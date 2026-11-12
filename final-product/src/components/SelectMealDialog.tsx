@@ -8,6 +8,7 @@ export function SelectMealDialog({
   kind,
   jd,
   weekday,
+  monthName,
   options,
   current,
   locked,
@@ -18,6 +19,7 @@ export function SelectMealDialog({
   kind: MealKind
   jd: number
   weekday: string
+  monthName: string
   options: string[]
   current: string | null
   locked: boolean
@@ -31,7 +33,7 @@ export function SelectMealDialog({
   const other = kind === 'lunch' ? 'شام' : 'ناهار'
 
   return (
-    <Dialog open title={`انتخاب ${mealLabel} — ${fa(jd)} آبان، ${weekday}`} onClose={onClose} locked={saving}>
+    <Dialog open title={`انتخاب ${mealLabel} — ${fa(jd)} ${monthName}، ${weekday}`} onClose={onClose} locked={saving}>
       <p className="text-sm text-muted">انتخاب {mealLabel} روی {other} اثری ندارد.</p>
       {locked && ops && (
         <p className="mt-2 rounded-md bg-warnbg px-3 py-2 text-sm text-warn">مهلت این وعده گذشته است. این تغییر به‌عنوان عملیات پشتیبانی ثبت می‌شود.</p>

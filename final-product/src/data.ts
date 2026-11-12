@@ -12,9 +12,10 @@ import type {
   PastOrder,
   Role,
 } from './types'
+import { jalaliMonthLength, weekdayName } from './lib/jalali'
 
-export const TODAY = 21
-export const MONTH_TITLE = 'آبان ۱۴۰۵'
+export const SEED_MONTH = { jy: 1405, jm: 8 }
+const SEED_DAY = 21
 export const WEEKDAYS = ['شنبه', 'یکشنبه', 'دوشنبه', 'سه‌شنبه', 'چهارشنبه', 'پنجشنبه', 'جمعه'] as const
 
 export const ROLE_LABEL: Record<Role, string> = {
@@ -52,22 +53,15 @@ const DINNER_SETS = [
   ['ساندویچ مرغ', 'سالاد الویه'],
 ]
 
-export function weekdayOf(jd: number) {
-  return WEEKDAYS[(5 + jd) % 7]
+export function weekdayOf(month: { jy: number; jm: number }, jd: number) {
+  return weekdayName({ ...month, jd })
 }
 
-export function isFriday(jd: number) {
-  return weekdayOf(jd) === 'جمعه'
-}
-
-export function dateLabel(jd: number) {
-  return `${jd} آبان`
-}
-
-function menuFor(jd: number): DayMenu {
-  const weekday = weekdayOf(jd)
-  if (weekday === 'جمعه') return { jd, weekday, lunch: null, dinner: null }
+function menuFor(month: { jy: number; jm: number }, jd: number, blankFridays: boolean): DayMenu {
+  const weekday = weekdayOf(month, jd)
+  if (blankFridays && weekday === 'جمعه') return { ...month, jd, weekday, lunch: null, dinner: null }
   return {
+    ...month,
     jd,
     weekday,
     lunch: [...LUNCH_SETS[(jd - 1) % LUNCH_SETS.length]],
@@ -75,11 +69,15 @@ function menuFor(jd: number): DayMenu {
   }
 }
 
+export function buildMonthMenu(month: { jy: number; jm: number }, blankFridays = false) {
+  return Array.from({ length: jalaliMonthLength(month.jy, month.jm) }, (_, index) => menuFor(month, index + 1, blankFridays))
+}
+
 function pick(index: number, jd: number, meal: MealKind, options: string[]) {
   const n = (index + 1) * 13 + jd * 7 + (meal === 'dinner' ? 5 : 0)
   const bucket = n % 10
-  if (jd >= TODAY && bucket < 3) return null
-  if (jd < TODAY && bucket === 0) return null
+  if (jd >= SEED_DAY && bucket < 3) return null
+  if (jd < SEED_DAY && bucket === 0) return null
   return options[n % options.length]
 }
 
@@ -129,7 +127,7 @@ export function createSnapshot(): Snapshot {
     { id: 'e10', firstName: 'ندا', lastName: 'صالحی', username: 'nsalehi', buildingId: 'b1', groupIds: ['g2'], active: false, created: '۱۱ مرداد ۱۴۰۵' },
   ]
 
-  const days = Array.from({ length: 30 }, (_, index) => menuFor(index + 1))
+  const days = buildMonthMenu(SEED_MONTH, true)
   const orders: Order[] = []
   employees.forEach((employee, index) => {
     days.forEach((day) => {
@@ -137,11 +135,13 @@ export function createSnapshot(): Snapshot {
         const options = day[meal]
         if (!options) return
         let choice = pick(index, day.jd, meal, options)
-        if (!employee.active && day.jd >= TODAY) choice = null
+        if (!employee.active && day.jd >= SEED_DAY) choice = null
         orders.push({
           id: `${employee.id}-${day.jd}-${meal}`,
           employeeId: employee.id,
           buildingId: employee.buildingId,
+          jy: day.jy,
+          jm: day.jm,
           jd: day.jd,
           meal,
           choice,
@@ -182,8 +182,8 @@ export function createSnapshot(): Snapshot {
   })
 
   const guests: GuestOrder[] = [
-    { id: 'gu1', buildingId: 'b1', jd: 23, meal: 'lunch', count: 4, note: 'جلسه هیئت‌مدیره' },
-    { id: 'gu2', buildingId: 'b2', jd: 25, meal: 'dinner', count: 2, note: 'مهمان پیمانکار' },
+    { id: 'gu1', buildingId: 'b1', jy: SEED_MONTH.jy, jm: SEED_MONTH.jm, jd: 23, meal: 'lunch', count: 4, note: 'جلسه هیئت‌مدیره' },
+    { id: 'gu2', buildingId: 'b2', jy: SEED_MONTH.jy, jm: SEED_MONTH.jm, jd: 25, meal: 'dinner', count: 2, note: 'مهمان پیمانکار' },
   ]
 
   const activity: ActivityItem[] = [

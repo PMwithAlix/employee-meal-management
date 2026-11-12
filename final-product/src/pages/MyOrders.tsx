@@ -1,7 +1,8 @@
 import { useState } from 'react'
 import { Button, Dialog, Empty } from '../components/ui'
 import { useApp } from '../store'
-import { findOrder, isLocked } from '../lib/orders'
+import { canGiveFeedback, findOrder, isMealOpen } from '../lib/orders'
+import { JALALI_MONTHS } from '../lib/jalali'
 import { fa } from '../lib/text'
 import type { Order } from '../types'
 
@@ -18,22 +19,21 @@ export function MyOrdersPage() {
     <div className="space-y-4">
       <section className="rounded-md border border-line bg-surface">
         <header className="border-b border-line px-4 py-3">
-          <h2 className="text-sm font-semibold">آبان ۱۴۰۵</h2>
+          <h2 className="text-sm font-semibold">{app.monthTitle}</h2>
           <p className="text-xs text-muted">سفارش‌های خودتان. ناهار و شام جدا آمده‌اند.</p>
         </header>
         <div className="divide-y divide-line">
           {days.map((day) => {
-            const lunch = findOrder(app.orders, id, day.jd, 'lunch')
-            const dinner = findOrder(app.orders, id, day.jd, 'dinner')
+            const lunch = findOrder(app.orders, id, day, day.jd, 'lunch')
+            const dinner = findOrder(app.orders, id, day, day.jd, 'dinner')
             return (
               <div key={day.jd} className="grid gap-3 px-4 py-3 md:grid-cols-[8rem_1fr_1fr]">
                 <div>
-                  <p className="text-sm font-medium">{fa(day.jd)} آبان</p>
+                  <p className="text-sm font-medium">{fa(day.jd)} {JALALI_MONTHS[day.jm - 1]}</p>
                   <p className="text-xs text-muted">{day.weekday}</p>
-                  <p className="text-xs text-muted">{isLocked(day.jd, app.today) ? 'مهلت تمام' : 'قابل ویرایش'}</p>
                 </div>
-                <OrderLine label="ناهار" name={day.lunch ? lunch?.choice ?? null : undefined} missing={!day.lunch} rating={lunch} onRate={() => lunch && setEditing(lunch)} locked={day.jd < app.today} />
-                <OrderLine label="شام" name={day.dinner ? dinner?.choice ?? null : undefined} missing={!day.dinner} rating={dinner} onRate={() => dinner && setEditing(dinner)} locked={day.jd < app.today} />
+                <OrderLine label="ناهار" name={day.lunch ? lunch?.choice ?? null : undefined} missing={!day.lunch} rating={lunch} onRate={() => lunch && setEditing(lunch)} status={day.lunch ? (isMealOpen(day, 'lunch', app.deadlines, app.now) ? 'قابل ویرایش' : 'مهلت تمام') : undefined} canRate={canGiveFeedback(lunch, app.now)} />
+                <OrderLine label="شام" name={day.dinner ? dinner?.choice ?? null : undefined} missing={!day.dinner} rating={dinner} onRate={() => dinner && setEditing(dinner)} status={day.dinner ? (isMealOpen(day, 'dinner', app.deadlines, app.now) ? 'قابل ویرایش' : 'مهلت تمام') : undefined} canRate={canGiveFeedback(dinner, app.now)} />
               </div>
             )
           })}
@@ -44,7 +44,7 @@ export function MyOrdersPage() {
           <h2 className="text-sm font-semibold">مهر ۱۴۰۵</h2>
         </header>
         {past.length === 0 ? (
-          <div className="p-4"><Empty title="سفارش مهر برای این حساب نیست" body="سفارش‌های آبان در بخش بالا قرار دارند." /></div>
+          <div className="p-4"><Empty title="سفارش مهر برای این حساب نیست" body="سفارش‌های ماه انتخاب‌شده در بخش بالا قرار دارند." /></div>
         ) : (
           <ul className="divide-y divide-line">
             {past.map((item) => (
@@ -68,20 +68,23 @@ function OrderLine({
   missing,
   rating,
   onRate,
-  locked,
+  status,
+  canRate,
 }: {
   label: string
   name: string | null | undefined
   missing: boolean
   rating?: Order
   onRate: () => void
-  locked: boolean
+  status?: string
+  canRate: boolean
 }) {
   return (
     <div className={label === 'ناهار' ? 'rounded-md border border-lunchline bg-lunchbg px-3 py-2' : 'rounded-md border border-dinnerline bg-dinnerbg px-3 py-2'}>
       <p className={label === 'ناهار' ? 'text-xs text-lunch' : 'text-xs text-dinner'}>{label}</p>
       <p className="text-sm">{missing ? 'منو تعریف نشده' : name ?? 'انتخاب نشده'}</p>
-      {locked && name && rating && (
+      {status && <p className="text-xs text-muted">{status}</p>}
+      {canRate && name && rating && (
         <button className="mt-1 text-xs text-link" onClick={onRate}>
           {rating.rating ? `دیدگاه: ${fa(rating.rating.score)} از ۵` : 'ثبت دیدگاه'}
         </button>
@@ -96,7 +99,7 @@ function RatingDialog({ order, onClose }: { order: Order; onClose: () => void })
   const [comment, setComment] = useState(order.rating?.comment ?? '')
   const [saving, setSaving] = useState(false)
   return (
-    <Dialog open title={`دیدگاه ${order.meal === 'lunch' ? 'ناهار' : 'شام'} ${fa(order.jd)} آبان`} onClose={onClose} locked={saving}>
+    <Dialog open title={`دیدگاه ${order.meal === 'lunch' ? 'ناهار' : 'شام'} ${fa(order.jd)} ${JALALI_MONTHS[order.jm - 1]}`} onClose={onClose} locked={saving}>
       <p className="text-sm text-muted">امتیاز ۱ تا ۵. توضیح اختیاری است و فقط پشتیبان، مدیریت و ادمین آن را می‌بینند.</p>
       <div className="mt-3 flex gap-1" role="radiogroup" aria-label="امتیاز">
         {[1, 2, 3, 4, 5].map((value) => (

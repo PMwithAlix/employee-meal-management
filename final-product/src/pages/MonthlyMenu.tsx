@@ -5,7 +5,9 @@ import { MealBlock } from '../components/MealBlock'
 import { Button, Empty, Segmented } from '../components/ui'
 import { WEEKDAYS } from '../data'
 import { useApp } from '../store'
-import { findOrder, isLocked, rowMatches } from '../lib/orders'
+import { isSameDate, JALALI_MONTHS } from '../lib/jalali'
+import { findOrder, isMealOpen, rowMatches } from '../lib/orders'
+import { formatDeadline } from '../lib/deadlines'
 import { can } from '../permissions'
 import { cn, fa } from '../lib/text'
 import type { DayMenu, MealKind } from '../types'
@@ -27,7 +29,7 @@ export function MonthlyMenuPage() {
     )
   }
 
-  const visible = app.days.filter((day) => rowMatches(day, app.orders, id, app.menuQuery, app.today))
+  const visible = app.days.filter((day) => rowMatches(day, app.orders, id, app.menuQuery, app.deadlines, app.now))
   const active = app.menuQuery.meal !== 'all' || app.menuQuery.status !== 'all' || app.menuQuery.q.trim()
 
   return (
@@ -35,7 +37,7 @@ export function MonthlyMenuPage() {
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <p className="text-sm font-medium">{app.monthTitle}</p>
-          <p className="text-xs text-muted">ناهار و شام جدا انتخاب می‌شوند. مهلت هر وعده: ساعت {fa(app.deadlineHour)} همان روز.</p>
+          <p className="text-xs text-muted">ناهار و شام جدا انتخاب می‌شوند. ناهار: {formatDeadline(app.deadlines.lunch)}. شام: {formatDeadline(app.deadlines.dinner)}.</p>
         </div>
         <Segmented
           label="نمای منو"
@@ -122,15 +124,15 @@ function DayList({ days }: { days: DayMenu[] }) {
           </thead>
           <tbody>
             {days.map((day) => {
-              const lunch = findOrder(app.orders, id, day.jd, 'lunch')
-              const dinner = findOrder(app.orders, id, day.jd, 'dinner')
+              const lunch = findOrder(app.orders, id, day, day.jd, 'lunch')
+              const dinner = findOrder(app.orders, id, day, day.jd, 'dinner')
               return (
-                <tr key={day.jd} className={cn('border-t border-divider align-top', day.jd === app.today && 'bg-brandsubtle')}>
-                  <td className="px-3 py-3 font-medium">{fa(day.jd)} آبان</td>
+                <tr key={day.jd} className={cn('border-t border-divider align-top', isSameDate(day, app.now) && 'bg-brandsubtle')}>
+                  <td className="px-3 py-3 font-medium">{fa(day.jd)} {JALALI_MONTHS[day.jm - 1]}</td>
                   <td className="px-3 py-3 text-muted">{day.weekday}</td>
                   <td className="px-3 py-3"><Cell day={day} meal="lunch" choice={lunch?.choice ?? null} /></td>
                   <td className="px-3 py-3"><Cell day={day} meal="dinner" choice={dinner?.choice ?? null} /></td>
-                  <td className="px-3 py-3 text-xs leading-5 text-muted">{summary(day, lunch?.choice ?? null, dinner?.choice ?? null, app.today)}</td>
+                  <td className="px-3 py-3 text-xs leading-5 text-muted">{summary(day, lunch?.choice ?? null, dinner?.choice ?? null, app)}</td>
                 </tr>
               )
             })}
@@ -139,19 +141,19 @@ function DayList({ days }: { days: DayMenu[] }) {
       </div>
       <div className="space-y-2 md:hidden">
         {days.map((day) => {
-          const lunch = findOrder(app.orders, id, day.jd, 'lunch')
-          const dinner = findOrder(app.orders, id, day.jd, 'dinner')
+          const lunch = findOrder(app.orders, id, day, day.jd, 'lunch')
+          const dinner = findOrder(app.orders, id, day, day.jd, 'dinner')
           return (
             <article key={day.jd} className="rounded-md border border-line bg-surface p-3">
               <div className="mb-2 flex items-center justify-between text-sm">
-                <strong>{fa(day.jd)} آبان</strong>
+                <strong>{fa(day.jd)} {JALALI_MONTHS[day.jm - 1]}</strong>
                 <span className="text-muted">{day.weekday}</span>
               </div>
               <div className="space-y-2">
                 <Cell day={day} meal="lunch" choice={lunch?.choice ?? null} />
                 <Cell day={day} meal="dinner" choice={dinner?.choice ?? null} />
               </div>
-              <p className="mt-2 text-xs text-muted">{summary(day, lunch?.choice ?? null, dinner?.choice ?? null, app.today)}</p>
+              <p className="mt-2 text-xs text-muted">{summary(day, lunch?.choice ?? null, dinner?.choice ?? null, app)}</p>
             </article>
           )
         })}
@@ -173,14 +175,14 @@ function Calendar({ days, visible }: { days: DayMenu[]; visible: Set<number> }) 
         <div className="grid grid-cols-7">
           {Array.from({ length: lead }, (_, index) => <div key={`b-${index}`} className="min-h-[148px] border-t border-line bg-bg" />)}
           {days.map((day) => (
-            <div key={day.jd} className={cn('min-h-[148px] border-t border-line bg-surface p-1.5', day.jd === app.today && 'ring-1 ring-inset ring-primary', !visible.has(day.jd) && 'opacity-35')}>
+            <div key={day.jd} className={cn('min-h-[148px] border-t border-line bg-surface p-1.5', isSameDate(day, app.now) && 'ring-1 ring-inset ring-primary', !visible.has(day.jd) && 'opacity-35')}>
               <div className="mb-1 flex items-center justify-between text-xs">
                 <span className="font-medium">{fa(day.jd)}</span>
                 {!visible.has(day.jd) && <span className="text-[10px] text-muted">خارج از فیلتر</span>}
               </div>
               <div className="space-y-1">
-                <Cell day={day} meal="lunch" choice={findOrder(app.orders, id, day.jd, 'lunch')?.choice ?? null} dense />
-                <Cell day={day} meal="dinner" choice={findOrder(app.orders, id, day.jd, 'dinner')?.choice ?? null} dense />
+                <Cell day={day} meal="lunch" choice={findOrder(app.orders, id, day, day.jd, 'lunch')?.choice ?? null} dense />
+                <Cell day={day} meal="dinner" choice={findOrder(app.orders, id, day, day.jd, 'dinner')?.choice ?? null} dense />
               </div>
             </div>
           ))}
@@ -189,10 +191,10 @@ function Calendar({ days, visible }: { days: DayMenu[]; visible: Set<number> }) 
       <div className="space-y-2 lg:hidden">
         {days.filter((day) => visible.has(day.jd)).map((day) => (
           <article key={day.jd} className="rounded-md border border-line bg-surface p-3">
-            <p className="mb-2 text-sm font-medium">{fa(day.jd)} آبان · {day.weekday}</p>
+            <p className="mb-2 text-sm font-medium">{fa(day.jd)} {JALALI_MONTHS[day.jm - 1]} · {day.weekday}</p>
             <div className="space-y-2">
-              <Cell day={day} meal="lunch" choice={findOrder(app.orders, id, day.jd, 'lunch')?.choice ?? null} />
-              <Cell day={day} meal="dinner" choice={findOrder(app.orders, id, day.jd, 'dinner')?.choice ?? null} />
+              <Cell day={day} meal="lunch" choice={findOrder(app.orders, id, day, day.jd, 'lunch')?.choice ?? null} />
+              <Cell day={day} meal="dinner" choice={findOrder(app.orders, id, day, day.jd, 'dinner')?.choice ?? null} />
             </div>
           </article>
         ))}
@@ -208,13 +210,14 @@ function Cell({ day, meal, choice, dense }: { day: DayMenu; meal: MealKind; choi
   const anchor = useRef<HTMLDivElement>(null)
   const [open, setOpen] = useState(false)
   const orphan = Boolean(choice && options && !options.includes(choice))
-  const canEdit = Boolean(id && options) && (day.jd < app.today ? can(app.role, 'order.ops') : can(app.role, 'order.self'))
+  const orderingOpen = isMealOpen(day, meal, app.deadlines, app.now)
+  const canEdit = Boolean(id && options) && (orderingOpen ? can(app.role, 'order.self') : can(app.role, 'order.ops'))
   return (
     <div ref={anchor} className="relative">
       <MealBlock
         kind={meal}
         choice={choice}
-        locked={isLocked(day.jd, app.today)}
+        locked={!orderingOpen}
         defined={Boolean(options)}
         orphan={orphan}
         dense={dense}
@@ -311,11 +314,10 @@ function OptionMenu({
   )
 }
 
-function summary(day: DayMenu, lunch: string | null, dinner: string | null, today: number) {
+function summary(day: DayMenu, lunch: string | null, dinner: string | null, app: ReturnType<typeof useApp>) {
   if (!day.lunch && !day.dinner) return 'منو تعریف نشده'
   const parts: string[] = []
-  if (day.lunch) parts.push(lunch ? 'ناهار انتخاب شده' : 'ناهار انتخاب نشده')
-  if (day.dinner) parts.push(dinner ? 'شام انتخاب شده' : 'شام انتخاب نشده')
-  parts.push(day.jd < today ? 'مهلت به پایان رسیده' : 'باز برای انتخاب')
+  if (day.lunch) parts.push(`ناهار ${lunch ? 'انتخاب شده' : 'انتخاب نشده'}، ${isMealOpen(day, 'lunch', app.deadlines, app.now) ? 'باز' : 'مهلت تمام'}`)
+  if (day.dinner) parts.push(`شام ${dinner ? 'انتخاب شده' : 'انتخاب نشده'}، ${isMealOpen(day, 'dinner', app.deadlines, app.now) ? 'باز' : 'مهلت تمام'}`)
   return parts.join(' · ')
 }

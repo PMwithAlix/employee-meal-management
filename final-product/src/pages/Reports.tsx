@@ -1,7 +1,8 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Empty } from '../components/ui'
 import { fullName } from '../data'
 import { useApp } from '../store'
+import { jalaliMonthLength, JALALI_MONTHS } from '../lib/jalali'
 import { fa } from '../lib/text'
 import type { MealKind } from '../types'
 
@@ -12,6 +13,11 @@ export function ReportsPage() {
   const [tab, setTab] = useState<ReportTab>('lunch')
   const [from, setFrom] = useState(1)
   const [to, setTo] = useState(30)
+  const length = jalaliMonthLength(app.selectedMonth.jy, app.selectedMonth.jm)
+  useEffect(() => {
+    setFrom(1)
+    setTo(length)
+  }, [app.selectedMonth.jy, app.selectedMonth.jm, length])
   const [buildingId, setBuildingId] = useState('all')
   const [employeeId, setEmployeeId] = useState('all')
   const [groupId, setGroupId] = useState('all')
@@ -20,6 +26,7 @@ export function ReportsPage() {
   const daily = useMemo(() => {
     return app.orders.filter((order) => {
       if (!order.choice) return false
+      if (order.jy !== app.selectedMonth.jy || order.jm !== app.selectedMonth.jm) return false
       if (order.jd < from || order.jd > to) return false
       if (buildingId !== 'all' && order.buildingId !== buildingId) return false
       const employee = app.employees.find((item) => item.id === order.employeeId)
@@ -28,7 +35,7 @@ export function ReportsPage() {
       if (groupId !== 'all' && !employee.groupIds.includes(groupId)) return false
       return true
     })
-  }, [app.orders, app.employees, from, to, buildingId, employeeId, groupId])
+  }, [app.orders, app.employees, app.selectedMonth.jy, app.selectedMonth.jm, from, to, buildingId, employeeId, groupId])
 
   const monthly = useMemo(() => {
     return app.employees.filter((employee) => {
@@ -37,7 +44,7 @@ export function ReportsPage() {
       if (groupId !== 'all' && !employee.groupIds.includes(groupId)) return false
       return true
     }).map((employee) => {
-      const mine = app.orders.filter((order) => order.employeeId === employee.id && order.choice && order.jd >= from && order.jd <= to)
+      const mine = app.orders.filter((order) => order.employeeId === employee.id && order.jy === app.selectedMonth.jy && order.jm === app.selectedMonth.jm && order.choice && order.jd >= from && order.jd <= to)
       const buildingAtOrder = mine[0] ? app.buildings.find((item) => item.id === mine[0].buildingId)?.name : app.buildings.find((item) => item.id === employee.buildingId)?.name
       return {
         id: employee.id,
@@ -47,9 +54,9 @@ export function ReportsPage() {
         dinner: mine.filter((order) => order.meal === 'dinner').length,
       }
     })
-  }, [app.employees, app.orders, app.buildings, from, to, buildingId, employeeId, groupId])
+  }, [app.employees, app.orders, app.buildings, app.selectedMonth.jy, app.selectedMonth.jm, from, to, buildingId, employeeId, groupId])
 
-  const comments = app.orders.filter((order) => order.rating && order.jd >= from && order.jd <= to)
+  const comments = app.orders.filter((order) => order.rating && order.jy === app.selectedMonth.jy && order.jm === app.selectedMonth.jm && order.jd >= from && order.jd <= to)
 
   const lunchRows = daily.filter((order) => order.meal === 'lunch')
   const dinnerRows = daily.filter((order) => order.meal === 'dinner')
@@ -63,8 +70,8 @@ export function ReportsPage() {
         ))}
       </div>
       <div className="grid gap-2 rounded-md border border-line bg-surface p-3 sm:grid-cols-3 lg:grid-cols-6">
-        <label className="text-xs text-muted">از روز<select className="mt-1 h-9 w-full rounded-md border border-line bg-bg px-2 text-sm text-ink" value={from} onChange={(event) => setFrom(Number(event.target.value))}>{days()}</select></label>
-        <label className="text-xs text-muted">تا روز<select className="mt-1 h-9 w-full rounded-md border border-line bg-bg px-2 text-sm text-ink" value={to} onChange={(event) => setTo(Number(event.target.value))}>{days()}</select></label>
+        <label className="text-xs text-muted">از روز<select className="mt-1 h-9 w-full rounded-md border border-line bg-bg px-2 text-sm text-ink" value={from} onChange={(event) => setFrom(Number(event.target.value))}>{days(length)}</select></label>
+        <label className="text-xs text-muted">تا روز<select className="mt-1 h-9 w-full rounded-md border border-line bg-bg px-2 text-sm text-ink" value={to} onChange={(event) => setTo(Number(event.target.value))}>{days(length)}</select></label>
         <label className="text-xs text-muted">ساختمان<select className="mt-1 h-9 w-full rounded-md border border-line bg-bg px-2 text-sm text-ink" value={buildingId} onChange={(event) => setBuildingId(event.target.value)}><option value="all">همه</option>{app.buildings.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
         <label className="text-xs text-muted">کارمند<select className="mt-1 h-9 w-full rounded-md border border-line bg-bg px-2 text-sm text-ink" value={employeeId} onChange={(event) => setEmployeeId(event.target.value)}><option value="all">همه</option>{app.employees.map((item) => <option key={item.id} value={item.id}>{fullName(item)}</option>)}</select></label>
         <label className="text-xs text-muted">گروه<select className="mt-1 h-9 w-full rounded-md border border-line bg-bg px-2 text-sm text-ink" value={groupId} onChange={(event) => setGroupId(event.target.value)}><option value="all">همه</option>{app.groups.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
@@ -103,7 +110,7 @@ export function ReportsPage() {
             const employee = app.employees.find((item) => item.id === order.employeeId)
             return (
               <article key={order.id} className="rounded-md border border-line bg-surface px-3 py-2 text-sm">
-                <p className="font-medium">{employee ? fullName(employee) : 'کارمند'} · {order.meal === 'lunch' ? 'ناهار' : 'شام'} {fa(order.jd)} آبان</p>
+                <p className="font-medium">{employee ? fullName(employee) : 'کارمند'} · {order.meal === 'lunch' ? 'ناهار' : 'شام'} {fa(order.jd)} {JALALI_MONTHS[order.jm - 1]}</p>
                 <p>امتیاز {fa(order.rating?.score ?? 0)} از ۵</p>
                 <p className="text-muted">{order.rating?.comment || 'بدون توضیح'}</p>
               </article>
@@ -115,8 +122,8 @@ export function ReportsPage() {
   )
 }
 
-function days() {
-  return Array.from({ length: 30 }, (_, index) => <option key={index + 1} value={index + 1}>{fa(index + 1)}</option>)
+function days(length: number) {
+  return Array.from({ length }, (_, index) => <option key={index + 1} value={index + 1}>{fa(index + 1)}</option>)
 }
 
 function OrderTable({ rows, meal }: { rows: ReturnType<typeof useApp>['orders']; meal: MealKind }) {
@@ -135,7 +142,7 @@ function OrderTable({ rows, meal }: { rows: ReturnType<typeof useApp>['orders'];
             const employee = app.employees.find((item) => item.id === order.employeeId)
             return (
               <tr key={order.id} className="border-t border-line">
-                <td className="px-3 py-2">{fa(order.jd)} آبان</td>
+                <td className="px-3 py-2">{fa(order.jd)} {JALALI_MONTHS[order.jm - 1]}</td>
                 <td className="px-3 py-2">{app.buildings.find((item) => item.id === order.buildingId)?.name}</td>
                 <td className="px-3 py-2">{employee ? fullName(employee) : '—'}</td>
                 <td className="px-3 py-2">{order.choice}</td>

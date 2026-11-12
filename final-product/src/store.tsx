@@ -1,9 +1,12 @@
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react'
-import { createSnapshot, fullName, MONTH_TITLE, PERSONA_ID, PREVIEW_MENU, ROLE_LABEL, TODAY } from './data'
+import { buildMonthMenu, createSnapshot, fullName, PERSONA_ID, PREVIEW_MENU, ROLE_LABEL, SEED_MONTH } from './data'
+import { defaultMonthDeadlines, isOrderingOpen, type MealDeadline, type MonthDeadlines } from './lib/deadlines'
+import { addMonths, currentDateTime, isPastDate, JALALI_MONTHS, monthKey, type JalaliDate, type JalaliDateTime } from './lib/jalali'
 import { fa } from './lib/text'
 import { can, canAccess, LANDING_PAGE } from './permissions'
 import type {
   ActivityItem,
+  DayMenu,
   Employee,
   FeedItem,
   GuestOrder,
@@ -30,9 +33,10 @@ interface StoreValue {
   mobileNav: boolean
   menuView: MenuView
   menuQuery: MenuQuery
-  deadlineHour: number
+  selectedMonth: Pick<JalaliDate, 'jy' | 'jm'>
   monthTitle: string
-  today: number
+  now: JalaliDateTime
+  deadlines: MonthDeadlines
   buildings: ReturnType<typeof createSnapshot>['buildings']
   groups: ReturnType<typeof createSnapshot>['groups']
   employees: Employee[]
@@ -56,7 +60,8 @@ interface StoreValue {
   setMenuView: (view: MenuView) => void
   setMenuQuery: (query: Partial<MenuQuery>) => void
   clearMenuQuery: () => void
-  setDeadlineHour: (hour: number) => void
+  shiftMonth: (delta: number) => void
+  setMealDeadline: (meal: MealKind, patch: Partial<Pick<MealDeadline, 'relation' | 'hour' | 'minute'>>) => void
   selectMeal: (employeeId: string, jd: number, meal: MealKind, choice: string | null, scope: 'self' | 'ops') => void
   rateMeal: (orderId: string, score: number, comment: string) => void
   saveEmployee: (input: Omit<Employee, 'id' | 'created' | 'active'> & { id?: string }) => string | null
@@ -65,7 +70,7 @@ interface StoreValue {
   assignBuilding: (employeeId: string, buildingId: string) => void
   saveGroup: (name: string, id?: string) => void
   setMembership: (groupId: string, employeeId: string, member: boolean) => void
-  addGuest: (guest: Omit<GuestOrder, 'id'>) => void
+  addGuest: (guest: Omit<GuestOrder, 'id' | 'jy' | 'jm'>) => void
   removeGuest: (id: string) => void
   updateDayOptions: (jd: number, meal: MealKind, options: string[]) => void
   setImportedFile: (file: ImportedFile | null) => void
@@ -92,11 +97,16 @@ export function StoreProvider({ children, onLogout }: { children: ReactNode; onL
   const [mobileNav, setMobileNav] = useState(false)
   const [menuView, setMenuView] = useState<MenuView>('list')
   const [menuQuery, setMenuQueryState] = useState<MenuQuery>(emptyQuery)
-  const [deadlineHour, setDeadlineHourState] = useState(10)
+  const [selectedMonth, setSelectedMonth] = useState(() => {
+    const today = currentDateTime()
+    return { jy: today.jy, jm: today.jm }
+  })
+  const [menus, setMenus] = useState<Record<string, DayMenu[]>>(() => ({ [monthKey(SEED_MONTH)]: initial.days }))
+  const [deadlinesByMonth, setDeadlinesByMonth] = useState<Record<string, MonthDeadlines>>({})
+  const [now, setNow] = useState(() => currentDateTime())
   const [buildings, setBuildings] = useState(initial.buildings)
   const [groups, setGroups] = useState(initial.groups)
   const [employees, setEmployees] = useState(initial.employees)
-  const [days, setDays] = useState(initial.days)
   const [orders, setOrders] = useState(initial.orders)
   const [guests, setGuests] = useState(initial.guests)
   const [activity, setActivity] = useState(initial.activity)
@@ -109,6 +119,16 @@ export function StoreProvider({ children, onLogout }: { children: ReactNode; onL
     document.documentElement.classList.toggle('dark', theme === 'dark')
     localStorage.setItem('meal-theme', theme)
   }, [theme])
+
+  useEffect(() => {
+    const id = window.setInterval(() => setNow(currentDateTime()), 15000)
+    return () => window.clearInterval(id)
+  }, [])
+
+  const monthId = monthKey(selectedMonth)
+  const days = menus[monthId] ?? buildMonthMenu(selectedMonth)
+  const deadlines = deadlinesByMonth[monthId] ?? defaultMonthDeadlines()
+  const monthName = JALALI_MONTHS[selectedMonth.jm - 1]
 
   const personaId = PERSONA_ID[role]
   const persona = employees.find((item) => item.id === personaId) ?? null
@@ -138,27 +158,28 @@ export function StoreProvider({ children, onLogout }: { children: ReactNode; onL
   }
 
   function selectMeal(employeeId: string, jd: number, meal: MealKind, choice: string | null, scope: 'self' | 'ops') {
-    const locked = jd < TODAY
+    const mealDate = { ...selectedMonth, jd }
+    const locked = !isOrderingOpen(mealDate, deadlines[meal], now)
     if (scope === 'self') {
       if (!can(role, 'order.self') || employeeId !== personaId) return
       if (locked && !can(role, 'order.ops')) return
     } else if (!can(role, 'order.ops')) {
       return
     }
-    const current = orders.find((item) => item.employeeId === employeeId && item.jd === jd && item.meal === meal)
+    const current = orders.find((item) => item.employeeId === employeeId && item.jy === selectedMonth.jy && item.jm === selectedMonth.jm && item.jd === jd && item.meal === meal)
     const employee = employees.find((item) => item.id === employeeId)
     if (!employee || (current && current.choice === choice) || (!current && choice === null)) return
     const before = current?.choice ?? 'انتخاب نشده'
     const after = choice ?? 'انتخاب نشده'
     if (!current) {
-      setOrders((list) => [...list, { id: uid('o'), employeeId, buildingId: employee.buildingId, jd, meal, choice, rating: null }])
+      setOrders((list) => [...list, { id: uid('o'), employeeId, buildingId: employee.buildingId, jy: selectedMonth.jy, jm: selectedMonth.jm, jd, meal, choice, rating: null }])
     } else {
       setOrders((list) => list.map((item) => (item.id === current.id ? { ...item, choice } : item)))
     }
     pushActivity({
       actor: personaName,
       action: scope === 'ops' || (locked && role === 'support') ? 'تغییر سفارش پس از مهلت' : 'ثبت سفارش',
-      target: `${fullName(employee)} · ${meal === 'lunch' ? 'ناهار' : 'شام'} ${fa(jd)} آبان`,
+      target: `${fullName(employee)} · ${meal === 'lunch' ? 'ناهار' : 'شام'} ${fa(jd)} ${monthName}`,
       at: 'همین حالا',
       before,
       after,
@@ -171,7 +192,7 @@ export function StoreProvider({ children, onLogout }: { children: ReactNode; onL
           at: 'همین حالا',
           meal,
           jd,
-          text: `${meal === 'lunch' ? 'ناهار' : 'شام'} ${fa(jd)} آبان: ${after}`,
+          text: `${meal === 'lunch' ? 'ناهار' : 'شام'} ${fa(jd)} ${monthName}: ${after}`,
         },
         ...list,
       ])
@@ -180,7 +201,7 @@ export function StoreProvider({ children, onLogout }: { children: ReactNode; onL
         {
           id: uid('n'),
           title: 'سفارش یک کارمند تغییر کرد',
-          body: `${personaName} ${meal === 'lunch' ? 'ناهار' : 'شام'} ${fa(jd)} آبان ${fullName(employee)} را به «${after}» تغییر داد.`,
+          body: `${personaName} ${meal === 'lunch' ? 'ناهار' : 'شام'} ${fa(jd)} ${monthName} ${fullName(employee)} را به «${after}» تغییر داد.`,
           at: 'همین حالا',
           read: false,
           page: 'menuMgmt',
@@ -193,12 +214,12 @@ export function StoreProvider({ children, onLogout }: { children: ReactNode; onL
 
   function rateMeal(orderId: string, score: number, comment: string) {
     const order = orders.find((item) => item.id === orderId)
-    if (!can(role, 'order.rate') || !order || order.employeeId !== personaId || order.jd >= TODAY || !order.choice) return
+    if (!can(role, 'order.rate') || !order || order.employeeId !== personaId || !isPastDate(order, now) || !order.choice) return
     setOrders((list) => list.map((item) => (item.id === orderId ? { ...item, rating: { score, comment: comment.trim() } } : item)))
     pushActivity({
       actor: personaName,
       action: order.rating ? 'ویرایش دیدگاه' : 'ثبت دیدگاه',
-      target: `${order.meal === 'lunch' ? 'ناهار' : 'شام'} ${fa(order.jd)} آبان`,
+      target: `${order.meal === 'lunch' ? 'ناهار' : 'شام'} ${fa(order.jd)} ${JALALI_MONTHS[order.jm - 1]}`,
       at: 'همین حالا',
       before: order.rating ? `${order.rating.score} از ۵` : '—',
       after: `${score} از ۵`,
@@ -341,14 +362,14 @@ export function StoreProvider({ children, onLogout }: { children: ReactNode; onL
     })
   }
 
-  function addGuest(guest: Omit<GuestOrder, 'id'>) {
+  function addGuest(guest: Omit<GuestOrder, 'id' | 'jy' | 'jm'>) {
     if (!can(role, 'guest.edit')) return
-    setGuests((list) => [{ ...guest, id: uid('gu') }, ...list])
+    setGuests((list) => [{ ...guest, jy: selectedMonth.jy, jm: selectedMonth.jm, id: uid('gu') }, ...list])
     const building = buildings.find((item) => item.id === guest.buildingId)?.name ?? 'ساختمان'
     pushActivity({
       actor: personaName,
       action: 'ثبت سفارش مهمان',
-      target: `${building} · ${fa(guest.jd)} آبان`,
+      target: `${building} · ${fa(guest.jd)} ${monthName}`,
       at: 'همین حالا',
       before: '—',
       after: `${guest.count} پرس ${guest.meal === 'lunch' ? 'ناهار' : 'شام'}`,
@@ -364,7 +385,7 @@ export function StoreProvider({ children, onLogout }: { children: ReactNode; onL
     pushActivity({
       actor: personaName,
       action: 'حذف سفارش مهمان',
-      target: `${fa(guest.jd)} آبان`,
+      target: `${fa(guest.jd)} ${JALALI_MONTHS[guest.jm - 1]}`,
       at: 'همین حالا',
       before: `${guest.count} پرس`,
       after: 'حذف شد',
@@ -373,12 +394,19 @@ export function StoreProvider({ children, onLogout }: { children: ReactNode; onL
 
   function updateDayOptions(jd: number, meal: MealKind, options: string[]) {
     if (!can(role, 'menu.edit')) return
-    setDays((list) => list.map((day) => (day.jd === jd ? { ...day, [meal]: options.length ? options : null } : day)))
+    setMenus((map) => {
+      const list = map[monthId] ?? days
+      return { ...map, [monthId]: list.map((day) => (day.jd === jd ? { ...day, [meal]: options.length ? options : null } : day)) }
+    })
     toast('ذخیره شد')
   }
 
+  function monthOrders<T extends { jy: number; jm: number }>(list: T[]) {
+    return list.filter((item) => item.jy === selectedMonth.jy && item.jm === selectedMonth.jm)
+  }
+
   function impact(policy: ReplacePolicy) {
-    const future = orders.filter((order) => order.choice)
+    const future = monthOrders(orders).filter((order) => order.choice)
     if (policy === 'reset') return { affected: future.length, keptOutside: 0 }
     const outside = future.filter((order) => {
       const day = days.find((item) => item.jd === order.jd)
@@ -392,14 +420,20 @@ export function StoreProvider({ children, onLogout }: { children: ReactNode; onL
   function applyImport(policy: ReplacePolicy) {
     if (!can(role, 'menu.edit')) return { affected: 0, keptOutside: 0 }
     const result = impact(policy)
-    setDays((list) =>
-      list.map((day) => (day.lunch || day.dinner ? { ...day, lunch: day.lunch ? [...PREVIEW_MENU.lunch] : null, dinner: day.dinner ? [...PREVIEW_MENU.dinner] : null } : day)),
-    )
+    setMenus((map) => {
+      const list = map[monthId] ?? days
+      return {
+        ...map,
+        [monthId]: list.map((day) => (day.lunch || day.dinner ? { ...day, lunch: day.lunch ? [...PREVIEW_MENU.lunch] : null, dinner: day.dinner ? [...PREVIEW_MENU.dinner] : null } : day)),
+      }
+    })
+    const inMonth = (order: { jy: number; jm: number }) => order.jy === selectedMonth.jy && order.jm === selectedMonth.jm
     if (policy === 'reset') {
-      setOrders((list) => list.map((order) => ({ ...order, choice: null, rating: null })))
+      setOrders((list) => list.map((order) => (inMonth(order) ? { ...order, choice: null, rating: null } : order)))
     } else if (policy === 'match') {
       setOrders((list) =>
         list.map((order) => {
+          if (!inMonth(order)) return order
           const options = order.meal === 'lunch' ? PREVIEW_MENU.lunch : PREVIEW_MENU.dinner
           if (order.choice && !options.includes(order.choice)) return { ...order, choice: null, rating: null }
           return order
@@ -409,7 +443,7 @@ export function StoreProvider({ children, onLogout }: { children: ReactNode; onL
     pushActivity({
       actor: personaName,
       action: 'جایگزینی منو',
-      target: MONTH_TITLE,
+      target: `${monthName} ${fa(selectedMonth.jy)}`,
       at: 'همین حالا',
       before: 'منوی قبلی',
       after: policy === 'keep' ? 'حفظ سفارش‌ها' : policy === 'match' ? 'تطبیق سفارش‌ها' : 'بازنشانی سفارش‌ها',
@@ -426,9 +460,10 @@ export function StoreProvider({ children, onLogout }: { children: ReactNode; onL
     mobileNav,
     menuView,
     menuQuery,
-    deadlineHour,
-    monthTitle: MONTH_TITLE,
-    today: TODAY,
+    selectedMonth,
+    monthTitle: `${monthName} ${fa(selectedMonth.jy)}`,
+    now,
+    deadlines,
     buildings,
     groups,
     employees,
@@ -452,9 +487,13 @@ export function StoreProvider({ children, onLogout }: { children: ReactNode; onL
     setMenuView,
     setMenuQuery: (query) => setMenuQueryState((current) => ({ ...current, ...query })),
     clearMenuQuery: () => setMenuQueryState(emptyQuery),
-    setDeadlineHour: (hour) => {
+    shiftMonth: (delta) => setSelectedMonth((month) => addMonths(month, delta)),
+    setMealDeadline: (meal, patch) => {
       if (!can(role, 'menu.edit')) return
-      setDeadlineHourState(hour)
+      setDeadlinesByMonth((map) => {
+        const current = map[monthId] ?? defaultMonthDeadlines()
+        return { ...map, [monthId]: { ...current, [meal]: { ...current[meal], ...patch, meal } } }
+      })
     },
     selectMeal,
     rateMeal,

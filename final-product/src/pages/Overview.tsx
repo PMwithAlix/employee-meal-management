@@ -1,7 +1,8 @@
 import type { ReactNode } from 'react'
 import { CalendarClock, Moon, Sun, Utensils } from 'lucide-react'
 import { useApp } from '../store'
-import { deadlineText, findOrder } from '../lib/orders'
+import { deadlineLabel, findOrder, isMealOpen } from '../lib/orders'
+import { JALALI_MONTHS } from '../lib/jalali'
 import { fa, cn } from '../lib/text'
 import type { MealFilter, StatusFilter } from '../types'
 
@@ -50,25 +51,29 @@ function EmployeeOverview() {
   const app = useApp()
   const id = app.personaId
   if (!id) return null
-  const mine = app.orders.filter((order) => order.employeeId === id)
+  const mine = app.orders.filter((order) => order.employeeId === id && order.jy === app.selectedMonth.jy && order.jm === app.selectedMonth.jm)
   const lunchCount = mine.filter((order) => order.meal === 'lunch' && order.choice).length
   const dinnerCount = mine.filter((order) => order.meal === 'dinner' && order.choice).length
-  const openDays = app.days.filter((day) => day.jd >= app.today && (day.lunch || day.dinner))
+  const openDays = app.days.filter((day) => (day.lunch && isMealOpen(day, 'lunch', app.deadlines, app.now)) || (day.dinner && isMealOpen(day, 'dinner', app.deadlines, app.now)))
   const upcoming = openDays
   const selectedDays = app.days.filter((day) => mine.some((order) => order.jd === day.jd && order.choice))
   const incomplete = app.days.filter((day) => {
-    if (day.jd < app.today || (!day.lunch && !day.dinner)) return false
-    const lunch = findOrder(app.orders, id, day.jd, 'lunch')
-    const dinner = findOrder(app.orders, id, day.jd, 'dinner')
-    return (Boolean(day.lunch) && !lunch?.choice) || (Boolean(day.dinner) && !dinner?.choice)
+    const lunchOpen = Boolean(day.lunch) && isMealOpen(day, 'lunch', app.deadlines, app.now)
+    const dinnerOpen = Boolean(day.dinner) && isMealOpen(day, 'dinner', app.deadlines, app.now)
+    if (!lunchOpen && !dinnerOpen) return false
+    const lunch = findOrder(app.orders, id, day, day.jd, 'lunch')
+    const dinner = findOrder(app.orders, id, day, day.jd, 'dinner')
+    return (lunchOpen && !lunch?.choice) || (dinnerOpen && !dinner?.choice)
   })
-  const passed = app.days.filter((day) => day.jd < app.today && (day.lunch || day.dinner))
-  const deadlines = app.days
-    .filter((day) => day.jd >= app.today)
+  const passed = app.days.filter((day) => {
+    const defined = (['lunch', 'dinner'] as const).filter((meal) => day[meal])
+    return defined.length > 0 && defined.every((meal) => !isMealOpen(day, meal, app.deadlines, app.now))
+  })
+  const deadlines = openDays
     .flatMap((day) =>
       (['lunch', 'dinner'] as const)
-        .filter((meal) => day[meal])
-        .map((meal) => ({ jd: day.jd, meal, text: deadlineText(day.jd, app.today, app.deadlineHour) })),
+        .filter((meal) => day[meal] && isMealOpen(day, meal, app.deadlines, app.now))
+        .map((meal) => ({ jd: day.jd, jm: day.jm, meal, text: deadlineLabel(day, meal, app.deadlines) })),
     )
     .slice(0, 4)
 
@@ -83,7 +88,7 @@ function EmployeeOverview() {
       <Stats
         items={[
           { label: 'سفارش‌های این ماه', value: fa(lunchCount + dinnerCount), hint: 'مجموع ناهار و شام ثبت‌شده', icon: Utensils },
-          { label: 'روزهای باز برای انتخاب', value: fa(openDays.length), hint: 'از امروز تا پایان آبان', icon: CalendarClock },
+          { label: 'روزهای باز برای انتخاب', value: fa(openDays.length), hint: `از امروز تا پایان ${JALALI_MONTHS[app.selectedMonth.jm - 1]}`, icon: CalendarClock },
           { label: 'ناهارهای ثبت‌شده', value: fa(lunchCount), hint: 'مستقل از شام', icon: Sun },
           { label: 'شام‌های ثبت‌شده', value: fa(dinnerCount), hint: 'مستقل از ناهار', icon: Moon },
         ]}
@@ -103,7 +108,7 @@ function EmployeeOverview() {
               <li key={`${item.jd}-${item.meal}`} className="flex items-center justify-between gap-3 py-2.5 text-sm">
                 <span>
                   <span className={cn('ms-2 text-xs', item.meal === 'lunch' ? 'text-lunch' : 'text-dinner')}>{item.meal === 'lunch' ? 'ناهار' : 'شام'}</span>
-                  {fa(item.jd)} آبان
+                  {fa(item.jd)} {JALALI_MONTHS[item.jm - 1]}
                 </span>
                 <span className="text-muted">{item.text}</span>
               </li>
@@ -130,7 +135,7 @@ function Bucket({ title, count, sample, onClick }: { title: string; count: numbe
     <>
       <span>
         <span className="block text-sm">{title}</span>
-        <span className="text-xs text-muted">{sample.length ? sample.join('، ') + ' آبان' : 'موردی نیست'}</span>
+        <span className="text-xs text-muted">{sample.length ? sample.join('، ') : 'موردی نیست'}</span>
       </span>
       <span className="text-lg font-semibold">{fa(count)}</span>
     </>
@@ -141,26 +146,27 @@ function Bucket({ title, count, sample, onClick }: { title: string; count: numbe
 
 function SupportOverview() {
   const app = useApp()
-  const lunch = app.orders.filter((order) => order.meal === 'lunch' && order.choice).length
-  const dinner = app.orders.filter((order) => order.meal === 'dinner' && order.choice).length
-  const openDays = app.days.filter((day) => day.jd >= app.today && (day.lunch || day.dinner)).length
+  const inMonth = (order: { jy: number; jm: number }) => order.jy === app.selectedMonth.jy && order.jm === app.selectedMonth.jm
+  const lunch = app.orders.filter((order) => inMonth(order) && order.meal === 'lunch' && order.choice).length
+  const dinner = app.orders.filter((order) => inMonth(order) && order.meal === 'dinner' && order.choice).length
+  const openDays = app.days.filter((day) => (day.lunch && isMealOpen(day, 'lunch', app.deadlines, app.now)) || (day.dinner && isMealOpen(day, 'dinner', app.deadlines, app.now)))
   return (
     <div className="space-y-4">
       <Stats
         items={[
           { label: 'ناهارهای ثبت‌شده', value: fa(lunch), hint: 'همه ساختمان‌ها', icon: Sun },
           { label: 'شام‌های ثبت‌شده', value: fa(dinner), hint: 'جدا از ناهار', icon: Moon },
-          { label: 'روزهای باز', value: fa(openDays), hint: 'هنوز مهلت دارند', icon: CalendarClock },
-          { label: 'سفارش مهمان', value: fa(app.guests.length), hint: 'مورد فعال', icon: Utensils },
+          { label: 'روزهای باز', value: fa(openDays.length), hint: 'هنوز مهلت دارند', icon: CalendarClock },
+          { label: 'سفارش مهمان', value: fa(app.guests.filter((guest) => guest.jy === app.selectedMonth.jy && guest.jm === app.selectedMonth.jm).length), hint: 'مورد فعال', icon: Utensils },
         ]}
       />
       <div className="grid gap-4 lg:grid-cols-2">
         <Panel title="مهلت‌های پیش رو" action={<button className="text-xs text-link" onClick={() => app.setPage('menuMgmt')}>مدیریت منو</button>}>
           <ul className="space-y-2 text-sm">
-            {app.days.filter((day) => day.jd >= app.today && day.jd <= app.today + 3 && (day.lunch || day.dinner)).map((day) => (
+            {openDays.slice(0, 4).map((day) => (
               <li key={day.jd} className="flex justify-between gap-3">
-                <span>{fa(day.jd)} آبان، {day.weekday}</span>
-                <span className="text-muted">{deadlineText(day.jd, app.today, app.deadlineHour)}</span>
+                <span>{fa(day.jd)} {JALALI_MONTHS[day.jm - 1]}، {day.weekday}</span>
+                <span className="text-muted">{day.lunch ? `ناهار ${deadlineLabel(day, 'lunch', app.deadlines)}` : ''}{day.lunch && day.dinner ? ' · ' : ''}{day.dinner ? `شام ${deadlineLabel(day, 'dinner', app.deadlines)}` : ''}</span>
               </li>
             ))}
           </ul>
@@ -220,14 +226,15 @@ function HrOverview() {
 
 function ManagementOverview() {
   const app = useApp()
-  const lunch = app.orders.filter((order) => order.meal === 'lunch' && order.choice).length
-  const dinner = app.orders.filter((order) => order.meal === 'dinner' && order.choice).length
+  const inMonth = (order: { jy: number; jm: number }) => order.jy === app.selectedMonth.jy && order.jm === app.selectedMonth.jm
+  const lunch = app.orders.filter((order) => inMonth(order) && order.meal === 'lunch' && order.choice).length
+  const dinner = app.orders.filter((order) => inMonth(order) && order.meal === 'dinner' && order.choice).length
   return (
     <div className="space-y-4">
       <p className="rounded-md border border-line bg-surface px-3 py-2 text-sm text-muted">دسترسی مدیریت فقط مشاهده است. ایجاد، ویرایش و حذف در این نقش وجود ندارد.</p>
       <Stats
         items={[
-          { label: 'ناهارهای ثبت‌شده', value: fa(lunch), hint: 'آبان ۱۴۰۵', icon: Sun },
+          { label: 'ناهارهای ثبت‌شده', value: fa(lunch), hint: app.monthTitle, icon: Sun },
           { label: 'شام‌های ثبت‌شده', value: fa(dinner), hint: 'جدا از ناهار', icon: Moon },
           { label: 'ساختمان‌ها', value: fa(app.buildings.length), hint: 'خلاصه عملیاتی', icon: CalendarClock },
           { label: 'رویدادهای اخیر', value: fa(Math.min(app.activity.length, 6)), hint: 'در تاریخچه', icon: Utensils },
@@ -238,7 +245,7 @@ function ManagementOverview() {
           <ul className="divide-y divide-line text-sm">
             {app.buildings.map((building) => {
               const people = app.employees.filter((employee) => employee.buildingId === building.id)
-              const lunchCount = app.orders.filter((order) => order.meal === 'lunch' && order.choice && people.some((employee) => employee.id === order.employeeId)).length
+              const lunchCount = app.orders.filter((order) => inMonth(order) && order.meal === 'lunch' && order.choice && people.some((employee) => employee.id === order.employeeId)).length
               return (
                 <li key={building.id} className="flex items-center justify-between py-2">
                   <span>{building.name}</span>
@@ -272,7 +279,7 @@ function AdminOverview() {
         items={[
           { label: 'کارکنان', value: fa(app.employees.length), hint: `${fa(app.employees.filter((employee) => employee.active).length)} فعال`, icon: Utensils },
           { label: 'ساختمان‌ها', value: fa(app.buildings.length), hint: 'بدون ویژگی اضافه', icon: CalendarClock },
-          { label: 'سفارش ثبت‌شده', value: fa(app.orders.filter((order) => order.choice).length), hint: 'ناهار و شام جدا', icon: Sun },
+          { label: 'سفارش ثبت‌شده', value: fa(app.orders.filter((order) => order.choice && order.jy === app.selectedMonth.jy && order.jm === app.selectedMonth.jm).length), hint: app.monthTitle, icon: Sun },
           { label: 'گروه‌ها', value: fa(app.groups.length), hint: 'عضویت آزاد', icon: Moon },
         ]}
       />

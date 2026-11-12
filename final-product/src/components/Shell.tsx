@@ -255,7 +255,11 @@ export function Shell() {
           </button>
           <div className="min-w-0 flex-1">
             <h1 className="truncate text-sm font-semibold">{TITLES[app.page]}</h1>
-            <p className="truncate text-[11px] text-muted">{app.monthTitle}</p>
+            <div className="flex items-center gap-1">
+              <button type="button" className="h-6 rounded px-1.5 text-[11px] text-link" onClick={() => app.shiftMonth(-1)}>ماه قبل</button>
+              <p className="truncate text-[11px] text-muted">{app.monthTitle}</p>
+              <button type="button" className="h-6 rounded px-1.5 text-[11px] text-link" onClick={() => app.shiftMonth(1)}>ماه بعد</button>
+            </div>
           </div>
           <div className="flex shrink-0 items-center gap-1">
             <button

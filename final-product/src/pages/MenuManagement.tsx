@@ -4,7 +4,9 @@ import { SelectMealDialog } from '../components/SelectMealDialog'
 import { Badge, Button, Dialog, Empty, Field, controlClass } from '../components/ui'
 import { PREVIEW_MENU, fullName } from '../data'
 import { useApp } from '../store'
-import { findOrder, isLocked } from '../lib/orders'
+import { findOrder, isMealOpen } from '../lib/orders'
+import { formatDeadline, type DeadlineRelation } from '../lib/deadlines'
+import { isPastDate, JALALI_MONTHS } from '../lib/jalali'
 import { fa, faBytes } from '../lib/text'
 import type { MealKind, ReplacePolicy } from '../types'
 
@@ -24,11 +26,10 @@ export function MenuManagementPage() {
           <p className="text-sm font-medium">{app.monthTitle}</p>
           <p className="text-xs text-muted">ویرایش منو، سفارش‌های قبلی را خودبه‌خود عوض نمی‌کند.</p>
         </div>
-        <Field label="مهلت ثبت هر وعده">
-          <select className={controlClass} value={app.deadlineHour} onChange={(event) => app.setDeadlineHour(Number(event.target.value))}>
-            {[8, 9, 10, 12].map((hour) => <option key={hour} value={hour}>ساعت {fa(hour)} همان روز</option>)}
-          </select>
-        </Field>
+        <div className="flex flex-wrap gap-3">
+          <DeadlineFields meal="lunch" />
+          <DeadlineFields meal="dinner" />
+        </div>
       </div>
       <div className="flex flex-wrap gap-1">
         {([['daily', 'منوی روزانه'], ['import', 'ورود از اکسل'], ['guests', 'سفارش مهمان'], ['staff', 'سفارش کارکنان']] as const).map(([id, label]) => (
@@ -43,6 +44,36 @@ export function MenuManagementPage() {
   )
 }
 
+function DeadlineFields({ meal }: { meal: MealKind }) {
+  const app = useApp()
+  const deadline = app.deadlines[meal]
+  const time = `${String(deadline.hour).padStart(2, '0')}:${String(deadline.minute).padStart(2, '0')}`
+  return (
+    <div className="flex flex-wrap items-end gap-2">
+      <Field label={meal === 'lunch' ? 'مهلت ناهار' : 'مهلت شام'}>
+        <select className={controlClass} value={deadline.relation} onChange={(event) => app.setMealDeadline(meal, { relation: event.target.value as DeadlineRelation })}>
+          <option value="same_day">همان روز</option>
+          <option value="previous_day">روز قبل</option>
+        </select>
+      </Field>
+      <Field label="ساعت">
+        <input
+          className={controlClass}
+          type="time"
+          aria-label={meal === 'lunch' ? 'ساعت مهلت ناهار' : 'ساعت مهلت شام'}
+          value={time}
+          onChange={(event) => {
+            const [hour, minute] = event.target.value.split(':').map(Number)
+            if (Number.isNaN(hour) || Number.isNaN(minute)) return
+            app.setMealDeadline(meal, { hour, minute })
+          }}
+        />
+      </Field>
+      <p className="pb-2 text-xs text-muted">{formatDeadline(deadline)}</p>
+    </div>
+  )
+}
+
 function DailyMenu() {
   const app = useApp()
   return (
@@ -50,8 +81,8 @@ function DailyMenu() {
       {app.days.map((day) => (
         <article key={day.jd} className="rounded-md border border-line bg-surface p-3">
           <div className="mb-2 flex items-center justify-between text-sm">
-            <strong>{fa(day.jd)} آبان · {day.weekday}</strong>
-            {day.jd < app.today && <span className="text-xs text-muted">سفارش‌های ثبت‌شده با این ویرایش عوض نمی‌شوند</span>}
+            <strong>{fa(day.jd)} {JALALI_MONTHS[day.jm - 1]} · {day.weekday}</strong>
+            {isPastDate(day, app.now) && <span className="text-xs text-muted">سفارش‌های ثبت‌شده با این ویرایش عوض نمی‌شوند</span>}
           </div>
           {!day.lunch && !day.dinner ? <p className="text-sm text-muted">منو تعریف نشده</p> : (
             <div className="grid gap-3 md:grid-cols-2">
@@ -222,7 +253,7 @@ function Guests() {
   return (
     <div className="grid gap-4 lg:grid-cols-[1fr_18rem]">
       <div className="overflow-hidden rounded-md border border-line bg-surface">
-        {app.guests.length === 0 ? <div className="p-4"><Empty title="سفارش مهمانی نیست" body="از فرم کنار صفحه یک مورد اضافه کنید." /></div> : (
+        {app.guests.filter((guest) => guest.jy === app.selectedMonth.jy && guest.jm === app.selectedMonth.jm).length === 0 ? <div className="p-4"><Empty title="سفارش مهمانی نیست" body="از فرم کنار صفحه یک مورد اضافه کنید." /></div> : (
           <table className="w-full text-sm">
             <thead className="bg-elevated text-xs text-muted">
               <tr>
@@ -235,9 +266,9 @@ function Guests() {
               </tr>
             </thead>
             <tbody>
-              {app.guests.map((guest) => (
+              {app.guests.filter((guest) => guest.jy === app.selectedMonth.jy && guest.jm === app.selectedMonth.jm).map((guest) => (
                 <tr key={guest.id} className="border-t border-line">
-                  <td className="px-3 py-2">{fa(guest.jd)} آبان</td>
+                  <td className="px-3 py-2">{fa(guest.jd)} {JALALI_MONTHS[guest.jm - 1]}</td>
                   <td className="px-3 py-2">{app.buildings.find((item) => item.id === guest.buildingId)?.name}</td>
                   <td className="px-3 py-2">{guest.meal === 'lunch' ? 'ناهار' : 'شام'}</td>
                   <td className="px-3 py-2">{fa(guest.count)}</td>
@@ -282,7 +313,7 @@ function StaffOrders() {
   const [target, setTarget] = useState<{ jd: number; meal: MealKind } | null>(null)
   const day = target ? app.days.find((item) => item.jd === target.jd) : undefined
   const options = day && target ? day[target.meal] : null
-  const current = target ? findOrder(app.orders, employeeId, target.jd, target.meal) : undefined
+  const current = target ? findOrder(app.orders, employeeId, app.selectedMonth, target.jd, target.meal) : undefined
   return (
     <div className="space-y-3">
       <Field label="کارمند">
@@ -295,8 +326,8 @@ function StaffOrders() {
         {app.days.filter((item) => item.lunch || item.dinner).map((item) => (
           <div key={item.jd} className="grid gap-2 rounded-md border border-line bg-surface p-3 md:grid-cols-[7rem_1fr_1fr]">
             <p className="text-sm">{fa(item.jd)} {item.weekday}</p>
-            <MealBlock kind="lunch" defined={Boolean(item.lunch)} locked={isLocked(item.jd, app.today)} choice={findOrder(app.orders, employeeId, item.jd, 'lunch')?.choice ?? null} onSelect={item.lunch ? () => setTarget({ jd: item.jd, meal: 'lunch' }) : undefined} />
-            <MealBlock kind="dinner" defined={Boolean(item.dinner)} locked={isLocked(item.jd, app.today)} choice={findOrder(app.orders, employeeId, item.jd, 'dinner')?.choice ?? null} onSelect={item.dinner ? () => setTarget({ jd: item.jd, meal: 'dinner' }) : undefined} />
+            <MealBlock kind="lunch" defined={Boolean(item.lunch)} locked={!isMealOpen(item, 'lunch', app.deadlines, app.now)} choice={findOrder(app.orders, employeeId, item, item.jd, 'lunch')?.choice ?? null} onSelect={item.lunch ? () => setTarget({ jd: item.jd, meal: 'lunch' }) : undefined} />
+            <MealBlock kind="dinner" defined={Boolean(item.dinner)} locked={!isMealOpen(item, 'dinner', app.deadlines, app.now)} choice={findOrder(app.orders, employeeId, item, item.jd, 'dinner')?.choice ?? null} onSelect={item.dinner ? () => setTarget({ jd: item.jd, meal: 'dinner' }) : undefined} />
           </div>
         ))}
       </div>
@@ -306,9 +337,10 @@ function StaffOrders() {
           kind={target.meal}
           jd={target.jd}
           weekday={day.weekday}
+          monthName={JALALI_MONTHS[day.jm - 1]}
           options={options}
           current={current?.choice ?? null}
-          locked={isLocked(target.jd, app.today)}
+          locked={!isMealOpen(day, target.meal, app.deadlines, app.now)}
           ops
           onClose={() => setTarget(null)}
           onSave={(choice) => {
