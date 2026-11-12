@@ -6,6 +6,7 @@ import { Button, Empty, Segmented } from '../components/ui'
 import { WEEKDAYS } from '../data'
 import { useApp } from '../store'
 import { findOrder, isLocked, rowMatches } from '../lib/orders'
+import { can } from '../permissions'
 import { cn, fa } from '../lib/text'
 import type { DayMenu, MealKind } from '../types'
 
@@ -207,7 +208,7 @@ function Cell({ day, meal, choice, dense }: { day: DayMenu; meal: MealKind; choi
   const anchor = useRef<HTMLDivElement>(null)
   const [open, setOpen] = useState(false)
   const orphan = Boolean(choice && options && !options.includes(choice))
-  const can = Boolean(id && options) && (day.jd < app.today ? app.role === 'support' : true)
+  const canEdit = Boolean(id && options) && (day.jd < app.today ? can(app.role, 'order.ops') : can(app.role, 'order.self'))
   return (
     <div ref={anchor} className="relative">
       <MealBlock
@@ -217,10 +218,10 @@ function Cell({ day, meal, choice, dense }: { day: DayMenu; meal: MealKind; choi
         defined={Boolean(options)}
         orphan={orphan}
         dense={dense}
-        onSelect={can ? () => setOpen((value) => !value) : undefined}
+        onSelect={canEdit ? () => setOpen((value) => !value) : undefined}
       />
-      {can && <ChevronDown size={14} className="pointer-events-none absolute bottom-2 end-2 text-muted" aria-hidden />}
-      {open && options && anchor.current && id && (
+      {canEdit && <ChevronDown size={14} className="pointer-events-none absolute bottom-2 end-2 text-muted" aria-hidden />}
+      {open && canEdit && options && anchor.current && id && (
         <OptionMenu
           anchor={anchor.current}
           options={options}

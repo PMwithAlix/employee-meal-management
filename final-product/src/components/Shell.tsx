@@ -20,7 +20,8 @@ import {
   X,
 } from 'lucide-react'
 import { ROLE_LABEL } from '../data'
-import { canOpen, useApp } from '../store'
+import { canAccess, ROLES } from '../permissions'
+import { useApp } from '../store'
 import { fa, cn } from '../lib/text'
 import type { Page, Role } from '../types'
 import { OverviewPage } from '../pages/Overview'
@@ -78,7 +79,7 @@ export function Shell() {
   const [notesOpen, setNotesOpen] = useState(false)
   const [profileOpen, setProfileOpen] = useState(false)
   const unread = app.notes.filter((note) => !note.read).length
-  const visible = NAV.filter((item) => canOpen(app.role, item.id))
+  const visible = NAV.filter((item) => canAccess(app.role, item.id))
   const groups = [...new Set(visible.map((item) => item.group))]
   const Page = PAGES[app.page]
 
@@ -134,22 +135,24 @@ export function Shell() {
             </div>
           ))}
         </nav>
-        <div className="border-t border-line p-2">
-          <div className={cn('rounded-md border border-dashed border-line p-2', app.collapsed && 'px-1')}>
-            {!app.collapsed && <p className="mb-1 text-[11px] leading-4 text-muted">پیش‌نمایش نقش، فقط در این نمونه</p>}
-            <select
-              aria-label="پیش‌نمایش نقش"
-              title="پیش‌نمایش نقش"
-              value={app.role}
-              onChange={(event) => app.setRole(event.target.value as Role)}
-              className="h-8 w-full rounded-md border border-line bg-surface px-1 text-xs"
-            >
-              {(Object.keys(ROLE_LABEL) as Role[]).map((role) => (
-                <option key={role} value={role}>{ROLE_LABEL[role]}</option>
-              ))}
-            </select>
+        {import.meta.env.DEV && (
+          <div className="border-t border-line p-2">
+            <div className={cn('rounded-md border border-dashed border-line p-2', app.collapsed && 'px-1')}>
+              {!app.collapsed && <p className="mb-1 text-[11px] leading-4 text-muted">پیش‌نمایش نقش، فقط در توسعه</p>}
+              <select
+                aria-label="پیش‌نمایش نقش"
+                title="پیش‌نمایش نقش"
+                value={app.role}
+                onChange={(event) => app.setRole(event.target.value as Role)}
+                className="h-8 w-full rounded-md border border-line bg-surface px-1 text-xs"
+              >
+                {ROLES.map((role) => (
+                  <option key={role} value={role}>{ROLE_LABEL[role]}</option>
+                ))}
+              </select>
+            </div>
           </div>
-        </div>
+        )}
       </aside>
 
       <div className={cn('min-h-screen', app.collapsed ? 'md:mr-[72px]' : 'md:mr-60')}>

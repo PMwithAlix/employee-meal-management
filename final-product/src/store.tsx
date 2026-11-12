@@ -1,6 +1,7 @@
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react'
 import { createSnapshot, fullName, MONTH_TITLE, PERSONA_ID, PREVIEW_MENU, ROLE_LABEL, TODAY } from './data'
 import { fa } from './lib/text'
+import { can, canAccess, LANDING_PAGE } from './permissions'
 import type {
   ActivityItem,
   Employee,
@@ -78,23 +79,6 @@ interface StoreValue {
 const StoreContext = createContext<StoreValue | null>(null)
 const emptyQuery: MenuQuery = { meal: 'all', status: 'all', q: '' }
 
-const NAV_ROLES: Record<Page, Role[]> = {
-  overview: ['employee', 'hr', 'support', 'management', 'admin'],
-  menu: ['employee', 'hr', 'support', 'admin'],
-  orders: ['employee', 'hr', 'support', 'admin'],
-  menuMgmt: ['support', 'admin'],
-  employees: ['hr', 'admin'],
-  buildings: ['hr', 'admin'],
-  groups: ['hr', 'admin'],
-  reports: ['support', 'management', 'admin'],
-  activity: ['support', 'management', 'admin'],
-  settings: ['employee', 'hr', 'support', 'management', 'admin'],
-}
-
-export function canOpen(role: Role, page: Page) {
-  return NAV_ROLES[page].includes(role)
-}
-
 function uid(prefix: string) {
   return `${prefix}-${Math.random().toString(36).slice(2, 8)}`
 }
@@ -118,7 +102,7 @@ export function StoreProvider({ children, onLogout }: { children: ReactNode; onL
   const [activity, setActivity] = useState(initial.activity)
   const [notes, setNotes] = useState(initial.notes)
   const [feed, setFeed] = useState(initial.feed)
-  const [importedFile, setImportedFile] = useState<ImportedFile | null>(null)
+  const [importedFile, setImportedFileState] = useState<ImportedFile | null>(null)
   const [toasts, setToasts] = useState<Toast[]>([])
 
   useEffect(() => {
@@ -143,12 +127,12 @@ export function StoreProvider({ children, onLogout }: { children: ReactNode; onL
 
   function setRole(next: Role) {
     setRoleState(next)
-    setPageState((current) => (canOpen(next, current) ? current : 'overview'))
+    setPageState((current) => (canAccess(next, current) ? current : LANDING_PAGE))
     setMobileNav(false)
   }
 
   function setPage(next: Page) {
-    if (!canOpen(role, next)) return
+    if (!canAccess(role, next)) return
     setPageState(next)
     setMobileNav(false)
   }
@@ -156,9 +140,9 @@ export function StoreProvider({ children, onLogout }: { children: ReactNode; onL
   function selectMeal(employeeId: string, jd: number, meal: MealKind, choice: string | null, scope: 'self' | 'ops') {
     const locked = jd < TODAY
     if (scope === 'self') {
-      if (employeeId !== personaId) return
-      if (locked && role !== 'support') return
-    } else if (role !== 'support' && role !== 'admin') {
+      if (!can(role, 'order.self') || employeeId !== personaId) return
+      if (locked && !can(role, 'order.ops')) return
+    } else if (!can(role, 'order.ops')) {
       return
     }
     const current = orders.find((item) => item.employeeId === employeeId && item.jd === jd && item.meal === meal)
@@ -209,7 +193,7 @@ export function StoreProvider({ children, onLogout }: { children: ReactNode; onL
 
   function rateMeal(orderId: string, score: number, comment: string) {
     const order = orders.find((item) => item.id === orderId)
-    if (!order || order.employeeId !== personaId || order.jd >= TODAY || !order.choice) return
+    if (!can(role, 'order.rate') || !order || order.employeeId !== personaId || order.jd >= TODAY || !order.choice) return
     setOrders((list) => list.map((item) => (item.id === orderId ? { ...item, rating: { score, comment: comment.trim() } } : item)))
     pushActivity({
       actor: personaName,
@@ -223,6 +207,7 @@ export function StoreProvider({ children, onLogout }: { children: ReactNode; onL
   }
 
   function saveEmployee(input: Omit<Employee, 'id' | 'created' | 'active'> & { id?: string }) {
+    if (!can(role, 'employee.edit')) return 'اجازه این کار را ندارید.'
     const username = input.username.trim()
     const duplicate = employees.some((item) => item.username === username && item.id !== input.id)
     if (!input.firstName.trim() || !input.lastName.trim() || !username || !input.buildingId || duplicate) return 'نام، نام خانوادگی، نام کاربری یکتا و ساختمان لازم است.'
@@ -266,6 +251,7 @@ export function StoreProvider({ children, onLogout }: { children: ReactNode; onL
   }
 
   function setEmployeeActive(id: string, active: boolean) {
+    if (!can(role, 'employee.edit')) return
     const employee = employees.find((item) => item.id === id)
     if (!employee || employee.active === active) return
     setEmployees((list) => list.map((item) => (item.id === id ? { ...item, active } : item)))
@@ -281,6 +267,7 @@ export function StoreProvider({ children, onLogout }: { children: ReactNode; onL
   }
 
   function saveBuilding(name: string, id?: string) {
+    if (!can(role, 'building.edit')) return
     const clean = name.trim()
     if (!clean) return
     if (id) {
@@ -298,6 +285,7 @@ export function StoreProvider({ children, onLogout }: { children: ReactNode; onL
   }
 
   function assignBuilding(employeeId: string, buildingId: string) {
+    if (!can(role, 'building.edit')) return
     const employee = employees.find((item) => item.id === employeeId)
     const building = buildings.find((item) => item.id === buildingId)
     if (!employee || !building || employee.buildingId === buildingId) return
@@ -315,6 +303,7 @@ export function StoreProvider({ children, onLogout }: { children: ReactNode; onL
   }
 
   function saveGroup(name: string, id?: string) {
+    if (!can(role, 'group.edit')) return
     const clean = name.trim()
     if (!clean) return
     if (id) {
@@ -329,6 +318,7 @@ export function StoreProvider({ children, onLogout }: { children: ReactNode; onL
   }
 
   function setMembership(groupId: string, employeeId: string, member: boolean) {
+    if (!can(role, 'group.edit')) return
     const employee = employees.find((item) => item.id === employeeId)
     const group = groups.find((item) => item.id === groupId)
     if (!employee || !group) return
@@ -352,6 +342,7 @@ export function StoreProvider({ children, onLogout }: { children: ReactNode; onL
   }
 
   function addGuest(guest: Omit<GuestOrder, 'id'>) {
+    if (!can(role, 'guest.edit')) return
     setGuests((list) => [{ ...guest, id: uid('gu') }, ...list])
     const building = buildings.find((item) => item.id === guest.buildingId)?.name ?? 'ساختمان'
     pushActivity({
@@ -366,6 +357,7 @@ export function StoreProvider({ children, onLogout }: { children: ReactNode; onL
   }
 
   function removeGuest(id: string) {
+    if (!can(role, 'guest.edit')) return
     const guest = guests.find((item) => item.id === id)
     if (!guest) return
     setGuests((list) => list.filter((item) => item.id !== id))
@@ -380,6 +372,7 @@ export function StoreProvider({ children, onLogout }: { children: ReactNode; onL
   }
 
   function updateDayOptions(jd: number, meal: MealKind, options: string[]) {
+    if (!can(role, 'menu.edit')) return
     setDays((list) => list.map((day) => (day.jd === jd ? { ...day, [meal]: options.length ? options : null } : day)))
     toast('ذخیره شد')
   }
@@ -397,6 +390,7 @@ export function StoreProvider({ children, onLogout }: { children: ReactNode; onL
   }
 
   function applyImport(policy: ReplacePolicy) {
+    if (!can(role, 'menu.edit')) return { affected: 0, keptOutside: 0 }
     const result = impact(policy)
     setDays((list) =>
       list.map((day) => (day.lunch || day.dinner ? { ...day, lunch: day.lunch ? [...PREVIEW_MENU.lunch] : null, dinner: day.dinner ? [...PREVIEW_MENU.dinner] : null } : day)),
@@ -458,7 +452,10 @@ export function StoreProvider({ children, onLogout }: { children: ReactNode; onL
     setMenuView,
     setMenuQuery: (query) => setMenuQueryState((current) => ({ ...current, ...query })),
     clearMenuQuery: () => setMenuQueryState(emptyQuery),
-    setDeadlineHour: setDeadlineHourState,
+    setDeadlineHour: (hour) => {
+      if (!can(role, 'menu.edit')) return
+      setDeadlineHourState(hour)
+    },
     selectMeal,
     rateMeal,
     saveEmployee,
@@ -470,7 +467,10 @@ export function StoreProvider({ children, onLogout }: { children: ReactNode; onL
     addGuest,
     removeGuest,
     updateDayOptions,
-    setImportedFile,
+    setImportedFile: (file) => {
+      if (!can(role, 'menu.edit')) return
+      setImportedFileState(file)
+    },
     applyImport,
     previewImpact: impact,
     markNote: (id) => setNotes((list) => list.map((item) => (item.id === id ? { ...item, read: true } : item))),
