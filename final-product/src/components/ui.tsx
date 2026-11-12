@@ -1,4 +1,4 @@
-import { useEffect, useRef, type ReactNode } from 'react'
+import { useLayoutEffect, useRef, type ReactNode } from 'react'
 import { X } from 'lucide-react'
 import { cn } from '../lib/text'
 import { useApp } from '../store'
@@ -57,6 +57,21 @@ export const controlClass =
 
 const FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
 
+function focusableIn(panel: HTMLElement) {
+  return [...panel.querySelectorAll<HTMLElement>(FOCUSABLE)].filter((item) => {
+    if ('disabled' in item && Boolean((item as HTMLButtonElement).disabled)) return false
+    return item.getClientRects().length > 0
+  })
+}
+
+function canRestore(element: HTMLElement) {
+  if (!element.isConnected || element === document.body || element === document.documentElement) return false
+  if (element.hasAttribute('disabled')) return false
+  if (element.getAttribute('aria-hidden') === 'true') return false
+  const style = getComputedStyle(element)
+  return style.display !== 'none' && style.visibility !== 'hidden' && element.getClientRects().length > 0
+}
+
 export function Dialog({
   open,
   title,
@@ -73,45 +88,79 @@ export function Dialog({
   locked?: boolean
 }) {
   const panelRef = useRef<HTMLDivElement>(null)
+  const previouslyFocused = useRef<HTMLElement | null>(null)
+  const lockedRef = useRef(locked)
+  const onCloseRef = useRef(onClose)
+  lockedRef.current = locked
+  onCloseRef.current = onClose
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!open) return
-    const previous = document.body.style.overflow
+    const active = document.activeElement
+    if (active instanceof HTMLElement && active !== panelRef.current && !panelRef.current?.contains(active)) {
+      previouslyFocused.current = active
+    }
+    const previousOverflow = document.body.style.overflow
     document.body.style.overflow = 'hidden'
     panelRef.current?.focus()
+
     function onKey(event: KeyboardEvent) {
-      if (event.key === 'Escape' && !locked) {
+      if (event.key === 'Escape') {
+        if (lockedRef.current) return
         event.preventDefault()
-        onClose()
+        onCloseRef.current()
         return
       }
-      if (event.key !== 'Tab' || !panelRef.current) return
-      const items = [...panelRef.current.querySelectorAll<HTMLElement>(FOCUSABLE)].filter((item) => item.offsetParent !== null || item === document.activeElement)
+      if (event.key !== 'Tab') return
+      const panel = panelRef.current
+      if (!panel) return
+      const items = focusableIn(panel)
       if (items.length === 0) {
         event.preventDefault()
+        panel.focus()
         return
       }
       const first = items[0]
       const last = items[items.length - 1]
-      if (event.shiftKey && document.activeElement === first) {
+      const current = document.activeElement
+      const inside = current instanceof Node && panel.contains(current)
+      if (!inside) {
+        event.preventDefault()
+        ;(event.shiftKey ? last : first).focus()
+        return
+      }
+      if (event.shiftKey && (current === first || current === panel)) {
         event.preventDefault()
         last.focus()
-      } else if (!event.shiftKey && document.activeElement === last) {
+      } else if (!event.shiftKey && current === last) {
         event.preventDefault()
         first.focus()
       }
     }
-    document.addEventListener('keydown', onKey)
-    return () => {
-      document.body.style.overflow = previous
-      document.removeEventListener('keydown', onKey)
+
+    function onFocusIn(event: FocusEvent) {
+      const panel = panelRef.current
+      if (!panel?.isConnected) return
+      if (event.target instanceof Node && panel.contains(event.target)) return
+      panel.focus()
     }
-  }, [open, locked, onClose])
+
+    document.addEventListener('keydown', onKey)
+    document.addEventListener('focusin', onFocusIn)
+    return () => {
+      document.removeEventListener('keydown', onKey)
+      document.removeEventListener('focusin', onFocusIn)
+      document.body.style.overflow = previousOverflow
+      const trigger = previouslyFocused.current
+      previouslyFocused.current = null
+      if (trigger && canRestore(trigger)) trigger.focus()
+    }
+  }, [open])
 
   if (!open) return null
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center sm:items-center sm:p-4">
-      <button className="absolute inset-0 bg-overlay" aria-label="بستن" onClick={locked ? undefined : onClose} />
+      <div className="absolute inset-0 bg-overlay" aria-hidden="true" onClick={locked ? undefined : onClose} />
       <div
         ref={panelRef}
         tabIndex={-1}
