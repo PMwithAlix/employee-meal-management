@@ -1,11 +1,14 @@
-import { useEffect, useLayoutEffect, useRef, useState } from 'react'
-import { createPortal } from 'react-dom'
-import { ChevronDown, Search, X } from 'lucide-react'
+import { useState } from 'react'
+import { Search, X } from 'lucide-react'
 import { MealBlock } from '../components/MealBlock'
-import { Button, Empty, Segmented } from '../components/ui'
+import { SelectMealDialog } from '../components/SelectMealDialog'
+import { Button, Empty, MonthBar, Segmented } from '../components/ui'
 import { WEEKDAYS } from '../data'
 import { useApp } from '../store'
-import { findOrder, isLocked, rowMatches } from '../lib/orders'
+import { isSameDate, JALALI_MONTHS } from '../lib/jalali'
+import { findOrder, isMealOpen, rowMatches } from '../lib/orders'
+import { formatDeadline } from '../lib/deadlines'
+import { can } from '../permissions'
 import { cn, fa } from '../lib/text'
 import type { DayMenu, MealKind } from '../types'
 
@@ -26,39 +29,42 @@ export function MonthlyMenuPage() {
     )
   }
 
-  const visible = app.days.filter((day) => rowMatches(day, app.orders, id, app.menuQuery, app.today))
+  const visible = app.days.filter((day) => rowMatches(day, app.orders, id, app.menuQuery, app.deadlines, app.now))
   const active = app.menuQuery.meal !== 'all' || app.menuQuery.status !== 'all' || app.menuQuery.q.trim()
 
   return (
     <div className="space-y-3">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <p className="text-sm font-medium">{app.monthTitle}</p>
-          <p className="text-xs text-muted">ناهار و شام جدا انتخاب می‌شوند. مهلت هر وعده: ساعت {fa(app.deadlineHour)} همان روز.</p>
+      <div className="space-y-2">
+        <MonthBar />
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <p className="text-xs text-muted">ناهار و شام جدا انتخاب می‌شوند. ناهار: {formatDeadline(app.deadlines.lunch)}. شام: {formatDeadline(app.deadlines.dinner)}.</p>
+          <Segmented
+            label="نمای منو"
+            size="touch"
+            value={app.menuView}
+            onChange={app.setMenuView}
+            options={[{ id: 'list', label: 'فهرست' }, { id: 'calendar', label: 'تقویم' }]}
+          />
         </div>
-        <Segmented
-          label="نمای منو"
-          value={app.menuView}
-          onChange={app.setMenuView}
-          options={[{ id: 'list', label: 'فهرست' }, { id: 'calendar', label: 'تقویم' }]}
-        />
       </div>
 
       <div className="rounded-md border border-line bg-surface p-3">
-        <div className="mb-2 flex items-center justify-between md:hidden">
-          <button className="text-sm" onClick={() => setFiltersOpen((value) => !value)}>{filtersOpen ? 'بستن فیلترها' : 'فیلترها'}</button>
+        <div className="mb-2 flex items-center justify-between gap-2 md:hidden">
+          <button type="button" className="min-h-11 rounded-md border border-line px-3 text-sm" aria-expanded={filtersOpen} onClick={() => setFiltersOpen((value) => !value)}>{filtersOpen ? 'بستن فیلترها' : 'فیلترها'}</button>
           <span className="text-xs text-muted">{fa(visible.length)} روز</span>
         </div>
         <div className={cn('gap-3', filtersOpen ? 'grid' : 'hidden md:grid')}>
           <div className="flex flex-wrap items-center gap-2">
             <Segmented
               label="وعده"
+              size="touch"
               value={app.menuQuery.meal}
               onChange={(meal) => app.setMenuQuery({ meal })}
               options={[{ id: 'all', label: 'همه' }, { id: 'lunch', label: 'ناهار' }, { id: 'dinner', label: 'شام' }]}
             />
             <Segmented
               label="وضعیت انتخاب"
+              size="touch"
               value={app.menuQuery.status}
               onChange={(status) => app.setMenuQuery({ status })}
               options={[
@@ -76,10 +82,11 @@ export function MonthlyMenuPage() {
                 value={app.menuQuery.q}
                 onChange={(event) => app.setMenuQuery({ q: event.target.value })}
                 placeholder="جستجوی غذا یا تاریخ"
-                className="h-9 w-full rounded-md border border-line bg-bg pe-9 ps-3 text-sm"
+                aria-label="جستجوی غذا یا تاریخ"
+                className="h-11 w-full rounded-md border border-line bg-bg pe-9 ps-3 text-base"
               />
             </label>
-            {active && <Button variant="ghost" onClick={app.clearMenuQuery}><X size={14} /> پاک کردن فیلتر</Button>}
+            {active && <Button variant="ghost" className="h-11 min-h-11" onClick={app.clearMenuQuery}><X size={14} /> پاک کردن فیلتر</Button>}
             <span className="hidden text-xs text-muted md:inline">{fa(visible.length)} روز</span>
           </div>
         </div>
@@ -121,15 +128,15 @@ function DayList({ days }: { days: DayMenu[] }) {
           </thead>
           <tbody>
             {days.map((day) => {
-              const lunch = findOrder(app.orders, id, day.jd, 'lunch')
-              const dinner = findOrder(app.orders, id, day.jd, 'dinner')
+              const lunch = findOrder(app.orders, id, day, day.jd, 'lunch')
+              const dinner = findOrder(app.orders, id, day, day.jd, 'dinner')
               return (
-                <tr key={day.jd} className={cn('border-t border-divider align-top', day.jd === app.today && 'bg-brandsubtle')}>
-                  <td className="px-3 py-3 font-medium">{fa(day.jd)} آبان</td>
+                <tr key={day.jd} className={cn('border-t border-divider align-top', isSameDate(day, app.now) && 'bg-brandsubtle')}>
+                  <td className="px-3 py-3 font-medium">{fa(day.jd)} {JALALI_MONTHS[day.jm - 1]}</td>
                   <td className="px-3 py-3 text-muted">{day.weekday}</td>
                   <td className="px-3 py-3"><Cell day={day} meal="lunch" choice={lunch?.choice ?? null} /></td>
                   <td className="px-3 py-3"><Cell day={day} meal="dinner" choice={dinner?.choice ?? null} /></td>
-                  <td className="px-3 py-3 text-xs leading-5 text-muted">{summary(day, lunch?.choice ?? null, dinner?.choice ?? null, app.today)}</td>
+                  <td className="px-3 py-3 text-xs leading-5 text-muted">{summary(day, lunch?.choice ?? null, dinner?.choice ?? null, app)}</td>
                 </tr>
               )
             })}
@@ -138,19 +145,19 @@ function DayList({ days }: { days: DayMenu[] }) {
       </div>
       <div className="space-y-2 md:hidden">
         {days.map((day) => {
-          const lunch = findOrder(app.orders, id, day.jd, 'lunch')
-          const dinner = findOrder(app.orders, id, day.jd, 'dinner')
+          const lunch = findOrder(app.orders, id, day, day.jd, 'lunch')
+          const dinner = findOrder(app.orders, id, day, day.jd, 'dinner')
           return (
-            <article key={day.jd} className="rounded-md border border-line bg-surface p-3">
-              <div className="mb-2 flex items-center justify-between text-sm">
-                <strong>{fa(day.jd)} آبان</strong>
-                <span className="text-muted">{day.weekday}</span>
+            <article key={day.jd} className={cn('rounded-md border border-line bg-surface p-3', isSameDate(day, app.now) && 'border-primary')}>
+              <div className="mb-2 flex items-center justify-between gap-2 text-sm">
+                <strong>{fa(day.jd)} {JALALI_MONTHS[day.jm - 1]}</strong>
+                <span className="text-muted">{day.weekday}{isSameDate(day, app.now) ? ' · امروز' : ''}</span>
               </div>
               <div className="space-y-2">
                 <Cell day={day} meal="lunch" choice={lunch?.choice ?? null} />
                 <Cell day={day} meal="dinner" choice={dinner?.choice ?? null} />
               </div>
-              <p className="mt-2 text-xs text-muted">{summary(day, lunch?.choice ?? null, dinner?.choice ?? null, app.today)}</p>
+              <p className="mt-2 text-xs text-muted">{summary(day, lunch?.choice ?? null, dinner?.choice ?? null, app)}</p>
             </article>
           )
         })}
@@ -172,14 +179,14 @@ function Calendar({ days, visible }: { days: DayMenu[]; visible: Set<number> }) 
         <div className="grid grid-cols-7">
           {Array.from({ length: lead }, (_, index) => <div key={`b-${index}`} className="min-h-[148px] border-t border-line bg-bg" />)}
           {days.map((day) => (
-            <div key={day.jd} className={cn('min-h-[148px] border-t border-line bg-surface p-1.5', day.jd === app.today && 'ring-1 ring-inset ring-primary', !visible.has(day.jd) && 'opacity-35')}>
+            <div key={day.jd} className={cn('min-h-[148px] border-t border-line bg-surface p-1.5', isSameDate(day, app.now) && 'ring-1 ring-inset ring-primary', !visible.has(day.jd) && 'opacity-35')}>
               <div className="mb-1 flex items-center justify-between text-xs">
                 <span className="font-medium">{fa(day.jd)}</span>
                 {!visible.has(day.jd) && <span className="text-[10px] text-muted">خارج از فیلتر</span>}
               </div>
               <div className="space-y-1">
-                <Cell day={day} meal="lunch" choice={findOrder(app.orders, id, day.jd, 'lunch')?.choice ?? null} dense />
-                <Cell day={day} meal="dinner" choice={findOrder(app.orders, id, day.jd, 'dinner')?.choice ?? null} dense />
+                <Cell day={day} meal="lunch" choice={findOrder(app.orders, id, day, day.jd, 'lunch')?.choice ?? null} dense />
+                <Cell day={day} meal="dinner" choice={findOrder(app.orders, id, day, day.jd, 'dinner')?.choice ?? null} dense />
               </div>
             </div>
           ))}
@@ -188,10 +195,10 @@ function Calendar({ days, visible }: { days: DayMenu[]; visible: Set<number> }) 
       <div className="space-y-2 lg:hidden">
         {days.filter((day) => visible.has(day.jd)).map((day) => (
           <article key={day.jd} className="rounded-md border border-line bg-surface p-3">
-            <p className="mb-2 text-sm font-medium">{fa(day.jd)} آبان · {day.weekday}</p>
+            <p className="mb-2 text-sm font-medium">{fa(day.jd)} {JALALI_MONTHS[day.jm - 1]} · {day.weekday}</p>
             <div className="space-y-2">
-              <Cell day={day} meal="lunch" choice={findOrder(app.orders, id, day.jd, 'lunch')?.choice ?? null} />
-              <Cell day={day} meal="dinner" choice={findOrder(app.orders, id, day.jd, 'dinner')?.choice ?? null} />
+              <Cell day={day} meal="lunch" choice={findOrder(app.orders, id, day, day.jd, 'lunch')?.choice ?? null} />
+              <Cell day={day} meal="dinner" choice={findOrder(app.orders, id, day, day.jd, 'dinner')?.choice ?? null} />
             </div>
           </article>
         ))}
@@ -204,117 +211,43 @@ function Cell({ day, meal, choice, dense }: { day: DayMenu; meal: MealKind; choi
   const app = useApp()
   const id = app.personaId
   const options = day[meal]
-  const anchor = useRef<HTMLDivElement>(null)
   const [open, setOpen] = useState(false)
   const orphan = Boolean(choice && options && !options.includes(choice))
-  const can = Boolean(id && options) && (day.jd < app.today ? app.role === 'support' : true)
+  const orderingOpen = isMealOpen(day, meal, app.deadlines, app.now)
+  const canEdit = Boolean(id && options) && (orderingOpen ? can(app.role, 'order.self') : can(app.role, 'order.ops'))
   return (
-    <div ref={anchor} className="relative">
+    <>
       <MealBlock
         kind={meal}
         choice={choice}
-        locked={isLocked(day.jd, app.today)}
+        locked={!orderingOpen}
         defined={Boolean(options)}
         orphan={orphan}
         dense={dense}
-        onSelect={can ? () => setOpen((value) => !value) : undefined}
+        onSelect={canEdit ? () => setOpen(true) : undefined}
       />
-      {can && <ChevronDown size={14} className="pointer-events-none absolute bottom-2 end-2 text-muted" aria-hidden />}
-      {open && options && anchor.current && id && (
-        <OptionMenu
-          anchor={anchor.current}
+      {open && canEdit && options && id && (
+        <SelectMealDialog
+          kind={meal}
+          jd={day.jd}
+          weekday={day.weekday}
+          monthName={JALALI_MONTHS[day.jm - 1]}
           options={options}
           current={choice}
+          locked={!orderingOpen}
+          ops={can(app.role, 'order.ops')}
           onClose={() => setOpen(false)}
-          onPick={(next) => {
-            app.selectMeal(id, day.jd, meal, next, 'self')
-            setOpen(false)
-          }}
+          onSave={(next) => app.selectMeal(id, day.jd, meal, next, 'self')}
         />
       )}
-    </div>
+    </>
   )
 }
 
-function OptionMenu({
-  anchor,
-  options,
-  current,
-  onPick,
-  onClose,
-}: {
-  anchor: HTMLElement
-  options: string[]
-  current: string | null
-  onPick: (choice: string | null) => void
-  onClose: () => void
-}) {
-  const menuRef = useRef<HTMLDivElement>(null)
-  const [style, setStyle] = useState<{ top: number; left: number; width: number }>({ top: 0, left: 0, width: 220 })
-
-  useLayoutEffect(() => {
-    const rect = anchor.getBoundingClientRect()
-    const width = Math.max(rect.width, 220)
-    let left = rect.left
-    if (left + width > window.innerWidth - 8) left = window.innerWidth - width - 8
-    if (left < 8) left = 8
-    const height = (options.length + (current ? 1 : 0)) * 40 + 8
-    let top = rect.bottom + 4
-    if (top + height > window.innerHeight - 8) top = Math.max(8, rect.top - height - 4)
-    setStyle({ top, left, width })
-  }, [anchor, options.length, current])
-
-  useEffect(() => {
-    function onPointer(event: PointerEvent) {
-      const node = event.target as Node
-      if (anchor.contains(node) || menuRef.current?.contains(node)) return
-      onClose()
-    }
-    function onKey(event: KeyboardEvent) {
-      if (event.key === 'Escape') onClose()
-    }
-    document.addEventListener('pointerdown', onPointer)
-    document.addEventListener('keydown', onKey)
-    return () => {
-      document.removeEventListener('pointerdown', onPointer)
-      document.removeEventListener('keydown', onKey)
-    }
-  }, [anchor, onClose])
-
-  return createPortal(
-    <div
-      ref={menuRef}
-      role="listbox"
-      style={{ position: 'fixed', top: style.top, left: style.left, width: style.width, zIndex: 70 }}
-      className="rounded-md border border-line bg-surface p-1 shadow-card"
-    >
-      {options.map((option) => (
-        <button
-          key={option}
-          type="button"
-          role="option"
-          aria-selected={option === current}
-          className={cn('block w-full rounded px-2.5 py-2 text-start text-sm hover:bg-surface2', option === current && 'bg-brandsubtle font-medium text-ink')}
-          onClick={() => onPick(option)}
-        >
-          {option}
-        </button>
-      ))}
-      {current && (
-        <button type="button" className="block w-full rounded px-2.5 py-2 text-start text-sm text-muted hover:bg-surface2" onClick={() => onPick(null)}>
-          حذف انتخاب
-        </button>
-      )}
-    </div>,
-    document.body,
-  )
-}
-
-function summary(day: DayMenu, lunch: string | null, dinner: string | null, today: number) {
+function summary(day: DayMenu, lunch: string | null, dinner: string | null, app: ReturnType<typeof useApp>) {
   if (!day.lunch && !day.dinner) return 'منو تعریف نشده'
   const parts: string[] = []
-  if (day.lunch) parts.push(lunch ? 'ناهار انتخاب شده' : 'ناهار انتخاب نشده')
-  if (day.dinner) parts.push(dinner ? 'شام انتخاب شده' : 'شام انتخاب نشده')
-  parts.push(day.jd < today ? 'مهلت به پایان رسیده' : 'باز برای انتخاب')
+  if (day.lunch) parts.push(`ناهار ${lunch ? 'انتخاب شده' : 'انتخاب نشده'}، ${isMealOpen(day, 'lunch', app.deadlines, app.now) ? 'باز' : 'مهلت تمام'}`)
+  if (day.dinner) parts.push(`شام ${dinner ? 'انتخاب شده' : 'انتخاب نشده'}، ${isMealOpen(day, 'dinner', app.deadlines, app.now) ? 'باز' : 'مهلت تمام'}`)
   return parts.join(' · ')
 }

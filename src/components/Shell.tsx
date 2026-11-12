@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import {
   BarChart3,
   Bell,
@@ -20,7 +20,8 @@ import {
   X,
 } from 'lucide-react'
 import { ROLE_LABEL } from '../data'
-import { canOpen, useApp } from '../store'
+import { canAccess, ROLES } from '../permissions'
+import { useApp } from '../store'
 import { fa, cn } from '../lib/text'
 import type { Page, Role } from '../types'
 import { OverviewPage } from '../pages/Overview'
@@ -60,6 +61,29 @@ const NAV: Array<{ id: Page; label: string; group: string; icon: typeof Users }>
   { id: 'settings', label: 'تنظیمات', group: 'سیستم', icon: Settings },
 ]
 
+function useIsDesktop() {
+  const query = '(min-width: 768px)'
+  const [desktop, setDesktop] = useState(() => window.matchMedia(query).matches)
+  useEffect(() => {
+    const media = window.matchMedia(query)
+    const onChange = () => setDesktop(media.matches)
+    onChange()
+    media.addEventListener('change', onChange)
+    return () => media.removeEventListener('change', onChange)
+  }, [])
+  return desktop
+}
+
+const FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+
+function focusableElements(root: HTMLElement) {
+  return [...root.querySelectorAll<HTMLElement>(FOCUSABLE)].filter((element) => {
+    if (element.getAttribute('aria-hidden') === 'true') return false
+    const style = getComputedStyle(element)
+    return style.display !== 'none' && style.visibility !== 'hidden'
+  })
+}
+
 const PAGES = {
   overview: OverviewPage,
   menu: MonthlyMenuPage,
@@ -75,40 +99,106 @@ const PAGES = {
 
 export function Shell() {
   const app = useApp()
+  const desktop = useIsDesktop()
+  const drawerRef = useRef<HTMLElement>(null)
+  const menuButtonRef = useRef<HTMLButtonElement>(null)
   const [notesOpen, setNotesOpen] = useState(false)
   const [profileOpen, setProfileOpen] = useState(false)
   const unread = app.notes.filter((note) => !note.read).length
-  const visible = NAV.filter((item) => canOpen(app.role, item.id))
+  const visible = NAV.filter((item) => canAccess(app.role, item.id))
   const groups = [...new Set(visible.map((item) => item.group))]
   const Page = PAGES[app.page]
+  const drawerOpen = app.mobileNav && !desktop
+  const iconOnly = app.collapsed && desktop
 
   useEffect(() => {
     document.title = `${TITLES[app.page]} · سامانه غذا`
   }, [app.page])
 
+  useEffect(() => {
+    if (desktop && app.mobileNav) app.setMobileNav(false)
+  }, [desktop, app.mobileNav, app.setMobileNav])
+
+  useEffect(() => {
+    const drawer = drawerRef.current
+    if (!drawer) return
+    drawer.inert = !desktop && !app.mobileNav
+  }, [desktop, app.mobileNav])
+
+  useEffect(() => {
+    if (!drawerOpen) return
+    const drawer = drawerRef.current
+    const previousOverflow = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    const items = drawer ? focusableElements(drawer) : []
+    ;(items[0] ?? drawer)?.focus()
+    function onKey(event: KeyboardEvent) {
+      if (event.key === 'Escape') {
+        app.setMobileNav(false)
+        return
+      }
+      if (event.key !== 'Tab' || !drawer) return
+      const current = focusableElements(drawer)
+      if (current.length === 0) {
+        event.preventDefault()
+        drawer.focus()
+        return
+      }
+      const first = current[0]
+      const last = current[current.length - 1]
+      const active = document.activeElement
+      const inside = active instanceof Node && drawer.contains(active)
+      if (event.shiftKey) {
+        if (!inside || active === first) {
+          event.preventDefault()
+          last.focus()
+        }
+        return
+      }
+      if (!inside || active === last) {
+        event.preventDefault()
+        first.focus()
+      }
+    }
+    document.addEventListener('keydown', onKey)
+    return () => {
+      document.body.style.overflow = previousOverflow
+      document.removeEventListener('keydown', onKey)
+      menuButtonRef.current?.focus()
+    }
+  }, [drawerOpen, app.setMobileNav])
+
   return (
     <div className="min-h-screen bg-bg text-ink">
-      {app.mobileNav && <button className="fixed inset-0 z-30 bg-overlay md:hidden" aria-label="بستن منو" onClick={() => app.setMobileNav(false)} />}
+      {drawerOpen && <button className="fixed inset-0 z-30 bg-overlay md:hidden" aria-label="بستن منو" onClick={() => app.setMobileNav(false)} />}
       <aside
+        ref={drawerRef}
+        id="app-navigation"
+        tabIndex={-1}
+        role={drawerOpen ? 'dialog' : 'navigation'}
+        aria-modal={drawerOpen || undefined}
+        aria-hidden={!desktop && !app.mobileNav ? true : undefined}
+        aria-label="منوی اصلی"
         className={cn(
-          'fixed inset-y-0 right-0 z-40 flex flex-col border-s border-line bg-sidebar transition-transform md:translate-x-0',
-          app.collapsed ? 'w-[72px]' : 'w-60',
+          'fixed inset-y-0 right-0 z-40 flex w-60 flex-col border-s border-line bg-sidebar transition-transform md:translate-x-0',
+          iconOnly && 'md:w-[72px]',
           app.mobileNav ? 'translate-x-0' : 'translate-x-full',
         )}
       >
-        <div className={cn('flex h-14 items-center gap-2 border-b border-line px-3', app.collapsed && 'justify-center')}>
+        <div className={cn('flex h-14 items-center gap-2 border-b border-line px-3', iconOnly && 'md:justify-center md:px-2')}>
           <span className="grid h-8 w-8 shrink-0 place-items-center rounded-md bg-primary text-sm font-semibold text-onprimary">غ</span>
-          {!app.collapsed && (
-            <span>
-              <span className="block text-sm font-semibold leading-5">سامانه غذا</span>
-              <span className="block text-[11px] text-muted">سفارش ماهانه</span>
-            </span>
-          )}
+          <span className={cn('min-w-0', iconOnly && 'md:hidden')}>
+            <span className="block truncate text-sm font-semibold leading-5">سامانه غذا</span>
+            <span className="block truncate text-[11px] text-muted">سفارش ماهانه</span>
+          </span>
+          <button type="button" className="ms-auto grid h-10 w-10 shrink-0 place-items-center rounded-md hover:bg-surface md:hidden" aria-label="بستن منو" onClick={() => app.setMobileNav(false)}>
+            <X size={18} />
+          </button>
         </div>
-        <nav className="flex-1 overflow-auto px-2 py-3">
+        <nav className="flex-1 overflow-auto px-2 py-3" aria-label="بخش‌های برنامه">
           {groups.map((group) => (
             <div key={group} className="mb-3">
-              {!app.collapsed && <p className="px-2 pb-1 text-[11px] text-muted">{group}</p>}
+              <p className={cn('px-2 pb-1 text-[11px] text-muted', iconOnly && 'md:sr-only')}>{group}</p>
               {visible
                 .filter((item) => item.group === group)
                 .map((item) => {
@@ -119,54 +209,61 @@ export function Shell() {
                       key={item.id}
                       type="button"
                       title={item.label}
+                      aria-current={active ? 'page' : undefined}
                       onClick={() => app.setPage(item.id)}
                       className={cn(
-                        'mb-0.5 flex w-full items-center gap-2 rounded-md px-2.5 py-2 text-sm',
+                        'mb-0.5 flex min-h-11 w-full items-center gap-2 rounded-md px-2.5 py-2 text-sm',
                         active ? 'bg-selected font-medium text-link shadow-[inset_-2px_0_0_var(--link)]' : 'text-ink hover:bg-surface2',
-                        app.collapsed && 'justify-center px-0',
+                        iconOnly && 'md:justify-center md:px-0',
                       )}
                     >
                       <Icon size={16} aria-hidden />
-                      {!app.collapsed && <span className="truncate">{item.label}</span>}
+                      <span className={cn('truncate', iconOnly && 'md:sr-only')}>{item.label}</span>
                     </button>
                   )
                 })}
             </div>
           ))}
         </nav>
-        <div className="border-t border-line p-2">
-          <div className={cn('rounded-md border border-dashed border-line p-2', app.collapsed && 'px-1')}>
-            {!app.collapsed && <p className="mb-1 text-[11px] leading-4 text-muted">پیش‌نمایش نقش، فقط در این نمونه</p>}
-            <select
-              aria-label="پیش‌نمایش نقش"
-              title="پیش‌نمایش نقش"
-              value={app.role}
-              onChange={(event) => app.setRole(event.target.value as Role)}
-              className="h-8 w-full rounded-md border border-line bg-surface px-1 text-xs"
-            >
-              {(Object.keys(ROLE_LABEL) as Role[]).map((role) => (
-                <option key={role} value={role}>{ROLE_LABEL[role]}</option>
-              ))}
-            </select>
+        {import.meta.env.DEV && (
+          <div className="border-t border-line p-2">
+            <div className={cn('rounded-md border border-dashed border-line p-2', iconOnly && 'md:px-1')}>
+              <p className={cn('mb-1 text-[11px] leading-4 text-muted', iconOnly && 'md:sr-only')}>پیش‌نمایش نقش، فقط در توسعه</p>
+              <select
+                aria-label="پیش‌نمایش نقش"
+                title="پیش‌نمایش نقش"
+                value={app.role}
+                onChange={(event) => app.setRole(event.target.value as Role)}
+                className="h-8 w-full rounded-md border border-line bg-surface px-1 text-xs"
+              >
+                {ROLES.map((role) => (
+                  <option key={role} value={role}>{ROLE_LABEL[role]}</option>
+                ))}
+              </select>
+            </div>
           </div>
-        </div>
+        )}
       </aside>
 
-      <div className={cn('min-h-screen', app.collapsed ? 'md:mr-[72px]' : 'md:mr-60')}>
+      <div className={cn('min-h-screen min-w-0', app.collapsed ? 'md:mr-[72px]' : 'md:mr-60')}>
         <header className="sticky top-0 z-20 flex h-14 items-center gap-2 border-b border-line bg-bg/95 px-3 backdrop-blur md:px-5">
-          <button className="rounded-md p-2 md:hidden" aria-label="باز کردن منو" onClick={() => app.setMobileNav(true)}>
+          <button ref={menuButtonRef} className="grid h-10 w-10 shrink-0 place-items-center rounded-md md:hidden" aria-label="باز کردن منو" aria-expanded={drawerOpen} aria-controls="app-navigation" onClick={() => app.setMobileNav(true)}>
             <Menu size={18} />
           </button>
-          <button className="hidden rounded-md p-2 md:inline-flex" aria-label={app.collapsed ? 'باز کردن نوار کناری' : 'جمع کردن نوار کناری'} title={app.collapsed ? 'باز کردن نوار کناری' : 'جمع کردن نوار کناری'} onClick={() => app.setCollapsed(!app.collapsed)}>
+          <button className="hidden h-10 w-10 shrink-0 place-items-center rounded-md md:grid" aria-label={app.collapsed ? 'باز کردن نوار کناری' : 'جمع کردن نوار کناری'} title={app.collapsed ? 'باز کردن نوار کناری' : 'جمع کردن نوار کناری'} onClick={() => app.setCollapsed(!app.collapsed)}>
             {app.collapsed ? <PanelRightOpen size={18} /> : <PanelRightClose size={18} />}
           </button>
-          <div className="min-w-0">
+          <div className="min-w-0 flex-1">
             <h1 className="truncate text-sm font-semibold">{TITLES[app.page]}</h1>
-            <p className="truncate text-[11px] text-muted">{app.monthTitle}</p>
+            <div className="flex items-center gap-1">
+              <button type="button" className="h-6 rounded px-1.5 text-[11px] text-link" onClick={() => app.shiftMonth(-1)}>ماه قبل</button>
+              <p className="truncate text-[11px] text-muted">{app.monthTitle}</p>
+              <button type="button" className="h-6 rounded px-1.5 text-[11px] text-link" onClick={() => app.shiftMonth(1)}>ماه بعد</button>
+            </div>
           </div>
-          <div className="ms-auto flex items-center gap-1">
+          <div className="flex shrink-0 items-center gap-1">
             <button
-              className="rounded-md p-2"
+              className="grid h-10 w-10 shrink-0 place-items-center rounded-md"
               aria-label={app.theme === 'dark' ? 'زمینه روشن' : 'زمینه تیره'}
               title={app.theme === 'dark' ? 'زمینه روشن' : 'زمینه تیره'}
               onClick={() => app.setTheme(app.theme === 'dark' ? 'light' : 'dark')}
@@ -174,7 +271,7 @@ export function Shell() {
               {app.theme === 'dark' ? <Sun size={16} /> : <Moon size={16} />}
             </button>
             <div className="relative">
-              <button className="relative rounded-md p-2" aria-label="اعلان‌ها" title="اعلان‌ها" onClick={() => { setNotesOpen((value) => !value); setProfileOpen(false) }}>
+              <button className="relative grid h-10 w-10 shrink-0 place-items-center rounded-md" aria-label="اعلان‌ها" title="اعلان‌ها" onClick={() => { setNotesOpen((value) => !value); setProfileOpen(false) }}>
                 <Bell size={16} />
                 {unread > 0 && <span className="absolute left-1 top-1 grid h-4 min-w-4 place-items-center rounded-full bg-danger px-1 text-[10px] text-onprimary">{fa(unread)}</span>}
               </button>
@@ -208,7 +305,7 @@ export function Shell() {
               )}
             </div>
             <div className="relative">
-              <button className="flex items-center gap-2 rounded-md px-2 py-1 hover:bg-surface" onClick={() => { setProfileOpen((value) => !value); setNotesOpen(false) }}>
+              <button className="flex h-10 shrink-0 items-center gap-2 rounded-md px-1.5 hover:bg-surface" onClick={() => { setProfileOpen((value) => !value); setNotesOpen(false) }}>
                 <span className="grid h-7 w-7 place-items-center rounded-full bg-surface2 text-xs">{app.personaName.slice(0, 1)}</span>
                 <span className="hidden text-start sm:block">
                   <span className="block text-xs font-medium leading-4">{app.personaName}</span>

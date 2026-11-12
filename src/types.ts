@@ -47,6 +47,8 @@ export interface Employee {
 
 export interface DayMenu {
   jd: number
+  jy: number
+  jm: number
   weekday: string
   lunch: string[] | null
   dinner: string[] | null
@@ -61,6 +63,8 @@ export interface Order {
   id: string
   employeeId: string
   buildingId: string
+  jy: number
+  jm: number
   jd: number
   meal: MealKind
   choice: string | null
@@ -70,6 +74,8 @@ export interface Order {
 export interface GuestOrder {
   id: string
   buildingId: string
+  jy: number
+  jm: number
   jd: number
   meal: MealKind
   count: number
