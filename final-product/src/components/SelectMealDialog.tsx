@@ -12,6 +12,7 @@ export function SelectMealDialog({
   current,
   locked,
   ops,
+  who,
   onClose,
   onSave,
 }: {
@@ -23,6 +24,7 @@ export function SelectMealDialog({
   current: string | null
   locked: boolean
   ops: boolean
+  who?: string
   onClose: () => void
   onSave: (choice: string | null) => boolean
 }) {
@@ -53,7 +55,8 @@ export function SelectMealDialog({
 
   return (
     <Dialog open title={`${current ? 'تغییر' : 'انتخاب'} ${mealLabel} — ${when}`} onClose={onClose} locked={saving || Boolean(notice)}>
-      <p className="text-sm text-muted">این انتخاب فقط {mealLabel} است و روی {other} اثری ندارد. بستن پنجره سفارش را عوض نمی‌کند.</p>
+      {who && <p className="text-sm font-medium">کارمند: {who}</p>}
+      <p className={cn('text-sm text-muted', who && 'mt-1')}>این انتخاب فقط {mealLabel} است و روی {other} اثری ندارد. بستن پنجره سفارش را عوض نمی‌کند.</p>
       {locked && ops && (
         <p className="mt-2 rounded-md bg-warnbg px-3 py-2 text-sm text-warn">مهلت این وعده گذشته است. این تغییر به‌عنوان عملیات پشتیبانی ثبت می‌شود.</p>
       )}

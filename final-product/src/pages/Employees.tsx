@@ -27,25 +27,39 @@ export function EmployeesPage() {
     <div className="grid gap-4 lg:grid-cols-[1fr_18rem]">
       <div className="space-y-3">
         <div className="flex flex-wrap gap-2">
-          <input value={q} onChange={(event) => setQ(event.target.value)} placeholder="نام یا نام کاربری" className="h-10 min-w-[12rem] flex-1 rounded-md border border-line bg-surface px-3 text-sm" />
-          <select className="h-10 rounded-md border border-line bg-surface px-2 text-sm" value={buildingId} onChange={(event) => setBuildingId(event.target.value)}>
+          <input value={q} onChange={(event) => setQ(event.target.value)} placeholder="نام، نام خانوادگی یا نام کاربری" aria-label="جستجوی کارمند" className="h-11 min-w-0 flex-1 basis-full rounded-md border border-line bg-surface px-3 text-base sm:basis-48" />
+          <select className="h-11 min-w-0 flex-1 rounded-md border border-line bg-surface px-2 text-base" value={buildingId} onChange={(event) => setBuildingId(event.target.value)}>
             <option value="all">همه ساختمان‌ها</option>
             {app.buildings.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
           </select>
-          <select className="h-10 rounded-md border border-line bg-surface px-2 text-sm" value={groupId} onChange={(event) => setGroupId(event.target.value)}>
+          <select className="h-11 min-w-0 flex-1 rounded-md border border-line bg-surface px-2 text-base" value={groupId} onChange={(event) => setGroupId(event.target.value)}>
             <option value="all">همه گروه‌ها</option>
             {app.groups.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
           </select>
-          <select className="h-10 rounded-md border border-line bg-surface px-2 text-sm" value={status} onChange={(event) => setStatus(event.target.value as 'all' | 'active' | 'inactive')}>
+          <select className="h-11 min-w-0 flex-1 rounded-md border border-line bg-surface px-2 text-base" value={status} onChange={(event) => setStatus(event.target.value as 'all' | 'active' | 'inactive')}>
             <option value="all">همه وضعیت‌ها</option>
             <option value="active">فعال</option>
             <option value="inactive">غیرفعال</option>
           </select>
           <Button onClick={() => setEditing('new')}>کارمند جدید</Button>
         </div>
-        {rows.length === 0 ? <Empty title="کارمندی پیدا نشد" body="عبارت جستجو یا فیلتر را تغییر دهید." /> : (
-          <div className="overflow-auto rounded-md border border-line bg-surface">
-            <table className="w-full min-w-[640px] text-sm">
+        {rows.length === 0 ? <Empty title={q.trim() || buildingId !== 'all' || groupId !== 'all' || status !== 'all' ? 'نتیجه‌ای پیدا نشد' : 'کارمندی نیست'} body="عبارت جستجو یا فیلتر را تغییر دهید." /> : (
+          <>
+          <div className="space-y-2 lg:hidden">
+            {rows.map((employee) => (
+              <button key={employee.id} type="button" className={cn('w-full rounded-md border border-line bg-surface p-3 text-start', selected === employee.id && 'border-primary bg-brandsubtle')} onClick={() => setSelected(employee.id)}>
+                <span className="flex items-center justify-between gap-2">
+                  <span className="font-medium">{fullName(employee)}</span>
+                  <Badge tone={employee.active ? 'ok' : 'neutral'}>{employee.active ? 'فعال' : 'غیرفعال'}</Badge>
+                </span>
+                <span className="mt-1 block text-sm text-muted" dir="ltr">{employee.username}</span>
+                <span className="mt-1 block text-sm">{app.buildings.find((item) => item.id === employee.buildingId)?.name}</span>
+                <span className="mt-1 block text-sm text-muted">{employee.groupIds.map((id) => app.groups.find((item) => item.id === id)?.name).filter(Boolean).join('، ') || 'بدون گروه'}</span>
+              </button>
+            ))}
+          </div>
+          <div className="hidden overflow-hidden rounded-md border border-line bg-surface lg:block">
+            <table className="w-full text-sm">
               <thead className="bg-elevated text-xs text-muted">
                 <tr>
                   {['نام', 'نام کاربری', 'ساختمان', 'گروه‌ها', 'وضعیت', 'تاریخ ایجاد'].map((head) => <th key={head} className="px-3 py-2 text-start font-medium">{head}</th>)}
@@ -65,6 +79,7 @@ export function EmployeesPage() {
               </tbody>
             </table>
           </div>
+          </>
         )}
       </div>
       {current && (
@@ -110,6 +125,15 @@ function EmployeeForm({ id, onClose }: { id?: string; onClose: () => void }) {
   const [buildingId, setBuildingId] = useState(current?.buildingId ?? app.buildings[0]?.id ?? '')
   const [groupIds, setGroupIds] = useState<string[]>(current?.groupIds ?? [])
   const [error, setError] = useState('')
+  const [tried, setTried] = useState(false)
+  const duplicate = app.employees.some((employee) => employee.username === username.trim() && employee.id !== id)
+  const fields = {
+    firstName: firstName.trim() ? '' : 'نام را وارد کنید.',
+    lastName: lastName.trim() ? '' : 'نام خانوادگی را وارد کنید.',
+    username: !username.trim() ? 'نام کاربری را وارد کنید.' : duplicate ? 'این نام کاربری قبلاً ثبت شده است.' : '',
+    password: !id && password.trim().length < 4 ? 'رمز عبور اولیه را وارد کنید.' : '',
+    building: buildingId ? '' : 'ساختمان را انتخاب کنید.',
+  }
 
   return (
     <Dialog open title={id ? 'ویرایش کارمند' : 'کارمند جدید'} onClose={onClose} wide>
@@ -117,8 +141,8 @@ function EmployeeForm({ id, onClose }: { id?: string; onClose: () => void }) {
         className="grid gap-3 sm:grid-cols-2"
         onSubmit={(event) => {
           event.preventDefault()
-          if (!id && password.trim().length < 4) {
-            setError('رمز عبور را وارد کنید.')
+          if (fields.firstName || fields.lastName || fields.username || fields.password || fields.building) {
+            setTried(true)
             return
           }
           const message = app.saveEmployee({ id, firstName, lastName, username, buildingId, groupIds })
@@ -126,22 +150,31 @@ function EmployeeForm({ id, onClose }: { id?: string; onClose: () => void }) {
           else onClose()
         }}
       >
-        <Field label="نام"><input className={controlClass} value={firstName} onChange={(event) => setFirstName(event.target.value)} /></Field>
-        <Field label="نام خانوادگی"><input className={controlClass} value={lastName} onChange={(event) => setLastName(event.target.value)} /></Field>
-        <Field label="نام کاربری"><input className={controlClass} dir="ltr" value={username} onChange={(event) => setUsername(event.target.value)} /></Field>
-        {!id && <Field label="رمز عبور"><input className={controlClass} type="password" value={password} onChange={(event) => setPassword(event.target.value)} /></Field>}
+        <Field label="نام"><input className={controlClass} value={firstName} onChange={(event) => setFirstName(event.target.value)} />{tried && fields.firstName && <p className="mt-1 text-sm text-danger">{fields.firstName}</p>}</Field>
+        <Field label="نام خانوادگی"><input className={controlClass} value={lastName} onChange={(event) => setLastName(event.target.value)} />{tried && fields.lastName && <p className="mt-1 text-sm text-danger">{fields.lastName}</p>}</Field>
+        <Field label="نام کاربری"><input className={controlClass} dir="ltr" value={username} onChange={(event) => setUsername(event.target.value)} />{(tried || duplicate) && fields.username && <p className="mt-1 text-sm text-danger">{fields.username}</p>}</Field>
+        {!id && (
+          <Field label="رمز عبور اولیه">
+            <input className={controlClass} type="password" value={password} onChange={(event) => setPassword(event.target.value)} autoComplete="new-password" />
+            {tried && fields.password && <p className="mt-1 text-sm text-danger">{fields.password}</p>}
+            <p className="mt-1 text-xs text-muted">این رمز در نمونه ذخیره نمی‌شود و در ورود واقعی ثبت نمی‌گردد. ورود آزمایشی همچنان با هر نام کاربری غیرخالی انجام می‌شود.</p>
+          </Field>
+        )}
         <Field label="ساختمان">
           <select className={controlClass} value={buildingId} onChange={(event) => setBuildingId(event.target.value)}>
+            <option value="">انتخاب ساختمان</option>
             {app.buildings.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
           </select>
+          {tried && fields.building && <p className="mt-1 text-sm text-danger">{fields.building}</p>}
         </Field>
         <fieldset className="sm:col-span-2">
-          <legend className="mb-1 text-sm text-muted">گروه‌های کارکنان</legend>
+          <legend className="mb-1 text-sm text-muted">گروه‌های عضویت</legend>
           <div className="flex flex-wrap gap-2">
             {app.groups.map((group) => (
-              <label key={group.id} className="flex items-center gap-1 text-sm">
+              <label key={group.id} className="flex min-h-11 items-center gap-2 rounded-md border border-line px-3 text-sm">
                 <input
                   type="checkbox"
+                  className="h-5 w-5"
                   checked={groupIds.includes(group.id)}
                   onChange={(event) => setGroupIds((list) => event.target.checked ? [...list, group.id] : list.filter((item) => item !== group.id))}
                 />

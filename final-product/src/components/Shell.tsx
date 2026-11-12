@@ -19,7 +19,7 @@ import {
   UtensilsCrossed,
   X,
 } from 'lucide-react'
-import { ROLE_LABEL } from '../data'
+import { PERSONA_ID, ROLE_LABEL } from '../data'
 import { canAccess, ROLES } from '../permissions'
 import { useApp } from '../store'
 import { fa, cn } from '../lib/text'
@@ -104,7 +104,8 @@ export function Shell() {
   const menuButtonRef = useRef<HTMLButtonElement>(null)
   const [notesOpen, setNotesOpen] = useState(false)
   const [profileOpen, setProfileOpen] = useState(false)
-  const unread = app.notes.filter((note) => !note.read).length
+  const visibleNotes = app.notes.filter((note) => !note.employeeId || note.employeeId === PERSONA_ID[app.role])
+  const unread = visibleNotes.filter((note) => !note.read).length
   const visible = NAV.filter((item) => canAccess(app.role, item.id))
   const groups = [...new Set(visible.map((item) => item.group))]
   const Page = PAGES[app.page]
@@ -282,7 +283,7 @@ export function Shell() {
                     <button className="text-xs text-link" onClick={app.markAllNotes}>خواندن همه</button>
                   </div>
                   <div className="max-h-80 space-y-1 overflow-auto">
-                    {app.notes.map((note) => (
+                    {visibleNotes.map((note) => (
                       <button
                         key={note.id}
                         className={cn('block w-full rounded-md px-2 py-2 text-start hover:bg-surface2', !note.read && 'bg-infobg')}

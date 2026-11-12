@@ -19,7 +19,7 @@ export function BuildingsPage() {
         {app.buildings.map((item) => {
           const count = app.employees.filter((employee) => employee.active && employee.buildingId === item.id).length
           return (
-            <button key={item.id} className={`w-full rounded-md border px-3 py-2 text-start ${item.id === openId ? 'border-primary bg-surface' : 'border-line bg-surface'}`} onClick={() => setOpenId(item.id)}>
+            <button key={item.id} className={`min-h-11 w-full rounded-md border px-3 py-2 text-start ${item.id === openId ? 'border-primary bg-surface' : 'border-line bg-surface'}`} onClick={() => setOpenId(item.id)}>
               <span className="block text-sm font-medium">{item.name}</span>
               <span className="text-xs text-muted">{fa(count)} کارمند فعال</span>
             </button>
@@ -53,7 +53,7 @@ export function BuildingsPage() {
             <p className="text-sm font-medium">انتقال کارمند به این ساختمان</p>
             <p className="text-xs text-muted">هر کارمند فقط یک ساختمان دارد. سفارش‌های قبلی با ساختمان زمان ثبت باقی می‌مانند.</p>
             <div className="flex flex-wrap gap-2">
-              <select className="h-10 min-w-[14rem] flex-1 rounded-md border border-line bg-bg px-2 text-sm" value={moving} onChange={(event) => setMoving(event.target.value)}>
+              <select className="h-11 min-w-0 flex-1 rounded-md border border-line bg-bg px-2 text-base" aria-label="کارمند برای انتقال" value={moving} onChange={(event) => setMoving(event.target.value)}>
                 <option value="">انتخاب کارمند</option>
                 {app.employees.filter((employee) => employee.buildingId !== building.id).map((employee) => (
                   <option key={employee.id} value={employee.id}>{fullName(employee)}</option>
@@ -73,18 +73,23 @@ function BuildingForm({ id, onClose, onCreated }: { id?: string; onClose: () => 
   const app = useApp()
   const current = app.buildings.find((item) => item.id === id)
   const [name, setName] = useState(current?.name ?? '')
+  const [error, setError] = useState('')
   return (
     <Dialog open title={id ? 'ویرایش ساختمان' : 'ساختمان جدید'} onClose={onClose}>
       <form
         onSubmit={(event) => {
           event.preventDefault()
-          if (!name.trim()) return
+          if (!name.trim()) {
+            setError('نام ساختمان را وارد کنید.')
+            return
+          }
           const nextId = app.saveBuilding(name, id)
           if (nextId && !id) onCreated(nextId)
           onClose()
         }}
       >
-        <Field label="نام ساختمان"><input className={controlClass} value={name} onChange={(event) => setName(event.target.value)} /></Field>
+        <Field label="نام ساختمان"><input className={controlClass} value={name} onChange={(event) => { setName(event.target.value); setError('') }} /></Field>
+        {error && <p className="mt-1 text-sm text-danger">{error}</p>}
         <p className="mt-2 text-xs text-muted">در محدوده فعلی محصول، ساختمان فقط نام دارد.</p>
         <div className="mt-4 flex justify-end gap-2">
           <Button variant="secondary" onClick={onClose}>انصراف</Button>
