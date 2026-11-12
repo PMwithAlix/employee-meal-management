@@ -38,21 +38,21 @@ export function ReportsPage() {
   }, [app.orders, app.employees, app.selectedMonth.jy, app.selectedMonth.jm, from, to, buildingId, employeeId, groupId])
 
   const monthly = useMemo(() => {
-    return app.employees.filter((employee) => {
-      if (buildingId !== 'all' && employee.buildingId !== buildingId) return false
-      if (employeeId !== 'all' && employee.id !== employeeId) return false
-      if (groupId !== 'all' && !employee.groupIds.includes(groupId)) return false
-      return true
-    }).map((employee) => {
-      const mine = app.orders.filter((order) => order.employeeId === employee.id && order.jy === app.selectedMonth.jy && order.jm === app.selectedMonth.jm && order.choice && order.jd >= from && order.jd <= to)
-      const buildingAtOrder = mine[0] ? app.buildings.find((item) => item.id === mine[0].buildingId)?.name : app.buildings.find((item) => item.id === employee.buildingId)?.name
-      return {
-        id: employee.id,
-        name: fullName(employee),
-        building: buildingAtOrder ?? '—',
-        lunch: mine.filter((order) => order.meal === 'lunch').length,
-        dinner: mine.filter((order) => order.meal === 'dinner').length,
-      }
+    return app.employees.flatMap((employee) => {
+      if (employeeId !== 'all' && employee.id !== employeeId) return []
+      if (groupId !== 'all' && !employee.groupIds.includes(groupId)) return []
+      const mine = app.orders.filter((order) => order.employeeId === employee.id && order.choice && order.jy === app.selectedMonth.jy && order.jm === app.selectedMonth.jm && order.jd >= from && order.jd <= to && (buildingId === 'all' || order.buildingId === buildingId))
+      const buildingIds = [...new Set(mine.map((order) => order.buildingId))]
+      return buildingIds.map((historicalBuildingId) => {
+        const orders = mine.filter((order) => order.buildingId === historicalBuildingId)
+        return {
+          id: `${employee.id}:${historicalBuildingId}`,
+          name: fullName(employee),
+          building: app.buildings.find((item) => item.id === historicalBuildingId)?.name ?? '—',
+          lunch: orders.filter((order) => order.meal === 'lunch').length,
+          dinner: orders.filter((order) => order.meal === 'dinner').length,
+        }
+      })
     })
   }, [app.employees, app.orders, app.buildings, app.selectedMonth.jy, app.selectedMonth.jm, from, to, buildingId, employeeId, groupId])
 
