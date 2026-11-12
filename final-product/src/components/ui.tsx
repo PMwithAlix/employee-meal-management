@@ -1,6 +1,7 @@
-import { useEffect, type ReactNode } from 'react'
+import { useEffect, useRef, type ReactNode } from 'react'
 import { X } from 'lucide-react'
 import { cn } from '../lib/text'
+import { useApp } from '../store'
 
 export function Button({
   children,
@@ -54,6 +55,8 @@ export function Field({
 export const controlClass =
   'h-10 w-full rounded-md border border-line bg-surface px-3 text-sm text-ink outline-none focus:border-primary'
 
+const FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+
 export function Dialog({
   open,
   title,
@@ -69,30 +72,75 @@ export function Dialog({
   wide?: boolean
   locked?: boolean
 }) {
+  const panelRef = useRef<HTMLDivElement>(null)
+
   useEffect(() => {
     if (!open) return
     const previous = document.body.style.overflow
     document.body.style.overflow = 'hidden'
+    panelRef.current?.focus()
+    function onKey(event: KeyboardEvent) {
+      if (event.key === 'Escape' && !locked) {
+        event.preventDefault()
+        onClose()
+        return
+      }
+      if (event.key !== 'Tab' || !panelRef.current) return
+      const items = [...panelRef.current.querySelectorAll<HTMLElement>(FOCUSABLE)].filter((item) => item.offsetParent !== null || item === document.activeElement)
+      if (items.length === 0) {
+        event.preventDefault()
+        return
+      }
+      const first = items[0]
+      const last = items[items.length - 1]
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault()
+        last.focus()
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault()
+        first.focus()
+      }
+    }
+    document.addEventListener('keydown', onKey)
     return () => {
       document.body.style.overflow = previous
+      document.removeEventListener('keydown', onKey)
     }
-  }, [open])
+  }, [open, locked, onClose])
 
   if (!open) return null
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center sm:items-center sm:p-4">
       <button className="absolute inset-0 bg-overlay" aria-label="بستن" onClick={locked ? undefined : onClose} />
-      <div role="dialog" aria-modal="true" aria-label={title} className={cn('relative max-h-[92vh] w-full overflow-auto rounded-t-lg border border-line bg-surface p-4 shadow-card sm:rounded-lg', wide ? 'sm:max-w-2xl' : 'sm:max-w-md')}>
+      <div
+        ref={panelRef}
+        tabIndex={-1}
+        role="dialog"
+        aria-modal="true"
+        aria-label={title}
+        className={cn('relative max-h-[92vh] w-full overflow-auto rounded-t-lg border border-line bg-surface p-4 pb-[max(1rem,env(safe-area-inset-bottom))] shadow-card outline-none sm:rounded-lg', wide ? 'sm:max-w-2xl' : 'sm:max-w-md')}
+      >
         <div className="mb-3 flex items-start justify-between gap-3">
           <h2 className="text-base font-semibold">{title}</h2>
           {!locked && (
-            <button className="rounded-md p-1 text-muted hover:bg-surface2" onClick={onClose} aria-label="بستن">
-              <X size={16} />
+            <button className="grid h-11 w-11 shrink-0 place-items-center rounded-md text-muted hover:bg-surface2" onClick={onClose} aria-label="بستن">
+              <X size={18} />
             </button>
           )}
         </div>
         {children}
       </div>
+    </div>
+  )
+}
+
+export function MonthBar() {
+  const app = useApp()
+  return (
+    <div className="flex items-center justify-between gap-2">
+      <button type="button" className="min-h-11 rounded-md px-3 text-sm text-link" onClick={() => app.shiftMonth(-1)}>ماه قبل</button>
+      <p className="min-w-0 truncate text-center text-sm font-semibold">{app.monthTitle}</p>
+      <button type="button" className="min-h-11 rounded-md px-3 text-sm text-link" onClick={() => app.shiftMonth(1)}>ماه بعد</button>
     </div>
   )
 }
@@ -128,14 +176,16 @@ export function Segmented<T extends string>({
   options,
   onChange,
   label,
+  size = 'compact',
 }: {
   value: T
   options: Array<{ id: T; label: string }>
   onChange: (value: T) => void
   label: string
+  size?: 'compact' | 'touch'
 }) {
   return (
-    <div role="radiogroup" aria-label={label} className="inline-flex flex-wrap rounded-md border border-line bg-surface2 p-0.5">
+    <div role="radiogroup" aria-label={label} className="inline-flex max-w-full flex-wrap rounded-md border border-line bg-surface2 p-0.5">
       {options.map((option) => (
         <button
           key={option.id}
@@ -143,7 +193,7 @@ export function Segmented<T extends string>({
           role="radio"
           aria-checked={value === option.id}
           onClick={() => onChange(option.id)}
-          className={cn('h-8 rounded px-2.5 text-sm', value === option.id ? 'bg-selected font-medium text-ink' : 'text-muted')}
+          className={cn(size === 'touch' ? 'min-h-11 px-3' : 'h-8 px-2.5', 'rounded text-sm', value === option.id ? 'bg-selected font-medium text-ink' : 'text-muted')}
         >
           {option.label}
         </button>

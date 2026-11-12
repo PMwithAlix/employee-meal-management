@@ -62,8 +62,8 @@ interface StoreValue {
   clearMenuQuery: () => void
   shiftMonth: (delta: number) => void
   setMealDeadline: (meal: MealKind, patch: Partial<Pick<MealDeadline, 'relation' | 'hour' | 'minute'>>) => void
-  selectMeal: (employeeId: string, jd: number, meal: MealKind, choice: string | null, scope: 'self' | 'ops') => void
-  rateMeal: (orderId: string, score: number, comment: string) => void
+  selectMeal: (employeeId: string, jd: number, meal: MealKind, choice: string | null, scope: 'self' | 'ops') => boolean
+  rateMeal: (orderId: string, score: number, comment: string) => boolean
   saveEmployee: (input: Omit<Employee, 'id' | 'created' | 'active'> & { id?: string }) => string | null
   setEmployeeActive: (id: string, active: boolean) => void
   saveBuilding: (name: string, id?: string) => string | undefined
@@ -161,14 +161,14 @@ export function StoreProvider({ children, onLogout }: { children: ReactNode; onL
     const mealDate = { ...selectedMonth, jd }
     const locked = !isOrderingOpen(mealDate, deadlines[meal], now)
     if (scope === 'self') {
-      if (!can(role, 'order.self') || employeeId !== personaId) return
-      if (locked && !can(role, 'order.ops')) return
+      if (!can(role, 'order.self') || employeeId !== personaId) return false
+      if (locked && !can(role, 'order.ops')) return false
     } else if (!can(role, 'order.ops')) {
-      return
+      return false
     }
     const current = orders.find((item) => item.employeeId === employeeId && item.jy === selectedMonth.jy && item.jm === selectedMonth.jm && item.jd === jd && item.meal === meal)
     const employee = employees.find((item) => item.id === employeeId)
-    if (!employee || (current && current.choice === choice) || (!current && choice === null)) return
+    if (!employee || (current && current.choice === choice) || (!current && choice === null)) return false
     const before = current?.choice ?? 'انتخاب نشده'
     const after = choice ?? 'انتخاب نشده'
     if (!current) {
@@ -210,11 +210,12 @@ export function StoreProvider({ children, onLogout }: { children: ReactNode; onL
       ])
     }
     toast('ذخیره شد')
+    return true
   }
 
   function rateMeal(orderId: string, score: number, comment: string) {
     const order = orders.find((item) => item.id === orderId)
-    if (!can(role, 'order.rate') || !order || order.employeeId !== personaId || !isPastDate(order, now) || !order.choice) return
+    if (!can(role, 'order.rate') || !order || order.employeeId !== personaId || !isPastDate(order, now) || !order.choice) return false
     setOrders((list) => list.map((item) => (item.id === orderId ? { ...item, rating: { score, comment: comment.trim() } } : item)))
     pushActivity({
       actor: personaName,
@@ -225,6 +226,7 @@ export function StoreProvider({ children, onLogout }: { children: ReactNode; onL
       after: `${score} از ۵`,
     })
     toast('ذخیره شد')
+    return true
   }
 
   function saveEmployee(input: Omit<Employee, 'id' | 'created' | 'active'> & { id?: string }) {

@@ -343,10 +343,7 @@ function StaffOrders() {
           locked={!isMealOpen(day, target.meal, app.deadlines, app.now)}
           ops
           onClose={() => setTarget(null)}
-          onSave={(choice) => {
-            app.selectMeal(employeeId, target.jd, target.meal, choice, 'ops')
-            setTarget(null)
-          }}
+          onSave={(choice) => app.selectMeal(employeeId, target.jd, target.meal, choice, 'ops')}
         />
       )}
     </div>
