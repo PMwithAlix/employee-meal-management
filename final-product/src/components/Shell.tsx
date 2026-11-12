@@ -74,6 +74,16 @@ function useIsDesktop() {
   return desktop
 }
 
+const FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+
+function focusableElements(root: HTMLElement) {
+  return [...root.querySelectorAll<HTMLElement>(FOCUSABLE)].filter((element) => {
+    if (element.getAttribute('aria-hidden') === 'true') return false
+    const style = getComputedStyle(element)
+    return style.display !== 'none' && style.visibility !== 'hidden'
+  })
+}
+
 const PAGES = {
   overview: OverviewPage,
   menu: MonthlyMenuPage,
@@ -110,20 +120,51 @@ export function Shell() {
   }, [desktop, app.mobileNav, app.setMobileNav])
 
   useEffect(() => {
+    const drawer = drawerRef.current
+    if (!drawer) return
+    drawer.inert = !desktop && !app.mobileNav
+  }, [desktop, app.mobileNav])
+
+  useEffect(() => {
     if (!drawerOpen) return
+    const drawer = drawerRef.current
     const previousOverflow = document.body.style.overflow
     document.body.style.overflow = 'hidden'
-    const previouslyFocused = document.activeElement instanceof HTMLElement ? document.activeElement : null
-    drawerRef.current?.focus()
+    const items = drawer ? focusableElements(drawer) : []
+    ;(items[0] ?? drawer)?.focus()
     function onKey(event: KeyboardEvent) {
-      if (event.key === 'Escape') app.setMobileNav(false)
+      if (event.key === 'Escape') {
+        app.setMobileNav(false)
+        return
+      }
+      if (event.key !== 'Tab' || !drawer) return
+      const current = focusableElements(drawer)
+      if (current.length === 0) {
+        event.preventDefault()
+        drawer.focus()
+        return
+      }
+      const first = current[0]
+      const last = current[current.length - 1]
+      const active = document.activeElement
+      const inside = active instanceof Node && drawer.contains(active)
+      if (event.shiftKey) {
+        if (!inside || active === first) {
+          event.preventDefault()
+          last.focus()
+        }
+        return
+      }
+      if (!inside || active === last) {
+        event.preventDefault()
+        first.focus()
+      }
     }
     document.addEventListener('keydown', onKey)
     return () => {
       document.body.style.overflow = previousOverflow
       document.removeEventListener('keydown', onKey)
-      const restore = menuButtonRef.current ?? previouslyFocused
-      restore?.focus()
+      menuButtonRef.current?.focus()
     }
   }, [drawerOpen, app.setMobileNav])
 
