@@ -1,12 +1,19 @@
 import type { ImportedDayMenu, ImportedMenu } from '../types'
+import { isValidJalaliDate, jalaliMonthLength, weekdayName, type JalaliDate } from './jalali'
+import { fa } from './text'
 
 const LUNCH_SHEET = 'ناهار'
 const DINNER_SHEET = 'شام'
 const DATE = /^(\d{4})\/(\d{1,2})\/(\d{1,2})$/
+const FOOD_COLUMNS = ['نوع اول', 'نوع دوم', 'نوع سوم']
+const LUNCH_COLUMNS = ['ردیف', 'روز', 'تاریخ', 'نوع اول', 'نوع دوم', 'نوع سوم']
+const DINNER_COLUMNS = ['ردیف', 'روز', 'تاریخ', 'نوع اول', 'نوع دوم']
 
 export type MenuFileResult = { ok: true; menu: ImportedMenu } | { ok: false; error: string }
 
-export async function readMenuFile(buffer: ArrayBuffer): Promise<MenuFileResult> {
+type ParsedRow = { jd: number; foods: string[] }
+
+export async function readMenuFile(buffer: ArrayBuffer, month: Pick<JalaliDate, 'jy' | 'jm'>): Promise<MenuFileResult> {
   let files: Map<string, string>
   try {
     files = await unzipText(buffer)
@@ -19,27 +26,30 @@ export async function readMenuFile(buffer: ArrayBuffer): Promise<MenuFileResult>
   const sheets = sheetPaths(workbook, rels)
   const lunchPath = sheets.get(LUNCH_SHEET)
   const dinnerPath = sheets.get(DINNER_SHEET)
-  if (!lunchPath || !dinnerPath) {
-    return { ok: false, error: 'فایل باید دقیقاً دو شیت به نام «ناهار» و «شام» داشته باشد.' }
-  }
+  if (!lunchPath) return { ok: false, error: 'شیت «ناهار» در فایل نیست.' }
+  if (!dinnerPath) return { ok: false, error: 'شیت «شام» در فایل نیست.' }
   const strings = sharedStrings(files.get('xl/sharedStrings.xml') ?? '')
-  const lunch = readSheet(files.get(lunchPath) ?? '', strings, LUNCH_SHEET)
+  const lunch = readSheet(files.get(lunchPath) ?? '', strings, LUNCH_SHEET, LUNCH_COLUMNS, month)
   if (!lunch.ok) return lunch
-  const dinner = readSheet(files.get(dinnerPath) ?? '', strings, DINNER_SHEET)
+  const dinner = readSheet(files.get(dinnerPath) ?? '', strings, DINNER_SHEET, DINNER_COLUMNS, month)
   if (!dinner.ok) return dinner
-  if (lunch.jy !== dinner.jy || lunch.jm !== dinner.jm) {
-    return { ok: false, error: 'تاریخ ناهار و شام در یک ماه شمسی نیست.' }
+  for (const [jd, row] of lunch.rows) {
+    if (!dinner.rows.has(jd)) return { ok: false, error: `تاریخ ${dateLabel(month.jy, month.jm, jd)} در شیت «ناهار»، سطر ${fa(row.excelRow)}، هست و در شیت «شام» نیست.` }
   }
-  const days = new Map<number, ImportedDayMenu>()
-  for (const row of lunch.rows) days.set(row.jd, { jd: row.jd, lunch: row.foods, dinner: [] })
-  for (const row of dinner.rows) {
-    const current = days.get(row.jd) ?? { jd: row.jd, lunch: [], dinner: [] }
-    current.dinner = row.foods
-    days.set(row.jd, current)
+  for (const [jd, row] of dinner.rows) {
+    if (!lunch.rows.has(jd)) return { ok: false, error: `تاریخ ${dateLabel(month.jy, month.jm, jd)} در شیت «شام»، سطر ${fa(row.excelRow)}، هست و در شیت «ناهار» نیست.` }
   }
-  const menuDays = [...days.values()].sort((a, b) => a.jd - b.jd)
-  if (menuDays.length === 0) return { ok: false, error: 'در فایل هیچ روزی با تاریخ معتبر پیدا نشد.' }
-  return { ok: true, menu: { jy: lunch.jy, jm: lunch.jm, days: menuDays } }
+  const length = jalaliMonthLength(month.jy, month.jm)
+  for (let jd = 1; jd <= length; jd += 1) {
+    if (!lunch.rows.has(jd) || !dinner.rows.has(jd)) {
+      return { ok: false, error: `تاریخ ${dateLabel(month.jy, month.jm, jd)} در هر دو شیت «ناهار» و «شام» نیست. همه روزهای ماه، حتی بدون غذا، باید باشند.` }
+    }
+  }
+  const days: ImportedDayMenu[] = []
+  for (let jd = 1; jd <= length; jd += 1) {
+    days.push({ jd, lunch: lunch.rows.get(jd)?.foods ?? [], dinner: dinner.rows.get(jd)?.foods ?? [] })
+  }
+  return { ok: true, menu: { jy: month.jy, jm: month.jm, days } }
 }
 
 function sheetPaths(workbook: string, rels: string) {
@@ -60,9 +70,15 @@ function sharedStrings(xml: string) {
   )
 }
 
-function readSheet(xml: string, strings: string[], sheet: string): { ok: true; jy: number; jm: number; rows: Array<{ jd: number; foods: string[] }> } | { ok: false; error: string } {
+function readSheet(
+  xml: string,
+  strings: string[],
+  sheet: string,
+  required: string[],
+  month: Pick<JalaliDate, 'jy' | 'jm'>,
+): { ok: true; rows: Map<number, ParsedRow & { excelRow: number }> } | { ok: false; error: string } {
   if (!xml) return { ok: false, error: `شیت «${sheet}» در فایل پیدا نشد.` }
-  const rows = new Map<number, Map<number, string>>()
+  const grid = new Map<number, Map<number, string>>()
   for (const cell of xml.matchAll(/<c\b(?![^>]*\/>)([^>]*)>([\s\S]*?)<\/c>/g)) {
     const ref = attr(cell[1], 'r')
     if (!ref) continue
@@ -72,39 +88,66 @@ function readSheet(xml: string, strings: string[], sheet: string): { ok: true; j
     const value = cell[2].match(/<v>([\s\S]*?)<\/v>/)?.[1]
     const inline = [...cell[2].matchAll(/<t\b[^>]*>([\s\S]*?)<\/t>/g)].map((part) => decodeXml(part[1])).join('')
     const text = type === 's' ? strings[Number(value)] ?? '' : type === 'inlineStr' ? inline : decodeXml(value ?? inline)
-    if (!rows.has(row)) rows.set(row, new Map())
-    rows.get(row)?.set(column, text.trim())
+    if (!grid.has(row)) grid.set(row, new Map())
+    grid.get(row)?.set(column, text.trim())
   }
-  const header = [...rows.entries()].find(([, cells]) => cells.get(0) === 'ردیف')
+  const header = [...grid.entries()].find(([, cells]) => [...cells.values()].includes('ردیف'))
   if (!header) return { ok: false, error: `شیت «${sheet}» ستون‌های ردیف، روز، تاریخ و نوع غذا را ندارد.` }
   const labels = header[1]
-  const dateCol = columnOf(labels, 'تاریخ')
-  const foodCols = [...labels.entries()].filter(([, label]) => label.startsWith('نوع')).map(([index]) => index)
-  if (dateCol === undefined || columnOf(labels, 'روز') === undefined || foodCols.length === 0) {
-    return { ok: false, error: `شیت «${sheet}» باید ستون‌های روز، تاریخ و نوع اول را داشته باشد.` }
+  for (const name of required) {
+    if (columnOf(labels, name) === undefined) return { ok: false, error: `شیت «${sheet}» ستون «${name}» را ندارد.` }
   }
-  const parsed: Array<{ jd: number; foods: string[] }> = []
-  let month: { jy: number; jm: number } | null = null
-  for (const [index, cells] of rows) {
+  const dayCol = columnOf(labels, 'روز')
+  const dateCol = columnOf(labels, 'تاریخ')
+  const foodCols = FOOD_COLUMNS.flatMap((name) => {
+    const column = columnOf(labels, name)
+    return column === undefined ? [] : [column]
+  })
+  if (dayCol === undefined || dateCol === undefined) return { ok: false, error: `شیت «${sheet}» ستون‌های روز و تاریخ را ندارد.` }
+  const parsed = new Map<number, ParsedRow & { excelRow: number }>()
+  for (const [index, cells] of grid) {
     if (index <= header[0]) continue
-    const date = cells.get(dateCol) ?? ''
-    if (!date) continue
-    const match = DATE.exec(date)
-    if (!match) return { ok: false, error: `تاریخ «${date}» در شیت «${sheet}» با قالب ۱۴۰۵/۰۶/۰۱ نیست.` }
+    const fields = [dayCol, dateCol, ...foodCols].map((column) => cells.get(column) ?? '')
+    if (fields.every((item) => !item.trim())) continue
+    const dateText = latinDigits(cells.get(dateCol) ?? '').trim()
+    if (!dateText) return { ok: false, error: `سطر ${fa(index)} در شیت «${sheet}» تاریخ ندارد.` }
+    const match = DATE.exec(dateText)
+    if (!match) return { ok: false, error: `تاریخ «${dateText}» در شیت «${sheet}»، سطر ${fa(index)}، با قالب ۱۴۰۵/۰۶/۰۱ نیست.` }
     const jy = Number(match[1])
     const jm = Number(match[2])
     const jd = Number(match[3])
-    if (jm < 1 || jm > 12 || jd < 1 || jd > 31) return { ok: false, error: `تاریخ «${date}» در شیت «${sheet}» معتبر نیست.` }
-    if (month && (month.jy !== jy || month.jm !== jm)) return { ok: false, error: `شیت «${sheet}» بیش از یک ماه شمسی دارد.` }
-    month = { jy, jm }
+    const label = dateLabel(jy, jm, jd)
+    if (!isValidJalaliDate(jy, jm, jd)) return { ok: false, error: `تاریخ ${label} در شیت «${sheet}»، سطر ${fa(index)}، در تقویم شمسی وجود ندارد.` }
+    if (jy !== month.jy || jm !== month.jm) return { ok: false, error: `تاریخ ${label} در شیت «${sheet}»، سطر ${fa(index)}، خارج از ماه انتخاب‌شده است.` }
+    const weekday = cells.get(dayCol) ?? ''
+    const expected = weekdayName({ jy, jm, jd })
+    if (normalizeDay(weekday) !== normalizeDay(expected)) {
+      return { ok: false, error: `در شیت «${sheet}»، سطر ${fa(index)}، تاریخ ${label} با روز «${weekday || 'خالی'}» هم‌خوان نیست. روز این تاریخ «${expected}» است.` }
+    }
+    if (parsed.has(jd)) return { ok: false, error: `تاریخ ${label} در شیت «${sheet}»، سطر ${fa(index)}، تکراری است. ردیف قبلی جایگزین نمی‌شود.` }
     const foods = foodCols
       .map((column) => cells.get(column) ?? '')
       .map((item) => item.trim())
       .filter((item, position, list) => item && list.indexOf(item) === position)
-    parsed.push({ jd, foods })
+    parsed.set(jd, { jd, foods, excelRow: index })
   }
-  if (!month || parsed.length === 0) return { ok: false, error: `شیت «${sheet}» ردیف تاریخ ندارد.` }
-  return { ok: true, jy: month.jy, jm: month.jm, rows: parsed }
+  return { ok: true, rows: parsed }
+}
+
+function dateLabel(jy: number, jm: number, jd: number) {
+  return `${fa(jy)}/${fa(String(jm).padStart(2, '0'))}/${fa(String(jd).padStart(2, '0'))}`
+}
+
+function normalizeDay(value: string) {
+  return value.replace(/\u200c/g, '').replace(/\s+/g, '').replace(/ي/g, 'ی').replace(/ك/g, 'ک')
+}
+
+function latinDigits(value: string) {
+  return value.replace(/[۰-۹٠-٩]/g, (char) => {
+    const persian = '۰۱۲۳۴۵۶۷۸۹'.indexOf(char)
+    if (persian >= 0) return String(persian)
+    return String('٠١٢٣٤٥٦٧٨٩'.indexOf(char))
+  })
 }
 
 function columnOf(labels: Map<number, string>, name: string) {

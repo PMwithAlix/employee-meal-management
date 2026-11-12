@@ -170,8 +170,14 @@ function ImportPanel() {
               return
             }
             setReading(true)
+            if (!file.name.toLowerCase().endsWith('.xlsx')) {
+              app.setImportedFile({ name: file.name, size: file.size }, null)
+              setError('فقط فایل xlsx پذیرفته می‌شود.')
+              setReading(false)
+              return
+            }
             file.arrayBuffer().then(async (buffer) => {
-              const result = await readMenuFile(buffer)
+              const result = await readMenuFile(buffer, app.selectedMonth)
               if (!result.ok) {
                 app.setImportedFile({ name: file.name, size: file.size }, null)
                 setError(result.error)
@@ -186,24 +192,28 @@ function ImportPanel() {
         />
       </label>
       {reading && <p className="text-sm text-muted">در حال بررسی ساختار فایل…</p>}
-      {error && <p className="rounded-md bg-dangerbg px-3 py-2 text-sm text-danger" role="alert">{error} تا اصلاح فایل، منو و سفارش‌ها تغییر نمی‌کنند.</p>}
-      {app.importedFile && menu && (
+      {app.importedFile && (
         <div className="rounded-md border border-line bg-surface p-3 text-sm">
           <p className="font-medium break-all">{app.importedFile.name}</p>
-          <p className="text-xs text-muted">{faBytes(app.importedFile.size)} · {fileMonth} · {fa(menu.days.length)} روز</p>
-          <div className="mt-3 max-h-80 space-y-2 overflow-auto">
-            {menu.days.map((day) => (
-              <div key={day.jd} className="grid gap-2 rounded-md border border-line p-2 sm:grid-cols-2">
-                <p className="text-sm font-medium sm:col-span-2">{fa(day.jd)} {JALALI_MONTHS[menu.jm - 1]}</p>
-                <Preview title="ناهار" items={day.lunch} />
-                <Preview title="شام" items={day.dinner} />
+          <p className="text-xs text-muted">{faBytes(app.importedFile.size)}{menu ? ` · ${fileMonth} · ${fa(menu.days.length)} روز` : ''}</p>
+          {error && <p className="mt-3 rounded-md bg-dangerbg px-3 py-2 text-sm text-danger" role="alert">{error} منو و سفارش‌های موجود تغییر نکرده‌اند.</p>}
+          {menu && (
+            <>
+              <div className="mt-3 max-h-80 space-y-2 overflow-auto">
+                {menu.days.map((day) => (
+                  <div key={day.jd} className="grid gap-2 rounded-md border border-line p-2 sm:grid-cols-2">
+                    <p className="text-sm font-medium sm:col-span-2">{fa(day.jd)} {JALALI_MONTHS[menu.jm - 1]}</p>
+                    <Preview title="ناهار" items={day.lunch} />
+                    <Preview title="شام" items={day.dinner} />
+                  </div>
+                ))}
               </div>
-            ))}
-          </div>
-          {sameMonth ? (
-            <Button className="mt-3" onClick={() => setWizard(true)}>بررسی جایگزینی منو</Button>
-          ) : (
-            <p className="mt-3 text-sm text-danger">این فایل برای {fileMonth} است و ماه انتخاب‌شده {app.monthTitle} است. تا یکی شدن ماه، چیزی اعمال نمی‌شود.</p>
+              {sameMonth ? (
+                <Button className="mt-3" onClick={() => setWizard(true)}>بررسی جایگزینی منو</Button>
+              ) : (
+                <p className="mt-3 text-sm text-danger">این فایل برای {fileMonth} است و ماه انتخاب‌شده {app.monthTitle} است. تا یکی شدن ماه، چیزی اعمال نمی‌شود.</p>
+              )}
+            </>
           )}
         </div>
       )}
