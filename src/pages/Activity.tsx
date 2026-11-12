@@ -17,7 +17,7 @@ export function ActivityPage() {
         <>
           <div className="hidden overflow-auto rounded-md border border-line bg-surface md:block">
             <table className="w-full min-w-[760px] text-sm">
-              <thead className="bg-surface2 text-xs text-muted">
+              <thead className="bg-elevated text-xs text-muted">
                 <tr>
                   {['زمان', 'کاربر', 'عملیات', 'موضوع', 'مقدار قبلی', 'مقدار جدید', 'نتیجه'].map((head) => <th key={head} className="px-3 py-2 text-start font-medium">{head}</th>)}
                 </tr>

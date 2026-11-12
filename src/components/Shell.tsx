@@ -88,7 +88,7 @@ export function Shell() {
 
   return (
     <div className="min-h-screen bg-bg text-ink">
-      {app.mobileNav && <button className="fixed inset-0 z-30 bg-black/40 md:hidden" aria-label="بستن منو" onClick={() => app.setMobileNav(false)} />}
+      {app.mobileNav && <button className="fixed inset-0 z-30 bg-overlay md:hidden" aria-label="بستن منو" onClick={() => app.setMobileNav(false)} />}
       <aside
         className={cn(
           'fixed inset-y-0 right-0 z-40 flex flex-col border-s border-line bg-sidebar transition-transform md:translate-x-0',
@@ -122,7 +122,7 @@ export function Shell() {
                       onClick={() => app.setPage(item.id)}
                       className={cn(
                         'mb-0.5 flex w-full items-center gap-2 rounded-md px-2.5 py-2 text-sm',
-                        active ? 'bg-surface font-medium text-primary shadow-[inset_-2px_0_0_var(--primary)]' : 'text-ink hover:bg-surface',
+                        active ? 'bg-selected font-medium text-link shadow-[inset_-2px_0_0_var(--link)]' : 'text-ink hover:bg-surface2',
                         app.collapsed && 'justify-center px-0',
                       )}
                     >
@@ -176,13 +176,13 @@ export function Shell() {
             <div className="relative">
               <button className="relative rounded-md p-2" aria-label="اعلان‌ها" title="اعلان‌ها" onClick={() => { setNotesOpen((value) => !value); setProfileOpen(false) }}>
                 <Bell size={16} />
-                {unread > 0 && <span className="absolute left-1 top-1 grid h-4 min-w-4 place-items-center rounded-full bg-danger px-1 text-[10px] text-white">{fa(unread)}</span>}
+                {unread > 0 && <span className="absolute left-1 top-1 grid h-4 min-w-4 place-items-center rounded-full bg-danger px-1 text-[10px] text-onprimary">{fa(unread)}</span>}
               </button>
               {notesOpen && (
                 <div className="absolute end-0 z-30 mt-1 w-[min(22rem,calc(100vw-1.5rem))] rounded-md border border-line bg-surface p-2 shadow-card">
                   <div className="mb-2 flex items-center justify-between px-1">
                     <p className="text-sm font-medium">اعلان‌ها</p>
-                    <button className="text-xs text-primary" onClick={app.markAllNotes}>خواندن همه</button>
+                    <button className="text-xs text-link" onClick={app.markAllNotes}>خواندن همه</button>
                   </div>
                   <div className="max-h-80 space-y-1 overflow-auto">
                     {app.notes.map((note) => (

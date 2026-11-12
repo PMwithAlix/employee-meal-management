@@ -89,7 +89,7 @@ function EmployeeOverview() {
         ]}
       />
       <div className="grid gap-4 lg:grid-cols-2">
-        <Panel title="وضعیت سفارش‌ها" action={<button className="text-xs text-primary" onClick={() => jump('all')}>رفتن به منو</button>}>
+        <Panel title="وضعیت سفارش‌ها" action={<button className="text-xs text-link" onClick={() => jump('all')}>رفتن به منو</button>}>
           <div className="space-y-3">
             <Bucket title="روزهای پیش رو" count={upcoming.length} sample={upcoming.slice(0, 3).map((day) => fa(day.jd))} onClick={() => jump('open')} />
             <Bucket title="روزهای دارای انتخاب" count={selectedDays.length} sample={selectedDays.slice(-3).map((day) => fa(day.jd))} onClick={() => jump('selected')} />
@@ -155,7 +155,7 @@ function SupportOverview() {
         ]}
       />
       <div className="grid gap-4 lg:grid-cols-2">
-        <Panel title="مهلت‌های پیش رو" action={<button className="text-xs text-primary" onClick={() => app.setPage('menuMgmt')}>مدیریت منو</button>}>
+        <Panel title="مهلت‌های پیش رو" action={<button className="text-xs text-link" onClick={() => app.setPage('menuMgmt')}>مدیریت منو</button>}>
           <ul className="space-y-2 text-sm">
             {app.days.filter((day) => day.jd >= app.today && day.jd <= app.today + 3 && (day.lunch || day.dinner)).map((day) => (
               <li key={day.jd} className="flex justify-between gap-3">
@@ -165,7 +165,7 @@ function SupportOverview() {
             ))}
           </ul>
         </Panel>
-        <Panel title="فعالیت عملیاتی اخیر" action={<button className="text-xs text-primary" onClick={() => app.setPage('activity')}>تاریخچه</button>}>
+        <Panel title="فعالیت عملیاتی اخیر" action={<button className="text-xs text-link" onClick={() => app.setPage('activity')}>تاریخچه</button>}>
           <ActivityList />
         </Panel>
       </div>
@@ -234,7 +234,7 @@ function ManagementOverview() {
         ]}
       />
       <div className="grid gap-4 lg:grid-cols-2">
-        <Panel title="خلاصه ساختمان‌ها" action={<button className="text-xs text-primary" onClick={() => app.setPage('reports')}>گزارش‌ها</button>}>
+        <Panel title="خلاصه ساختمان‌ها" action={<button className="text-xs text-link" onClick={() => app.setPage('reports')}>گزارش‌ها</button>}>
           <ul className="divide-y divide-line text-sm">
             {app.buildings.map((building) => {
               const people = app.employees.filter((employee) => employee.buildingId === building.id)
@@ -248,7 +248,7 @@ function ManagementOverview() {
             })}
           </ul>
         </Panel>
-        <Panel title="فعالیت اخیر" action={<button className="text-xs text-primary" onClick={() => app.setPage('activity')}>تاریخچه کامل</button>}>
+        <Panel title="فعالیت اخیر" action={<button className="text-xs text-link" onClick={() => app.setPage('activity')}>تاریخچه کامل</button>}>
           <ActivityList />
         </Panel>
       </div>

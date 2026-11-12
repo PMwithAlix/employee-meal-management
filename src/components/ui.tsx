@@ -24,10 +24,10 @@ export function Button({
       onClick={onClick}
       className={cn(
         'inline-flex h-9 items-center justify-center gap-1.5 rounded-md px-3 text-sm transition disabled:cursor-not-allowed disabled:opacity-50',
-        variant === 'primary' && 'bg-primary text-onprimary hover:opacity-90',
+        variant === 'primary' && 'bg-primary text-onprimary hover:bg-primaryhover active:bg-primaryactive',
         variant === 'secondary' && 'border border-line bg-surface text-ink hover:bg-surface2',
         variant === 'ghost' && 'text-ink hover:bg-surface2',
-        variant === 'danger' && 'bg-danger text-white hover:opacity-90',
+        variant === 'danger' && 'bg-danger text-onprimary hover:opacity-90',
         className,
       )}
     >
@@ -81,7 +81,7 @@ export function Dialog({
   if (!open) return null
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center sm:items-center sm:p-4">
-      <button className="absolute inset-0 bg-black/40" aria-label="بستن" onClick={locked ? undefined : onClose} />
+      <button className="absolute inset-0 bg-overlay" aria-label="بستن" onClick={locked ? undefined : onClose} />
       <div role="dialog" aria-modal="true" aria-label={title} className={cn('relative max-h-[92vh] w-full overflow-auto rounded-t-lg border border-line bg-surface p-4 shadow-card sm:rounded-lg', wide ? 'sm:max-w-2xl' : 'sm:max-w-md')}>
         <div className="mb-3 flex items-start justify-between gap-3">
           <h2 className="text-base font-semibold">{title}</h2>
@@ -143,7 +143,7 @@ export function Segmented<T extends string>({
           role="radio"
           aria-checked={value === option.id}
           onClick={() => onChange(option.id)}
-          className={cn('h-8 rounded px-2.5 text-sm', value === option.id ? 'bg-surface font-medium text-ink' : 'text-muted')}
+          className={cn('h-8 rounded px-2.5 text-sm', value === option.id ? 'bg-selected font-medium text-ink' : 'text-muted')}
         >
           {option.label}
         </button>

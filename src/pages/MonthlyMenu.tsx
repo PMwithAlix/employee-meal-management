@@ -110,7 +110,7 @@ function DayList({ days }: { days: DayMenu[] }) {
     <>
       <div className="hidden overflow-hidden rounded-md border border-line md:block">
         <table className="w-full border-collapse text-sm">
-          <thead className="bg-surface2 text-xs text-muted">
+          <thead className="bg-elevated text-xs text-muted">
             <tr>
               <th className="px-3 py-2 text-start font-medium">تاریخ</th>
               <th className="px-3 py-2 text-start font-medium">روز هفته</th>
@@ -124,7 +124,7 @@ function DayList({ days }: { days: DayMenu[] }) {
               const lunch = findOrder(app.orders, id, day.jd, 'lunch')
               const dinner = findOrder(app.orders, id, day.jd, 'dinner')
               return (
-                <tr key={day.jd} className={cn('border-t border-line align-top', day.jd === app.today && 'bg-infobg/40')}>
+                <tr key={day.jd} className={cn('border-t border-divider align-top', day.jd === app.today && 'bg-brandsubtle')}>
                   <td className="px-3 py-3 font-medium">{fa(day.jd)} آبان</td>
                   <td className="px-3 py-3 text-muted">{day.weekday}</td>
                   <td className="px-3 py-3"><Cell day={day} meal="lunch" choice={lunch?.choice ?? null} /></td>
@@ -294,7 +294,7 @@ function OptionMenu({
           type="button"
           role="option"
           aria-selected={option === current}
-          className={cn('block w-full rounded px-2.5 py-2 text-start text-sm hover:bg-surface2', option === current && 'font-medium')}
+          className={cn('block w-full rounded px-2.5 py-2 text-start text-sm hover:bg-surface2', option === current && 'bg-brandsubtle font-medium text-ink')}
           onClick={() => onPick(option)}
         >
           {option}

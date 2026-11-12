@@ -79,7 +79,7 @@ export function ReportsPage() {
       ) : tab === 'monthly' ? (
         <div className="overflow-auto rounded-md border border-line bg-surface">
           <table className="w-full min-w-[560px] text-sm">
-            <thead className="bg-surface2 text-xs text-muted">
+            <thead className="bg-elevated text-xs text-muted">
               <tr>
                 {['کارمند', 'ساختمان زمان سفارش', 'تعداد ناهار', 'تعداد شام'].map((head) => <th key={head} className="px-3 py-2 text-start font-medium">{head}</th>)}
               </tr>
@@ -125,7 +125,7 @@ function OrderTable({ rows, meal }: { rows: ReturnType<typeof useApp>['orders'];
   return (
     <div className="overflow-auto rounded-md border border-line bg-surface">
       <table className="w-full min-w-[640px] text-sm">
-        <thead className="bg-surface2 text-xs text-muted">
+        <thead className="bg-elevated text-xs text-muted">
           <tr>
             {['تاریخ', 'ساختمان', 'کارمند', meal === 'lunch' ? 'ناهار انتخاب‌شده' : 'شام انتخاب‌شده'].map((head) => <th key={head} className="px-3 py-2 text-start font-medium">{head}</th>)}
           </tr>

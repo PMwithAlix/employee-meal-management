@@ -224,7 +224,7 @@ function Guests() {
       <div className="overflow-hidden rounded-md border border-line bg-surface">
         {app.guests.length === 0 ? <div className="p-4"><Empty title="سفارش مهمانی نیست" body="از فرم کنار صفحه یک مورد اضافه کنید." /></div> : (
           <table className="w-full text-sm">
-            <thead className="bg-surface2 text-xs text-muted">
+            <thead className="bg-elevated text-xs text-muted">
               <tr>
                 <th className="px-3 py-2 text-start font-medium">تاریخ</th>
                 <th className="px-3 py-2 text-start font-medium">ساختمان</th>

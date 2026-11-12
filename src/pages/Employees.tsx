@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react'
 import { Badge, Button, Dialog, Empty, Field, controlClass } from '../components/ui'
 import { fullName } from '../data'
+import { cn } from '../lib/text'
 import { useApp } from '../store'
 
 export function EmployeesPage() {
@@ -45,14 +46,14 @@ export function EmployeesPage() {
         {rows.length === 0 ? <Empty title="کارمندی پیدا نشد" body="عبارت جستجو یا فیلتر را تغییر دهید." /> : (
           <div className="overflow-auto rounded-md border border-line bg-surface">
             <table className="w-full min-w-[640px] text-sm">
-              <thead className="bg-surface2 text-xs text-muted">
+              <thead className="bg-elevated text-xs text-muted">
                 <tr>
                   {['نام', 'نام کاربری', 'ساختمان', 'گروه‌ها', 'وضعیت', 'تاریخ ایجاد'].map((head) => <th key={head} className="px-3 py-2 text-start font-medium">{head}</th>)}
                 </tr>
               </thead>
               <tbody>
                 {rows.map((employee) => (
-                  <tr key={employee.id} className="cursor-pointer border-t border-line hover:bg-surface2" onClick={() => setSelected(employee.id)}>
+                  <tr key={employee.id} className={cn('cursor-pointer border-t border-divider hover:bg-surface2', selected === employee.id && 'bg-brandsubtle')} onClick={() => setSelected(employee.id)}>
                     <td className="px-3 py-2">{fullName(employee)}</td>
                     <td className="px-3 py-2" dir="ltr">{employee.username}</td>
                     <td className="px-3 py-2">{app.buildings.find((item) => item.id === employee.buildingId)?.name}</td>

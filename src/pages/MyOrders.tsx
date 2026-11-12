@@ -82,7 +82,7 @@ function OrderLine({
       <p className={label === 'ناهار' ? 'text-xs text-lunch' : 'text-xs text-dinner'}>{label}</p>
       <p className="text-sm">{missing ? 'منو تعریف نشده' : name ?? 'انتخاب نشده'}</p>
       {locked && name && rating && (
-        <button className="mt-1 text-xs text-primary" onClick={onRate}>
+        <button className="mt-1 text-xs text-link" onClick={onRate}>
           {rating.rating ? `دیدگاه: ${fa(rating.rating.score)} از ۵` : 'ثبت دیدگاه'}
         </button>
       )}

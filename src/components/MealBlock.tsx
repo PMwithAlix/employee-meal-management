@@ -57,11 +57,14 @@ export function MealBlock({
 
   const className = cn(
     'block w-full rounded-md border px-2.5 py-2 text-start',
-    !defined && 'border-line bg-surface2',
-    defined && lunch && 'border-lunchline bg-lunchbg',
-    defined && !lunch && 'border-dinnerline bg-dinnerbg',
-    defined && !choice && 'border-dashed',
-    onSelect && 'hover:brightness-[0.98] dark:hover:brightness-110',
+    !defined && 'border-line bg-surface2 text-muted',
+    defined && !choice && lunch && 'border-dashed border-lunchline bg-lunchbg',
+    defined && !choice && !lunch && 'border-dashed border-dinnerline bg-dinnerbg',
+    defined && choice && !locked && lunch && 'border-lunchlinesel bg-lunchbgsel',
+    defined && choice && !locked && !lunch && 'border-dinnerlinesel bg-dinnerbgsel',
+    defined && choice && locked && lunch && 'border-lunchline bg-lunchbg',
+    defined && choice && locked && !lunch && 'border-dinnerline bg-dinnerbg',
+    onSelect && !choice && 'hover:border-linestrong',
   )
 
   if (!onSelect) return <div className={className}>{inner}</div>
