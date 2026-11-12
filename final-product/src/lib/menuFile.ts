@@ -97,17 +97,18 @@ function readSheet(
   for (const name of required) {
     if (columnOf(labels, name) === undefined) return { ok: false, error: `شیت «${sheet}» ستون «${name}» را ندارد.` }
   }
+  const indexCol = columnOf(labels, 'ردیف')
   const dayCol = columnOf(labels, 'روز')
   const dateCol = columnOf(labels, 'تاریخ')
   const foodCols = FOOD_COLUMNS.flatMap((name) => {
     const column = columnOf(labels, name)
     return column === undefined ? [] : [column]
   })
-  if (dayCol === undefined || dateCol === undefined) return { ok: false, error: `شیت «${sheet}» ستون‌های روز و تاریخ را ندارد.` }
+  if (indexCol === undefined || dayCol === undefined || dateCol === undefined) return { ok: false, error: `شیت «${sheet}» ستون‌های ردیف، روز و تاریخ را ندارد.` }
   const parsed = new Map<number, ParsedRow & { excelRow: number }>()
   for (const [index, cells] of grid) {
     if (index <= header[0]) continue
-    const fields = [dayCol, dateCol, ...foodCols].map((column) => cells.get(column) ?? '')
+    const fields = [indexCol, dayCol, dateCol, ...foodCols].map((column) => cells.get(column) ?? '')
     if (fields.every((item) => !item.trim())) continue
     const dateText = latinDigits(cells.get(dateCol) ?? '').trim()
     if (!dateText) return { ok: false, error: `سطر ${fa(index)} در شیت «${sheet}» تاریخ ندارد.` }

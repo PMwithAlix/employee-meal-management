@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { MealBlock } from '../components/MealBlock'
 import { SelectMealDialog } from '../components/SelectMealDialog'
 import { Badge, Button, Dialog, Empty, Field, controlClass } from '../components/ui'
@@ -149,6 +149,7 @@ function ImportPanel() {
   const [wizard, setWizard] = useState(false)
   const [error, setError] = useState('')
   const [reading, setReading] = useState(false)
+  const selection = useRef(0)
   const menu = app.importedMenu
   const sameMonth = Boolean(menu && menu.jy === app.selectedMonth.jy && menu.jm === app.selectedMonth.jm)
   const fileMonth = menu ? `${JALALI_MONTHS[menu.jm - 1]} ${fa(menu.jy)}` : ''
@@ -162,32 +163,41 @@ function ImportPanel() {
           accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
           className="mt-3 max-w-full text-sm"
           onChange={(event) => {
+            const request = ++selection.current
             const file = event.target.files?.[0]
+            const month = app.selectedMonth
             setWizard(false)
             setError('')
             if (!file) {
               app.setImportedFile(null)
+              setReading(false)
               return
             }
+            app.setImportedFile({ name: file.name, size: file.size }, null)
             setReading(true)
             if (!file.name.toLowerCase().endsWith('.xlsx')) {
-              app.setImportedFile({ name: file.name, size: file.size }, null)
               setError('فقط فایل xlsx پذیرفته می‌شود.')
               setReading(false)
               return
             }
+            const current = () => request === selection.current
             file.arrayBuffer().then(async (buffer) => {
-              const result = await readMenuFile(buffer, app.selectedMonth)
+              const result = await readMenuFile(buffer, month)
+              if (!current()) return
               if (!result.ok) {
                 app.setImportedFile({ name: file.name, size: file.size }, null)
                 setError(result.error)
                 return
               }
+              setError('')
               app.setImportedFile({ name: file.name, size: file.size }, result.menu)
             }).catch(() => {
+              if (!current()) return
               app.setImportedFile({ name: file.name, size: file.size }, null)
               setError('خواندن فایل ممکن نشد. ساختار آن با نمونه منو سازگار نیست.')
-            }).finally(() => setReading(false))
+            }).finally(() => {
+              if (current()) setReading(false)
+            })
           }}
         />
       </label>
