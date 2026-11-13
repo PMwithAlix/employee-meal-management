@@ -44,4 +44,20 @@ describe('summarizeBackendDeadlines', () => {
   it('shows the clock when the month has only one meal day with a deadline', () => {
     expect(summarizeBackendDeadlines({ '2026-08-22:LUNCH': noon }, 'lunch', ['2026-08-22'])).toBe('همان روز، ساعت ۱۰:۰۰')
   })
+
+  it('does not treat an invalid deadline record as a missing deadline', () => {
+    const unknown = 'وضعیت مهلت قابل تشخیص نیست'
+    expect(summarizeBackendDeadlines({ '2026-08-22:LUNCH': null }, 'lunch', ['2026-08-22'])).toBe(unknown)
+    expect(summarizeBackendDeadlines({ '2026-08-22:LUNCH': 'not-a-date' }, 'lunch', ['2026-08-22'])).toBe(unknown)
+    expect(summarizeBackendDeadlines(
+      { '2026-08-22:LUNCH': noon, '2026-08-23:LUNCH': null },
+      'lunch',
+      ['2026-08-22', '2026-08-23'],
+    )).toBe(unknown)
+    expect(summarizeBackendDeadlines(
+      { '2026-08-22:LUNCH': 'not-a-date' },
+      'lunch',
+      ['2026-08-22', '2026-08-23'],
+    )).toBe(unknown)
+  })
 })

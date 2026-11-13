@@ -87,16 +87,22 @@ export function summarizeBackendDeadlines(map: Record<string, string | null>, me
   if (mealDates.length === 0) return 'مهلت تعریف نشده'
   const labels = new Set<string>()
   let missing = 0
+  let unknown = false
   for (const mealDate of mealDates) {
-    const iso = map[`${mealDate}${suffix}`]
-    if (!iso) {
+    const key = `${mealDate}${suffix}`
+    if (!Object.prototype.hasOwnProperty.call(map, key)) {
       missing += 1
       continue
     }
-    const label = formatDeadlineFromInstant(iso, mealDate)
-    if (label) labels.add(label)
-    else missing += 1
+    const iso = map[key]
+    const label = iso ? formatDeadlineFromInstant(iso, mealDate) : null
+    if (!label) {
+      unknown = true
+      continue
+    }
+    labels.add(label)
   }
+  if (unknown) return 'وضعیت مهلت قابل تشخیص نیست'
   if (missing === mealDates.length) return 'مهلت تعریف نشده'
   if (missing > 0) return 'بعضی روزها مهلت ندارند'
   if (labels.size === 1) return [...labels][0]
