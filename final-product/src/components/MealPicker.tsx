@@ -26,27 +26,26 @@ export function MealPicker({
 }) {
   const panelRef = useRef<HTMLDivElement>(null)
   const tokenRef = useRef(`picker-${Math.random().toString(36).slice(2)}`)
-  const [box, setBox] = useState({ top: 0, left: 0, width: 240, maxHeight: 240, placeAbove: false })
+  const [box, setBox] = useState({ top: 0, left: 0, width: 0, maxHeight: 240, placeAbove: false })
   const [saving, setSaving] = useState(false)
   const [failed, setFailed] = useState(false)
   const mealLabel = kind === 'lunch' ? 'ناهار' : 'شام'
 
-  function cardRect() {
+  function cardEl() {
     if (!trigger) return null
-    const card = trigger.tagName === 'BUTTON' ? trigger : (trigger.querySelector('button') ?? trigger)
-    return card.getBoundingClientRect()
+    return trigger.tagName === 'BUTTON' ? trigger : (trigger.querySelector('button') ?? trigger)
   }
 
   function place() {
-    const rect = cardRect()
-    if (!rect) return
+    const card = cardEl()
+    if (!card) return
+    const rect = card.getBoundingClientRect()
     const vw = window.innerWidth
     const vh = window.innerHeight
     const gutter = 8
-    const mobile = vw < 768
-    const width = mobile ? Math.min(rect.width, vw - gutter * 2) : Math.min(280, Math.max(rect.width, 200))
+    const width = Math.min(rect.width, Math.max(0, vw - gutter * 2))
     const rtl = document.documentElement.dir === 'rtl'
-    let left = mobile && rtl ? rect.right - width : rect.left
+    let left = rtl ? rect.right - width : rect.left
     if (left + width > vw - gutter) left = vw - gutter - width
     if (left < gutter) left = gutter
     const spaceBelow = Math.max(80, vh - rect.bottom - 8)
@@ -60,18 +59,20 @@ export function MealPicker({
   useLayoutEffect(() => {
     if (!open) return
     place()
+    const card = cardEl()
+    if (!card || typeof ResizeObserver === 'undefined') return
+    const observer = new ResizeObserver(() => place())
+    observer.observe(card)
+    return () => observer.disconnect()
   }, [open, trigger])
 
   useEffect(() => {
     if (!open) return
-    function onScroll() {
-      place()
-    }
     window.addEventListener('resize', place)
-    window.addEventListener('scroll', onScroll, true)
+    window.addEventListener('scroll', place, true)
     return () => {
       window.removeEventListener('resize', place)
-      window.removeEventListener('scroll', onScroll, true)
+      window.removeEventListener('scroll', place, true)
     }
   }, [open, trigger])
 
