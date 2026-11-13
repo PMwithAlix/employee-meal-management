@@ -29,6 +29,26 @@ function backendOrder(id: string) {
   }
 }
 
+function staffRating(id: string) {
+  return {
+    id,
+    orderId: `order-${id}`,
+    orderCycleId: `c-${id}`,
+    score: 5,
+    comment: 'عالی',
+    createdAt: '2026-11-01T00:00:00.000Z',
+    updatedAt: '2026-11-01T00:00:00.000Z',
+    userId: 'user-1',
+    mealDate: '2026-10-23',
+    jalaliDate: '1405/08/01',
+    mealType: 'LUNCH',
+    usernameSnapshot: 'emp',
+    mealTitleSnapshot: 'عدسی',
+    buildingNameSnapshot: 'اصلی',
+    cycleStatus: 'ACTIVE',
+  }
+}
+
 function jsonPage(page: number, total: number, items: unknown[], pageSize = 100) {
   return new Response(JSON.stringify({ items, total, page, pageSize }), { status: 200 })
 }
@@ -374,5 +394,63 @@ describe('orderApi', () => {
     expect(String((fetchMock.mock.calls as unknown as Array<[string, RequestInit]>)[0][0])).toContain('/api/v1/ratings')
     expect(listed.items).toHaveLength(1)
     expect(listed.items[0]?.orderId).toBe('order-1')
+    expect(listed.total).toBe(1)
+  })
+
+  it('loads staff ratings across multiple pages when totals match', async () => {
+    const fetchMock = vi.fn(async (url: string) => {
+      const page = Number(new URL(url, 'http://local.test').searchParams.get('page'))
+      if (page === 1) {
+        return jsonPage(1, 101, Array.from({ length: 100 }, (_, index) => staffRating(`r-${index}`)))
+      }
+      return jsonPage(2, 101, [staffRating('r-100')])
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    const listed = await orderApi.listAllRatings()
+    expect(fetchMock).toHaveBeenCalledTimes(2)
+    expect(listed.items).toHaveLength(101)
+    expect(listed.total).toBe(101)
+  })
+
+  it('rejects incomplete or inconsistent staff-rating pagination', async () => {
+    const incomplete = { kind: 'http', message: 'بارگذاری همه دیدگاه‌ها کامل نشد.' }
+    vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+      const page = Number(new URL(url, 'http://local.test').searchParams.get('page'))
+      if (page === 1) return jsonPage(1, 150, Array.from({ length: 100 }, (_, index) => staffRating(`r-${index}`)))
+      return jsonPage(page, 150, [])
+    }))
+    await expect(orderApi.listAllRatings()).rejects.toMatchObject(incomplete)
+
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ items: [], page: 1, pageSize: 100 }), { status: 200 })))
+    await expect(orderApi.listAllRatings()).rejects.toMatchObject(incomplete)
+
+    vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+      const page = Number(new URL(url, 'http://local.test').searchParams.get('page'))
+      return jsonPage(page, page === 1 ? 150 : 200, Array.from({ length: 100 }, (_, index) => staffRating(`r-${page}-${index}`)))
+    }))
+    await expect(orderApi.listAllRatings()).rejects.toMatchObject(incomplete)
+
+    vi.stubGlobal('fetch', vi.fn(async () => jsonPage(2, 1, [staffRating('r-1')])))
+    await expect(orderApi.listAllRatings()).rejects.toMatchObject(incomplete)
+
+    vi.stubGlobal('fetch', vi.fn(async () => jsonPage(1, 1, [staffRating('r-1')], 50)))
+    await expect(orderApi.listAllRatings()).rejects.toMatchObject(incomplete)
+
+    vi.stubGlobal('fetch', vi.fn(async () => jsonPage(1, 101, Array.from({ length: 101 }, (_, index) => staffRating(`r-${index}`)))))
+    await expect(orderApi.listAllRatings()).rejects.toMatchObject(incomplete)
+
+    vi.stubGlobal('fetch', vi.fn(async () => jsonPage(1, 1, [staffRating('a'), staffRating('b')])))
+    await expect(orderApi.listAllRatings()).rejects.toMatchObject(incomplete)
+
+    vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+      const page = Number(new URL(url, 'http://local.test').searchParams.get('page'))
+      return jsonPage(page, 5001, Array.from({ length: 100 }, (_, index) => staffRating(`r-${(page - 1) * 100 + index}`)))
+    }))
+    await expect(orderApi.listAllRatings()).rejects.toMatchObject(incomplete)
+
+    vi.stubGlobal('fetch', vi.fn(async () => {
+      throw new TypeError('Failed to fetch')
+    }))
+    await expect(orderApi.listAllRatings()).rejects.toMatchObject({ kind: 'network' })
   })
 })
