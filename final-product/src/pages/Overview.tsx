@@ -5,6 +5,7 @@ import { formatDeadlineFromInstant } from '../lib/deadlines'
 import { classifyEmployeeDeadline, deadlineLabel, findOrder, isElapsedDeadlineDay, isMealOpen, isOpenDeadlineDay, upcomingChosenMeals } from '../lib/orders'
 import { addDays, isSameDate, JALALI_MONTHS, weekdayName, type JalaliDate, type JalaliDateTime } from '../lib/jalali'
 import { fa, cn } from '../lib/text'
+import { useGuestMonthCount } from '../guests/useGuestMonthCount'
 import type { MealFilter, StatusFilter } from '../types'
 
 function Stats({ items }: { items: Array<{ label: string; value: string; hint: string; icon: typeof Sun }> }) {
@@ -209,10 +210,12 @@ function Bucket({ title, count, sample, onClick }: { title: string; count: numbe
 
 function SupportOverview() {
   const app = useApp()
+  const guests = useGuestMonthCount()
   const inMonth = (order: { jy: number; jm: number }) => order.jy === app.selectedMonth.jy && order.jm === app.selectedMonth.jm
   const lunch = app.orders.filter((order) => inMonth(order) && order.meal === 'lunch' && order.choice).length
   const dinner = app.orders.filter((order) => inMonth(order) && order.meal === 'dinner' && order.choice).length
   const openDays = app.days.filter((day) => (day.lunch && isMealOpen(day, 'lunch', app.deadlines, app.now)) || (day.dinner && isMealOpen(day, 'dinner', app.deadlines, app.now)))
+  const guestValue = guests.status === 'loading' ? '…' : guests.status === 'ready' && guests.count !== null ? fa(guests.count) : '—'
   return (
     <div className="space-y-4">
       <Stats
@@ -220,7 +223,7 @@ function SupportOverview() {
           { label: 'ناهارهای ثبت‌شده', value: fa(lunch), hint: 'همه ساختمان‌ها', icon: Sun },
           { label: 'شام‌های ثبت‌شده', value: fa(dinner), hint: 'جدا از ناهار', icon: Moon },
           { label: 'روزهای باز', value: fa(openDays.length), hint: 'هنوز مهلت دارند', icon: CalendarClock },
-          { label: 'سفارش مهمان', value: fa(app.guests.filter((guest) => guest.jy === app.selectedMonth.jy && guest.jm === app.selectedMonth.jm).length), hint: 'مورد فعال', icon: Utensils },
+          { label: 'سفارش مهمان', value: guestValue, hint: 'مورد فعال', icon: Utensils },
         ]}
       />
       <div className="grid gap-4 lg:grid-cols-2">
