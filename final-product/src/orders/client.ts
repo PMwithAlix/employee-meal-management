@@ -1,4 +1,5 @@
 import { authRequest } from '../auth/client'
+import { AuthRequestError } from '../auth/errors'
 import { parseBackendOrder, parseDeadline, toUiOrder } from './map'
 import { ORDER_ENDPOINTS, type CreateOrderBody } from './types'
 import type { Order } from '../types'
@@ -34,18 +35,21 @@ export const orderApi = {
 
   async listAllMine(signal?: AbortSignal) {
     const pageSize = 100
+    const maxPages = 50
     const orders: Order[] = []
     let page = 1
     let total = Number.POSITIVE_INFINITY
-    let guard = 0
-    while ((page - 1) * pageSize < total && guard < 50) {
+    while (page <= maxPages) {
       const listed = await this.listMine({ page, pageSize }, signal)
       orders.push(...listed.orders)
       total = listed.total
       if (listed.items.length === 0) break
-      if (listed.pageSize > 0 && listed.page >= Math.ceil(total / listed.pageSize)) break
+      const lastPage = listed.pageSize > 0 ? Math.ceil(total / listed.pageSize) : page
+      if (page >= lastPage) break
       page += 1
-      guard += 1
+      if (page > maxPages) {
+        throw new AuthRequestError('http', 'بارگذاری همه سفارش‌ها کامل نشد.')
+      }
     }
     return { orders, total }
   },

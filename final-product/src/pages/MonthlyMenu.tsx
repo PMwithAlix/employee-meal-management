@@ -8,7 +8,6 @@ import { usePublishedMenu } from '../menus/usePublishedMenu'
 import { useApp } from '../store'
 import { addDays, isSameDate, JALALI_MONTHS } from '../lib/jalali'
 import { findOrder, isMealOpen, mealChoices, rowMatches } from '../lib/orders'
-import { formatDeadline } from '../lib/deadlines'
 import { can } from '../permissions'
 import { cn, fa } from '../lib/text'
 import type { DayMenu, MealKind } from '../types'
@@ -32,7 +31,7 @@ export function MonthlyMenuPage() {
   }
 
   const days = published.pickerDays
-  const visible = days.filter((day) => rowMatches(day, app.myOrders, id, app.menuQuery, app.deadlines, app.now))
+  const visible = days.filter((day) => rowMatches(day, app.myOrders, id, app.menuQuery, app.deadlines, app.now, app.mealDeadlineAt))
   const active = app.menuQuery.meal !== 'all' || app.menuQuery.status !== 'all' || app.menuQuery.q.trim()
 
   return (
@@ -40,7 +39,7 @@ export function MonthlyMenuPage() {
       <div className="space-y-2">
         <MonthBar icons />
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <p className="text-xs text-muted">ناهار و شام جدا انتخاب می‌شوند. ناهار: {formatDeadline(app.deadlines.lunch)}. شام: {formatDeadline(app.deadlines.dinner)}.</p>
+          <p className="text-xs text-muted">ناهار و شام جدا انتخاب می‌شوند. ناهار: {app.mealDeadlineSummary('lunch')}. شام: {app.mealDeadlineSummary('dinner')}.</p>
           <Segmented
             label="نمای منو"
             size="touch"
@@ -105,6 +104,12 @@ export function MonthlyMenuPage() {
       {app.myOrdersStatus === 'unavailable' && (
         <Empty title="سفارش‌ها از سامانه خوانده نشد" body={app.myOrdersMessage || 'این به‌معنای حذف سفارش نیست. دوباره تلاش کنید.'} />
       )}
+      {app.deadlineStatus === 'unavailable' && (
+        <Empty title="مهلت سفارش از سامانه خوانده نشد" body={app.deadlineMessage || 'تا خواندن مهلت، سفارش عادی باز نیست. دوباره تلاش کنید.'} />
+      )}
+      {app.deadlineStatus === 'error' && (
+        <Empty title="بارگذاری مهلت سفارش انجام نشد" body={app.deadlineMessage || 'تا خواندن مهلت، سفارش عادی باز نیست.'} />
+      )}
       {published.status === 'loading' ? (
         <Empty title="در حال بارگذاری منو" body="منوی منتشرشده این ماه از سامانه خوانده می‌شود." />
       ) : published.status === 'unavailable' ? (
@@ -124,6 +129,9 @@ export function MonthlyMenuPage() {
       )}
       {(published.status === 'unavailable' || published.status === 'error' || published.status === 'forbidden') && (
         <Button variant="secondary" onClick={published.retry}>تلاش دوباره</Button>
+      )}
+      {(app.myOrdersStatus === 'unavailable' || app.myOrdersStatus === 'error' || app.deadlineStatus === 'unavailable' || app.deadlineStatus === 'error') && (
+        <Button variant="secondary" onClick={app.retryMyOrders}>تلاش دوباره</Button>
       )}
     </div>
   )

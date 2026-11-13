@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { defaultMonthDeadlines } from './deadlines'
 import { currentDateTime } from './jalali'
-import { findOrder, isEmployeeDeadlineOpen, isMealOpen } from './orders'
+import { findCancelledOrder, findOrder, isEmployeeDeadlineOpen, isMealOpen, matchesStatus } from './orders'
 import type { DayMenu, Order } from '../types'
 
 const day: DayMenu = {
@@ -39,6 +39,19 @@ describe('isMealOpen', () => {
   })
 })
 
+describe('matchesStatus open filter', () => {
+  const now = currentDateTime()
+  const local = defaultMonthDeadlines()
+  const query = { meal: 'all', status: 'open', q: '' } as const
+
+  it('uses the backend deadline state, not the local default', () => {
+    expect(matchesStatus(day, undefined, 'lunch', query.status, local, now, 'absent')).toBe(false)
+    expect(matchesStatus(day, undefined, 'lunch', query.status, local, now, 'unknown')).toBe(false)
+    expect(matchesStatus(day, undefined, 'lunch', query.status, local, now, { at: '2000-01-01T00:00:00.000Z' })).toBe(false)
+    expect(matchesStatus(day, undefined, 'dinner', query.status, local, now, { at: '2099-01-01T00:00:00.000Z' })).toBe(true)
+  })
+})
+
 describe('findOrder', () => {
   it('does not treat a cancelled order as the active selection', () => {
     const cancelled: Order = {
@@ -56,5 +69,6 @@ describe('findOrder', () => {
       rating: null,
     }
     expect(findOrder([cancelled], 'user-1', day, 1, 'lunch')).toBeUndefined()
+    expect(findCancelledOrder([cancelled], 'user-1', day, 1, 'lunch')?.snapshotTitle).toBe('چلوکباب')
   })
 })

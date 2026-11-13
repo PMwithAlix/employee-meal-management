@@ -44,3 +44,54 @@ export function formatDeadline(deadline: MealDeadline) {
   const minute = fa(String(deadline.minute).padStart(2, '0'))
   return `${when}، ساعت ${hour}:${minute}`
 }
+
+const TEHRAN = 'Asia/Tehran'
+
+export function tehranDateTimeParts(iso: string) {
+  const date = new Date(iso)
+  if (Number.isNaN(date.getTime())) return null
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: TEHRAN,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    hourCycle: 'h23',
+  }).formatToParts(date)
+  const read = (type: Intl.DateTimeFormatPartTypes) => Number(parts.find((part) => part.type === type)?.value)
+  const year = read('year')
+  const month = read('month')
+  const day = read('day')
+  const hour = read('hour')
+  const minute = read('minute')
+  if ([year, month, day, hour, minute].some((value) => Number.isNaN(value))) return null
+  return { year, month, day, hour, minute }
+}
+
+export function formatDeadlineFromInstant(deadlineAt: string, mealDate?: string) {
+  const parts = tehranDateTimeParts(deadlineAt)
+  if (!parts) return null
+  const hour = fa(String(parts.hour).padStart(2, '0'))
+  const minute = fa(String(parts.minute).padStart(2, '0'))
+  const clock = `ساعت ${hour}:${minute}`
+  if (!mealDate) return clock
+  const [gy, gm, gd] = mealDate.split('-').map(Number)
+  if (!gy || !gm || !gd) return clock
+  const when = Date.UTC(parts.year, parts.month - 1, parts.day) < Date.UTC(gy, gm - 1, gd) ? 'روز قبل' : 'همان روز'
+  return `${when}، ${clock}`
+}
+
+export function summarizeBackendDeadlines(map: Record<string, string>, meal: MealKind) {
+  const suffix = meal === 'lunch' ? ':LUNCH' : ':DINNER'
+  const labels = new Set<string>()
+  for (const [key, iso] of Object.entries(map)) {
+    if (!key.endsWith(suffix)) continue
+    const mealDate = key.slice(0, key.length - suffix.length)
+    const label = formatDeadlineFromInstant(iso, mealDate)
+    if (label) labels.add(label)
+  }
+  if (labels.size === 0) return 'مهلت تعریف نشده'
+  if (labels.size === 1) return [...labels][0]
+  return 'ساعت‌های متفاوت'
+}

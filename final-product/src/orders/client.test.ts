@@ -51,6 +51,44 @@ describe('orderApi', () => {
     expect(listed.orders[100]?.id).toBe('order-100')
   })
 
+  it('rejects a truncated personal-order listing when more than 50 pages remain', async () => {
+    const fetchMock = vi.fn(async () => new Response(JSON.stringify({
+      items: [{
+        id: 'order-keep',
+        userId: 'user-1',
+        mealDate: '2026-11-14',
+        mealType: 'LUNCH',
+        quantity: 1,
+        status: 'ACTIVE',
+        currentCycle: {
+          id: 'c-keep',
+          cycleNumber: 1,
+          menuItemId: 'item-1',
+          menuVersionId: 'v1',
+          optionTitle: 'عدسی',
+          usernameSnapshot: 'emp',
+          buildingIdSnapshot: null,
+          buildingNameSnapshot: null,
+          mealDateSnapshot: '2026-11-14',
+          mealTypeSnapshot: 'LUNCH',
+          status: 'ACTIVE',
+          createdAt: '2026-11-14T00:00:00.000Z',
+          groups: [],
+        },
+        rating: null,
+      }],
+      total: 5001,
+      page: 1,
+      pageSize: 100,
+    }), { status: 200 }))
+    vi.stubGlobal('fetch', fetchMock)
+    await expect(orderApi.listAllMine()).rejects.toMatchObject({
+      kind: 'http',
+      message: 'بارگذاری همه سفارش‌ها کامل نشد.',
+    })
+    expect(fetchMock).toHaveBeenCalledTimes(50)
+  })
+
   it('lists personal orders with credentials and without seed fallback', async () => {
     const fetchMock = vi.fn(async () => new Response(JSON.stringify({ items: [], total: 0, page: 1, pageSize: 100 }), { status: 200 }))
     vi.stubGlobal('fetch', fetchMock)

@@ -3,7 +3,7 @@ import { Button, Dialog, Empty, MonthBar } from '../components/ui'
 import { SelectMealDialog } from '../components/SelectMealDialog'
 import { usePublishedMenu } from '../menus/usePublishedMenu'
 import { useApp } from '../store'
-import { canGiveFeedback, findOrder, isMealOpen, mealChoices, type MealDeadlineState } from '../lib/orders'
+import { canGiveFeedback, findCancelledOrder, findOrder, isMealOpen, mealChoices, type MealDeadlineState } from '../lib/orders'
 import type { MonthDeadlines } from '../lib/deadlines'
 import { isSameDate, JALALI_MONTHS, type JalaliDateTime } from '../lib/jalali'
 import { can } from '../permissions'
@@ -49,6 +49,8 @@ export function MyOrdersPage() {
           {days.map((day) => {
             const lunch = findOrder(app.myOrders, id, day, day.jd, 'lunch')
             const dinner = findOrder(app.myOrders, id, day, day.jd, 'dinner')
+            const lunchCancelled = lunch ? undefined : findCancelledOrder(app.myOrders, id, day, day.jd, 'lunch')
+            const dinnerCancelled = dinner ? undefined : findCancelledOrder(app.myOrders, id, day, day.jd, 'dinner')
             return (
               <div key={day.jd} className="grid gap-3 px-4 py-3 md:grid-cols-[8rem_1fr_1fr]">
                 <div>
@@ -60,6 +62,7 @@ export function MyOrdersPage() {
                   name={day.lunch ? lunch?.choice ?? null : undefined}
                   missing={!day.lunch}
                   order={lunch}
+                  note={lunchCancelled ? `${lunchCancelled.snapshotTitle ?? '—'} · لغو شده` : undefined}
                   status={day.lunch ? (isMealOpen(day, 'lunch', app.deadlines, app.now, app.mealDeadlineAt(day, 'lunch')) ? 'مهلت باز' : 'مهلت تمام') : undefined}
                   canEdit={canChange(app.role, day, 'lunch', app.deadlines, app.now, app.mealDeadlineAt(day, 'lunch'))}
                   canRate={canGiveFeedback(lunch, app.now, app.mealServings)}
@@ -71,6 +74,7 @@ export function MyOrdersPage() {
                   name={day.dinner ? dinner?.choice ?? null : undefined}
                   missing={!day.dinner}
                   order={dinner}
+                  note={dinnerCancelled ? `${dinnerCancelled.snapshotTitle ?? '—'} · لغو شده` : undefined}
                   status={day.dinner ? (isMealOpen(day, 'dinner', app.deadlines, app.now, app.mealDeadlineAt(day, 'dinner')) ? 'مهلت باز' : 'مهلت تمام') : undefined}
                   canEdit={canChange(app.role, day, 'dinner', app.deadlines, app.now, app.mealDeadlineAt(day, 'dinner'))}
                   canRate={canGiveFeedback(dinner, app.now, app.mealServings)}
@@ -130,6 +134,7 @@ function OrderLine({
   name,
   missing,
   order,
+  note,
   onRate,
   onEdit,
   status,
@@ -140,6 +145,7 @@ function OrderLine({
   name: string | null | undefined
   missing: boolean
   order?: Order
+  note?: string
   onRate: () => void
   onEdit: () => void
   status?: string
@@ -151,6 +157,7 @@ function OrderLine({
     <div className={lunch ? 'rounded-md border border-lunchline bg-lunchbg px-3 py-3' : 'rounded-md border border-dinnerline bg-dinnerbg px-3 py-3'}>
       <p className={lunch ? 'text-xs font-medium text-lunch' : 'text-xs font-medium text-dinner'}>{label}</p>
       <p className="mt-1 break-words text-sm">{missing ? 'منو تعریف نشده' : name ?? 'انتخاب نشده'}</p>
+      {note && <p className="mt-1 text-xs text-muted">{note}</p>}
       {status && <p className="mt-1 text-xs text-muted">{status}</p>}
       {(canEdit || (canRate && name && order)) && (
         <div className="mt-2 flex flex-col gap-2">

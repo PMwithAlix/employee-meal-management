@@ -3,6 +3,16 @@ import { formatDeadline, isOrderingOpen, type MonthDeadlines } from './deadlines
 import { fa } from './text'
 import type { DayMenu, MealKind, MealServings, MenuQuery, Order } from '../types'
 
+function mealOrders(
+  orders: Order[],
+  employeeId: string,
+  month: Pick<JalaliDate, 'jy' | 'jm'>,
+  jd: number,
+  meal: MealKind,
+) {
+  return orders.filter((item) => item.employeeId === employeeId && item.jy === month.jy && item.jm === month.jm && item.jd === jd && item.meal === meal)
+}
+
 export function findOrder(
   orders: Order[],
   employeeId: string,
@@ -10,8 +20,17 @@ export function findOrder(
   jd: number,
   meal: MealKind,
 ) {
-  const matches = orders.filter((item) => item.employeeId === employeeId && item.jy === month.jy && item.jm === month.jm && item.jd === jd && item.meal === meal)
-  return matches.find((item) => item.cycleStatus !== 'CANCELLED')
+  return mealOrders(orders, employeeId, month, jd, meal).find((item) => item.cycleStatus !== 'CANCELLED')
+}
+
+export function findCancelledOrder(
+  orders: Order[],
+  employeeId: string,
+  month: Pick<JalaliDate, 'jy' | 'jm'>,
+  jd: number,
+  meal: MealKind,
+) {
+  return mealOrders(orders, employeeId, month, jd, meal).find((item) => item.cycleStatus === 'CANCELLED')
 }
 
 export function mealChoices(day: DayMenu, meal: MealKind) {
@@ -60,12 +79,13 @@ export function matchesStatus(
   status: MenuQuery['status'],
   deadlines: MonthDeadlines,
   now: JalaliDateTime,
+  deadline?: MealDeadlineState,
 ) {
   if (!day[meal]) return false
   const selected = Boolean(order?.choice)
   if (status === 'selected') return selected
   if (status === 'unselected') return !selected
-  if (status === 'open') return isMealOpen(day, meal, deadlines, now)
+  if (status === 'open') return isMealOpen(day, meal, deadlines, now, deadline)
   return true
 }
 
@@ -76,6 +96,7 @@ export function rowMatches(
   query: MenuQuery,
   deadlines: MonthDeadlines,
   now: JalaliDateTime,
+  deadlineFor?: (day: DayMenu, meal: MealKind) => MealDeadlineState,
 ) {
   const meals: MealKind[] = query.meal === 'all' ? ['lunch', 'dinner'] : [query.meal]
   const q = toLatin(query.q.trim())
@@ -85,7 +106,7 @@ export function rowMatches(
     if (!toLatin(blob).includes(q)) return false
   }
   if (query.status === 'all') return true
-  return meals.some((meal) => matchesStatus(day, findOrder(orders, employeeId, day, day.jd, meal), meal, query.status, deadlines, now))
+  return meals.some((meal) => matchesStatus(day, findOrder(orders, employeeId, day, day.jd, meal), meal, query.status, deadlines, now, deadlineFor?.(day, meal)))
 }
 
 export function deadlineLabel(day: DayMenu, meal: MealKind, deadlines: MonthDeadlines) {

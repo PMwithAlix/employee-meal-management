@@ -1,6 +1,6 @@
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react'
 import { buildMonthMenu, createSnapshot, fullName, PERSONA_ID, ROLE_LABEL, SEED_MONTH } from './data'
-import { defaultMonthDeadlines, formatDeadline, isOrderingOpen, type MealDeadline, type MonthDeadlines } from './lib/deadlines'
+import { defaultMonthDeadlines, formatDeadline, isOrderingOpen, summarizeBackendDeadlines, type MealDeadline, type MonthDeadlines } from './lib/deadlines'
 import { addMonths, currentDateTime, JALALI_MONTHS, monthKey, type JalaliDate, type JalaliDateTime } from './lib/jalali'
 import { canGiveFeedback, isEmployeeDeadlineOpen, type MealDeadlineState } from './lib/orders'
 import { ADMIN_ACCOUNT_ID, normalizeUsername, passwordIssue, setSessionSecret, usernameIssue, verifySessionSecret } from './lib/credentials'
@@ -56,6 +56,8 @@ interface StoreValue {
   myOrders: Order[]
   myOrdersStatus: 'loading' | 'ready' | 'unavailable' | 'error'
   myOrdersMessage: string
+  deadlineStatus: 'loading' | 'ready' | 'unavailable' | 'error'
+  deadlineMessage: string
   orderingKey: string | null
   selfId: string
   guests: GuestOrder[]
@@ -83,6 +85,7 @@ interface StoreValue {
   setMealServing: (meal: MealKind, clock: string) => void
   selectMeal: (employeeId: string, jd: number, meal: MealKind, choice: string | null, scope: 'self' | 'ops', menuItemId?: string | null) => Promise<boolean>
   mealDeadlineAt: (day: Pick<DayMenu, 'jy' | 'jm' | 'jd' | 'gregorianDate'>, meal: MealKind) => MealDeadlineState
+  mealDeadlineSummary: (meal: MealKind) => string
   retryMyOrders: () => void
   rateMeal: (orderId: string, score: number, comment: string) => boolean
   saveEmployee: (input: {
@@ -166,6 +169,7 @@ export function StoreProvider({
   const [orderingKey, setOrderingKey] = useState<string | null>(null)
   const [deadlineMap, setDeadlineMap] = useState<Record<string, string>>({})
   const [deadlineStatus, setDeadlineStatus] = useState<'loading' | 'ready' | 'unavailable' | 'error'>('loading')
+  const [deadlineMessage, setDeadlineMessage] = useState('')
   const [guests, setGuests] = useState(initial.guests)
   const [activity, setActivity] = useState(initial.activity)
   const [notes, setNotes] = useState(initial.notes)
@@ -189,6 +193,7 @@ export function StoreProvider({
     setMyOrdersStatus('loading')
     setMyOrdersMessage('')
     setDeadlineStatus('loading')
+    setDeadlineMessage('')
     void Promise.allSettled([
       orderApi.listAllMine(controller.signal),
       orderApi.deadlines(selectedMonth.jy, selectedMonth.jm, controller.signal),
@@ -199,7 +204,6 @@ export function StoreProvider({
         setMyOrdersStatus('ready')
         setMyOrdersMessage('')
       } else {
-        setMyOrders([])
         const error = ordersResult.reason
         if (error instanceof AuthRequestError && error.kind === 'network') {
           setMyOrdersStatus('unavailable')
@@ -214,10 +218,12 @@ export function StoreProvider({
         for (const row of deadlinesResult.value) next[deadlineKey(row.mealDate, row.mealType)] = row.deadlineAt
         setDeadlineMap(next)
         setDeadlineStatus('ready')
+        setDeadlineMessage('')
       } else {
         const error = deadlinesResult.reason
         setDeadlineMap({})
         setDeadlineStatus(error instanceof AuthRequestError && error.kind === 'network' ? 'unavailable' : 'error')
+        setDeadlineMessage(error instanceof AuthRequestError ? error.message : 'بارگذاری مهلت سفارش انجام نشد.')
       }
     })
     return () => controller.abort()
@@ -267,6 +273,12 @@ export function StoreProvider({
     const date = day.gregorianDate ?? formatGregorianDate(day.jy, day.jm, day.jd)
     const at = deadlineMap[deadlineKey(date, meal)]
     return at ? { at } : 'absent'
+  }
+
+  function mealDeadlineSummary(meal: MealKind) {
+    if (deadlineStatus === 'loading') return 'در حال خواندن'
+    if (deadlineStatus !== 'ready') return 'خوانده نشد'
+    return summarizeBackendDeadlines(deadlineMap, meal)
   }
 
   function upsertMyOrder(next: Order) {
@@ -735,6 +747,8 @@ export function StoreProvider({
     myOrders,
     myOrdersStatus,
     myOrdersMessage,
+    deadlineStatus,
+    deadlineMessage,
     orderingKey,
     selfId: session.id,
     guests,
@@ -783,6 +797,7 @@ export function StoreProvider({
     },
     selectMeal,
     mealDeadlineAt,
+    mealDeadlineSummary,
     retryMyOrders: () => setMyOrdersBoot((value) => value + 1),
     rateMeal,
     saveEmployee,
