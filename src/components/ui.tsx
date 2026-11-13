@@ -24,7 +24,7 @@ export function Button({
       disabled={disabled}
       onClick={onClick}
       className={cn(
-        'inline-flex h-9 items-center justify-center gap-1.5 rounded-md px-3 text-sm transition disabled:cursor-not-allowed disabled:opacity-50',
+        'inline-flex h-11 min-h-11 items-center justify-center gap-1.5 rounded-md px-3 text-sm transition disabled:cursor-not-allowed disabled:opacity-50',
         variant === 'primary' && 'bg-primary text-onprimary hover:bg-primaryhover active:bg-primaryactive',
         variant === 'secondary' && 'border border-line bg-surface text-ink hover:bg-surface2',
         variant === 'ghost' && 'text-ink hover:bg-surface2',
@@ -53,7 +53,7 @@ export function Field({
 }
 
 export const controlClass =
-  'h-10 w-full rounded-md border border-line bg-surface px-3 text-sm text-ink outline-none focus:border-primary'
+  'h-11 min-h-11 w-full rounded-md border border-line bg-surface px-3 text-base text-ink outline-none focus:border-primary'
 
 const FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
 

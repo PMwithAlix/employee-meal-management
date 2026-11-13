@@ -100,6 +100,7 @@ export interface Note {
   at: string
   read: boolean
   page?: Page
+  employeeId?: string
 }
 
 export interface FeedItem {
@@ -123,4 +124,16 @@ export interface PastOrder {
 export interface ImportedFile {
   name: string
   size: number
+}
+
+export interface ImportedDayMenu {
+  jd: number
+  lunch: string[]
+  dinner: string[]
+}
+
+export interface ImportedMenu {
+  jy: number
+  jm: number
+  days: ImportedDayMenu[]
 }

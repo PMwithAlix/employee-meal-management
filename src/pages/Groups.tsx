@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Button, Field, controlClass } from '../components/ui'
+import { Button, Dialog, Field, controlClass } from '../components/ui'
 import { fullName } from '../data'
 import { useApp } from '../store'
 import { fa } from '../lib/text'
@@ -10,6 +10,7 @@ export function GroupsPage() {
   const [creating, setCreating] = useState('')
   const [rename, setRename] = useState('')
   const [adding, setAdding] = useState('')
+  const [removing, setRemoving] = useState('')
   const group = app.groups.find((item) => item.id === openId)
   const members = app.employees.filter((employee) => employee.groupIds.includes(openId))
   const others = app.employees.filter((employee) => employee.active && !employee.groupIds.includes(openId))
@@ -26,13 +27,13 @@ export function GroupsPage() {
             setCreating('')
           }}
         >
-          <input value={creating} onChange={(event) => setCreating(event.target.value)} placeholder="گروه جدید" className="h-10 min-w-0 flex-1 rounded-md border border-line bg-surface px-2 text-sm" />
+          <input value={creating} onChange={(event) => setCreating(event.target.value)} placeholder="گروه جدید" aria-label="نام گروه جدید" className="h-11 min-w-0 flex-1 rounded-md border border-line bg-surface px-2 text-base" />
           <Button type="submit">ساخت</Button>
         </form>
         {app.groups.map((item) => {
           const count = app.employees.filter((employee) => employee.groupIds.includes(item.id)).length
           return (
-            <button key={item.id} className={`w-full rounded-md border px-3 py-2 text-start ${item.id === openId ? 'border-primary bg-surface' : 'border-line bg-surface'}`} onClick={() => { setOpenId(item.id); setRename(item.name) }}>
+            <button key={item.id} className={`min-h-11 w-full rounded-md border px-3 py-2 text-start ${item.id === openId ? 'border-primary bg-surface' : 'border-line bg-surface'}`} onClick={() => { setOpenId(item.id); setRename(item.name) }}>
               <span className="block text-sm font-medium">{item.name}</span>
               <span className="text-xs text-muted">{fa(count)} عضو</span>
             </button>
@@ -59,7 +60,7 @@ export function GroupsPage() {
             {members.map((employee) => (
               <li key={employee.id} className="flex items-center justify-between py-2">
                 <span>{fullName(employee)} {!employee.active && <span className="text-xs text-muted">غیرفعال</span>}</span>
-                <button className="text-xs text-danger" onClick={() => app.setMembership(group.id, employee.id, false)}>حذف از گروه</button>
+                <Button variant="danger" onClick={() => setRemoving(employee.id)}>حذف از گروه</Button>
               </li>
             ))}
           </ul>
@@ -72,12 +73,19 @@ export function GroupsPage() {
               setAdding('')
             }}
           >
-            <select className="h-10 min-w-[14rem] flex-1 rounded-md border border-line bg-bg px-2 text-sm" value={adding} onChange={(event) => setAdding(event.target.value)}>
+            <select className="h-11 min-w-0 flex-1 rounded-md border border-line bg-bg px-2 text-base" aria-label="افزودن کارمند به گروه" value={adding} onChange={(event) => setAdding(event.target.value)}>
               <option value="">افزودن کارمند</option>
               {others.map((employee) => <option key={employee.id} value={employee.id}>{fullName(employee)}</option>)}
             </select>
             <Button type="submit" disabled={!adding}>افزودن</Button>
           </form>
+          <Dialog open={Boolean(removing)} title="حذف از گروه" onClose={() => setRemoving('')}>
+            <p className="text-sm">این کارمند از گروه «{group.name}» خارج شود؟ ساختمان و سفارش‌های او تغییر نمی‌کند.</p>
+            <div className="mt-3 flex justify-end gap-2">
+              <Button variant="secondary" onClick={() => setRemoving('')}>انصراف</Button>
+              <Button variant="danger" onClick={() => { app.setMembership(group.id, removing, false); setRemoving('') }}>حذف از گروه</Button>
+            </div>
+          </Dialog>
         </section>
       )}
     </div>

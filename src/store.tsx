@@ -1,6 +1,6 @@
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react'
-import { buildMonthMenu, createSnapshot, fullName, PERSONA_ID, PREVIEW_MENU, ROLE_LABEL, SEED_MONTH } from './data'
-import { defaultMonthDeadlines, isOrderingOpen, type MealDeadline, type MonthDeadlines } from './lib/deadlines'
+import { buildMonthMenu, createSnapshot, fullName, PERSONA_ID, ROLE_LABEL, SEED_MONTH } from './data'
+import { defaultMonthDeadlines, formatDeadline, isOrderingOpen, type MealDeadline, type MonthDeadlines } from './lib/deadlines'
 import { addMonths, currentDateTime, isPastDate, JALALI_MONTHS, monthKey, type JalaliDate, type JalaliDateTime } from './lib/jalali'
 import { fa } from './lib/text'
 import { can, canAccess, LANDING_PAGE } from './permissions'
@@ -11,6 +11,7 @@ import type {
   FeedItem,
   GuestOrder,
   ImportedFile,
+  ImportedMenu,
   MealKind,
   MenuQuery,
   MenuView,
@@ -48,6 +49,7 @@ interface StoreValue {
   feed: FeedItem[]
   past: ReturnType<typeof createSnapshot>['past']
   importedFile: ImportedFile | null
+  importedMenu: ImportedMenu | null
   toasts: Toast[]
   personaId: string | null
   personaName: string
@@ -73,15 +75,22 @@ interface StoreValue {
   addGuest: (guest: Omit<GuestOrder, 'id' | 'jy' | 'jm'>) => void
   removeGuest: (id: string) => void
   updateDayOptions: (jd: number, meal: MealKind, options: string[]) => void
-  setImportedFile: (file: ImportedFile | null) => void
-  applyImport: (policy: ReplacePolicy) => { affected: number; keptOutside: number }
-  previewImpact: (policy: ReplacePolicy) => { affected: number; keptOutside: number }
+  setImportedFile: (file: ImportedFile | null, menu?: ImportedMenu | null) => void
+  applyImport: (policy: ReplacePolicy) => ImportImpact
+  previewImpact: (policy: ReplacePolicy) => ImportImpact
   markNote: (id: string) => void
   markAllNotes: () => void
   logout: () => void
 }
 
 const StoreContext = createContext<StoreValue | null>(null)
+
+export interface ImportImpact {
+  affected: number
+  keptOutside: number
+  lunch: number
+  dinner: number
+}
 const emptyQuery: MenuQuery = { meal: 'all', status: 'all', q: '' }
 
 function uid(prefix: string) {
@@ -113,6 +122,7 @@ export function StoreProvider({ children, onLogout }: { children: ReactNode; onL
   const [notes, setNotes] = useState(initial.notes)
   const [feed, setFeed] = useState(initial.feed)
   const [importedFile, setImportedFileState] = useState<ImportedFile | null>(null)
+  const [importedMenu, setImportedMenu] = useState<ImportedMenu | null>(null)
   const [toasts, setToasts] = useState<Toast[]>([])
 
   useEffect(() => {
@@ -200,11 +210,12 @@ export function StoreProvider({ children, onLogout }: { children: ReactNode; onL
       setNotes((list) => [
         {
           id: uid('n'),
-          title: 'سفارش یک کارمند تغییر کرد',
-          body: `${personaName} ${meal === 'lunch' ? 'ناهار' : 'شام'} ${fa(jd)} ${monthName} ${fullName(employee)} را به «${after}» تغییر داد.`,
+          title: 'سفارش شما تغییر کرد',
+          body: `${personaName} ${meal === 'lunch' ? 'ناهار' : 'شام'} ${fa(jd)} ${monthName} را به «${after}» تغییر داد.`,
           at: 'همین حالا',
           read: false,
-          page: 'menuMgmt',
+          page: 'orders',
+          employeeId,
         },
         ...list,
       ])
@@ -396,9 +407,19 @@ export function StoreProvider({ children, onLogout }: { children: ReactNode; onL
 
   function updateDayOptions(jd: number, meal: MealKind, options: string[]) {
     if (!can(role, 'menu.edit')) return
+    const previous = days.find((day) => day.jd === jd)?.[meal] ?? []
+    if (previous.join('\0') === options.join('\0')) return
     setMenus((map) => {
       const list = map[monthId] ?? days
       return { ...map, [monthId]: list.map((day) => (day.jd === jd ? { ...day, [meal]: options.length ? options : null } : day)) }
+    })
+    pushActivity({
+      actor: personaName,
+      action: meal === 'lunch' ? 'ویرایش گزینه‌های ناهار' : 'ویرایش گزینه‌های شام',
+      target: `${fa(jd)} ${monthName}`,
+      at: 'همین حالا',
+      before: previous.length ? previous.join('، ') : 'بدون گزینه',
+      after: options.length ? options.join('، ') : 'بدون گزینه',
     })
     toast('ذخیره شد')
   }
@@ -407,26 +428,43 @@ export function StoreProvider({ children, onLogout }: { children: ReactNode; onL
     return list.filter((item) => item.jy === selectedMonth.jy && item.jm === selectedMonth.jm)
   }
 
-  function impact(policy: ReplacePolicy) {
-    const future = monthOrders(orders).filter((order) => order.choice)
-    if (policy === 'reset') return { affected: future.length, keptOutside: 0 }
-    const outside = future.filter((order) => {
-      const day = days.find((item) => item.jd === order.jd)
-      const options = order.meal === 'lunch' ? PREVIEW_MENU.lunch : PREVIEW_MENU.dinner
-      return Boolean(day && day[order.meal] && order.choice && !options.includes(order.choice))
+  function importedOptions(jd: number, meal: MealKind) {
+    const day = importedMenu?.days.find((item) => item.jd === jd)
+    if (!day) return null
+    return meal === 'lunch' ? day.lunch : day.dinner
+  }
+
+  function impact(policy: ReplacePolicy): ImportImpact {
+    const empty = { affected: 0, keptOutside: 0, lunch: 0, dinner: 0 }
+    if (!importedMenu || importedMenu.jy !== selectedMonth.jy || importedMenu.jm !== selectedMonth.jm) return empty
+    const chosen = monthOrders(orders).filter((order) => order.choice)
+    if (policy === 'reset') {
+      return { affected: chosen.length, keptOutside: 0, lunch: chosen.filter((order) => order.meal === 'lunch').length, dinner: chosen.filter((order) => order.meal === 'dinner').length }
+    }
+    const outside = chosen.filter((order) => {
+      const options = importedOptions(order.jd, order.meal)
+      return options !== null && !options.includes(order.choice ?? '')
     })
-    if (policy === 'match') return { affected: outside.length, keptOutside: 0 }
-    return { affected: 0, keptOutside: outside.length }
+    const lunch = outside.filter((order) => order.meal === 'lunch').length
+    const dinner = outside.filter((order) => order.meal === 'dinner').length
+    if (policy === 'match') return { affected: outside.length, keptOutside: 0, lunch, dinner }
+    return { affected: 0, keptOutside: outside.length, lunch, dinner }
   }
 
   function applyImport(policy: ReplacePolicy) {
-    if (!can(role, 'menu.edit')) return { affected: 0, keptOutside: 0 }
     const result = impact(policy)
+    if (!can(role, 'menu.edit') || !importedMenu || importedMenu.jy !== selectedMonth.jy || importedMenu.jm !== selectedMonth.jm) {
+      return { affected: 0, keptOutside: 0, lunch: 0, dinner: 0 }
+    }
     setMenus((map) => {
       const list = map[monthId] ?? days
       return {
         ...map,
-        [monthId]: list.map((day) => (day.lunch || day.dinner ? { ...day, lunch: day.lunch ? [...PREVIEW_MENU.lunch] : null, dinner: day.dinner ? [...PREVIEW_MENU.dinner] : null } : day)),
+        [monthId]: list.map((day) => {
+          const incoming = importedMenu.days.find((item) => item.jd === day.jd)
+          if (!incoming) return day
+          return { ...day, lunch: incoming.lunch.length ? [...incoming.lunch] : null, dinner: incoming.dinner.length ? [...incoming.dinner] : null }
+        }),
       }
     })
     const inMonth = (order: { jy: number; jm: number }) => order.jy === selectedMonth.jy && order.jm === selectedMonth.jm
@@ -435,9 +473,9 @@ export function StoreProvider({ children, onLogout }: { children: ReactNode; onL
     } else if (policy === 'match') {
       setOrders((list) =>
         list.map((order) => {
-          if (!inMonth(order)) return order
-          const options = order.meal === 'lunch' ? PREVIEW_MENU.lunch : PREVIEW_MENU.dinner
-          if (order.choice && !options.includes(order.choice)) return { ...order, choice: null, rating: null }
+          if (!inMonth(order) || !order.choice) return order
+          const options = importedMenu.days.find((item) => item.jd === order.jd)?.[order.meal]
+          if (options && !options.includes(order.choice)) return { ...order, choice: null, rating: null }
           return order
         }),
       )
@@ -477,6 +515,7 @@ export function StoreProvider({ children, onLogout }: { children: ReactNode; onL
     feed,
     past: initial.past,
     importedFile,
+    importedMenu,
     toasts,
     personaId,
     personaName,
@@ -492,9 +531,20 @@ export function StoreProvider({ children, onLogout }: { children: ReactNode; onL
     shiftMonth: (delta) => setSelectedMonth((month) => addMonths(month, delta)),
     setMealDeadline: (meal, patch) => {
       if (!can(role, 'menu.edit')) return
+      const current = deadlines[meal]
+      const next = { ...current, ...patch, meal }
+      if (next.relation === current.relation && next.hour === current.hour && next.minute === current.minute) return
       setDeadlinesByMonth((map) => {
-        const current = map[monthId] ?? defaultMonthDeadlines()
-        return { ...map, [monthId]: { ...current, [meal]: { ...current[meal], ...patch, meal } } }
+        const monthDeadlines = map[monthId] ?? defaultMonthDeadlines()
+        return { ...map, [monthId]: { ...monthDeadlines, [meal]: next } }
+      })
+      pushActivity({
+        actor: personaName,
+        action: meal === 'lunch' ? 'تغییر مهلت ناهار' : 'تغییر مهلت شام',
+        target: `${monthName} ${fa(selectedMonth.jy)}`,
+        at: 'همین حالا',
+        before: formatDeadline(current),
+        after: formatDeadline(next),
       })
     },
     selectMeal,
@@ -508,14 +558,15 @@ export function StoreProvider({ children, onLogout }: { children: ReactNode; onL
     addGuest,
     removeGuest,
     updateDayOptions,
-    setImportedFile: (file) => {
+    setImportedFile: (file, menu = null) => {
       if (!can(role, 'menu.edit')) return
       setImportedFileState(file)
+      setImportedMenu(file ? menu : null)
     },
     applyImport,
     previewImpact: impact,
     markNote: (id) => setNotes((list) => list.map((item) => (item.id === id ? { ...item, read: true } : item))),
-    markAllNotes: () => setNotes((list) => list.map((item) => ({ ...item, read: true }))),
+    markAllNotes: () => setNotes((list) => list.map((item) => (!item.employeeId || item.employeeId === personaId ? { ...item, read: true } : item))),
     logout: onLogout,
   }
 

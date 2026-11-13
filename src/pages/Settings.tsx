@@ -11,6 +11,7 @@ export function SettingsPage() {
         <p className="mb-3 mt-1 text-xs text-muted">زمینه روشن و تیره هر دو برای همین رابط تنظیم شده‌اند.</p>
         <Segmented
           label="زمینه"
+          size="touch"
           value={app.theme}
           onChange={app.setTheme}
           options={[{ id: 'light', label: 'روشن' }, { id: 'dark', label: 'تیره' }]}

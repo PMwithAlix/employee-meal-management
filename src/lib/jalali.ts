@@ -26,6 +26,12 @@ export function jalaliMonthLength(jy: number, jm: number) {
   return isLeapJalali(jy) ? 30 : 29
 }
 
+export function isValidJalaliDate(jy: number, jm: number, jd: number) {
+  if (!Number.isInteger(jy) || !Number.isInteger(jm) || !Number.isInteger(jd)) return false
+  const length = jalaliMonthLength(jy, jm)
+  return length > 0 && jd >= 1 && jd <= length
+}
+
 export function monthKey(month: Pick<JalaliDate, 'jy' | 'jm'>) {
   return `${month.jy}-${month.jm}`
 }
