@@ -4,7 +4,7 @@ import {
   NotFoundException,
   UnprocessableEntityException,
 } from '@nestjs/common';
-import { Prisma } from '@prisma/client';
+import { Prisma, Role } from '@prisma/client';
 import { AuditAction, AuditEntity } from '../audit/audit.actions';
 import { AuditService } from '../audit/audit.service';
 import type { AuthUser } from '../common/types/auth-user';
@@ -12,6 +12,7 @@ import { PrismaService } from '../database/prisma.service';
 import { AddGroupMemberDto } from './dto/add-group-member.dto';
 import { CreateGroupDto } from './dto/create-group.dto';
 import { UpdateGroupDto } from './dto/update-group.dto';
+import { assertEligibleGroupMemberRole } from './groups.access';
 
 @Injectable()
 export class GroupsService {
@@ -166,6 +167,7 @@ export class GroupsService {
         'افزودن کاربر غیرفعال به گروه مجاز نیست.',
       );
     }
+    assertEligibleGroupMemberRole(user.role);
 
     try {
       return await this.prisma.$transaction(async (tx) => {
