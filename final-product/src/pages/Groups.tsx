@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { AuthRequestError } from '../auth/errors'
 import { Button, Dialog, Empty, Field, controlClass } from '../components/ui'
-import { usesLiveGroupsPage } from '../groups/access'
+import { isEligibleGroupCandidate, usesLiveGroupsPage } from '../groups/access'
 import { groupApi, type DirectoryGroup, type GroupDetail, type GroupMember, type GroupMembershipHistory } from '../groups/client'
 import { formatGroupInstant } from '../groups/map'
 import { can } from '../permissions'
@@ -141,7 +141,7 @@ function LiveGroupsPage() {
   const group = detail && detail.id === openId ? detail : groups.find((item) => item.id === openId) ?? null
   const memberIds = useMemo(() => new Set(members.map((item) => item.userId)), [members])
   const others = useMemo(
-    () => users.filter((item) => item.role === 'EMPLOYEE' && item.isActive && !memberIds.has(item.id)),
+    () => users.filter((item) => isEligibleGroupCandidate({ role: item.role, isActive: item.isActive }) && !memberIds.has(item.id)),
     [users, memberIds],
   )
 
