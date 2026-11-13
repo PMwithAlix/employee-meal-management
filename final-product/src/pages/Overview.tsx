@@ -1,6 +1,5 @@
 import type { ReactNode } from 'react'
 import { CalendarClock, Moon, Sun, Utensils } from 'lucide-react'
-import { Empty } from '../components/ui'
 import { useApp } from '../store'
 import { deadlineLabel, findOrder, isMealOpen, upcomingChosenMeals } from '../lib/orders'
 import { addDays, isSameDate, JALALI_MONTHS, weekdayName, type JalaliDate, type JalaliDateTime } from '../lib/jalali'
@@ -27,11 +26,11 @@ function Stats({ items }: { items: Array<{ label: string; value: string; hint: s
   )
 }
 
-function Panel({ title, action, children, featured }: { title: string; action?: ReactNode; children: ReactNode; featured?: boolean }) {
+function Panel({ title, action, children }: { title: string; action?: ReactNode; children: ReactNode }) {
   return (
     <section className="rounded-md border border-line bg-surface">
       <div className="flex items-center justify-between gap-3 border-b border-line px-4 py-3">
-        <h2 className={featured ? 'text-base font-semibold' : 'text-sm font-semibold'}>{title}</h2>
+        <h2 className="text-sm font-semibold">{title}</h2>
         {action}
       </div>
       <div className="p-4">{children}</div>
@@ -87,49 +86,69 @@ function EmployeeOverview() {
     app.setPage('menu')
   }
 
+  const stats = [
+    { label: 'سفارش‌های این ماه', value: fa(lunchCount + dinnerCount), hint: 'مجموع ناهار و شام ثبت‌شده', icon: Utensils },
+    { label: 'روزهای باز برای انتخاب', value: fa(openDays.length), hint: `از امروز تا پایان ${JALALI_MONTHS[app.selectedMonth.jm - 1]}`, icon: CalendarClock },
+    { label: 'ناهارهای ثبت‌شده', value: fa(lunchCount), hint: 'مستقل از شام', icon: Sun },
+    { label: 'شام‌های ثبت‌شده', value: fa(dinnerCount), hint: 'مستقل از ناهار', icon: Moon },
+  ]
+  const recent = app.feed.filter((item) => item.employeeId === id).slice(0, 5)
+
   return (
-    <div className="space-y-4">
-      <Stats
-        items={[
-          { label: 'سفارش‌های این ماه', value: fa(lunchCount + dinnerCount), hint: 'مجموع ناهار و شام ثبت‌شده', icon: Utensils },
-          { label: 'روزهای باز برای انتخاب', value: fa(openDays.length), hint: `از امروز تا پایان ${JALALI_MONTHS[app.selectedMonth.jm - 1]}`, icon: CalendarClock },
-          { label: 'ناهارهای ثبت‌شده', value: fa(lunchCount), hint: 'مستقل از شام', icon: Sun },
-          { label: 'شام‌های ثبت‌شده', value: fa(dinnerCount), hint: 'مستقل از ناهار', icon: Moon },
-        ]}
-      />
-      <Panel title="سه وعده پیش رو" featured>
-        {upcomingMeals.length === 0 ? (
-          <Empty title="سفارش آینده‌ای ثبت نشده" body="ناهار یا شام وقتی اینجا می‌آید که غذا انتخاب شده باشد و زمان وعده هنوز نرسیده باشد." />
-        ) : (
-          <ul className="divide-y divide-line">
-            {upcomingMeals.map((order) => (
-              <li key={order.id} className="flex flex-col gap-1 py-3 first:pt-0 last:pb-0 sm:flex-row sm:items-center sm:justify-between sm:gap-3">
-                <span className="min-w-0">
-                  <span className="block text-sm font-medium">{dayHeading(order, app.now)}</span>
-                  <span className="text-xs text-muted">{fa(order.jd)} {JALALI_MONTHS[order.jm - 1]} {fa(order.jy)}</span>
-                </span>
-                <span className="min-w-0 sm:text-end">
-                  <span className={cn('block text-xs', order.meal === 'lunch' ? 'text-lunch' : 'text-dinner')}>{order.meal === 'lunch' ? 'ناهار' : 'شام'}</span>
-                  <span className="break-words text-sm font-medium">{order.choice}</span>
-                </span>
-              </li>
-            ))}
-          </ul>
-        )}
-      </Panel>
-      <div className="grid gap-4 lg:grid-cols-2">
-        <Panel title="وضعیت سفارش‌ها" action={<button className="min-h-11 px-2 text-xs text-link" onClick={() => jump('all')}>رفتن به منو</button>}>
-          <div className="space-y-3">
+    <div className="space-y-3">
+      <div className="grid grid-cols-2 gap-px overflow-hidden rounded-md border border-line bg-line lg:grid-cols-4">
+        {stats.map((item) => {
+          const Icon = item.icon
+          return (
+            <div key={item.label} className="bg-surface px-3 py-2.5">
+              <div className="flex items-center justify-between gap-2 text-muted">
+                <p className="text-[11px] leading-4">{item.label}</p>
+                <Icon size={14} aria-hidden />
+              </div>
+              <p className="mt-1 text-xl font-semibold leading-none">{item.value}</p>
+              <p className="mt-1 text-[11px] leading-4 text-muted">{item.hint}</p>
+            </div>
+          )
+        })}
+      </div>
+
+      <div className="grid gap-3 lg:grid-cols-5">
+        <DashPanel
+          className="order-2 lg:order-none lg:col-span-3"
+          title="وضعیت سفارش‌ها"
+          action={<button className="min-h-11 px-2 text-xs text-link" onClick={() => jump('all')}>رفتن به منو</button>}
+        >
+          <div className="grid grid-cols-2 gap-2">
             <Bucket title="روزهای پیش رو" count={upcoming.length} sample={upcoming.slice(0, 3).map((day) => fa(day.jd))} onClick={() => jump('open')} />
             <Bucket title="روزهای دارای انتخاب" count={selectedDays.length} sample={selectedDays.slice(-3).map((day) => fa(day.jd))} onClick={() => jump('selected')} />
             <Bucket title="ناهار ثبت‌نشده" count={missingLunch.length} sample={missingLunch.slice(0, 3).map((day) => fa(day.jd))} onClick={() => jump('unselected', 'lunch')} />
             <Bucket title="مهلت گذشته" count={passed.length} sample={passed.slice(-3).map((day) => fa(day.jd))} />
           </div>
-        </Panel>
-        <Panel title="نزدیک‌ترین مهلت‌ها">
+        </DashPanel>
+        <DashPanel className="order-1 lg:order-none lg:col-span-2" title="سه وعده پیش رو">
+          {upcomingMeals.length === 0 ? (
+            <p className="py-2 text-sm text-muted">سفارش آینده‌ای ثبت نشده. ناهار یا شام وقتی اینجا می‌آید که غذا انتخاب شده باشد و زمان وعده هنوز نرسیده باشد.</p>
+          ) : (
+            <ul className="grid gap-2">
+              {upcomingMeals.map((order) => (
+                <li key={order.id} className="rounded-md border border-line bg-surface2 px-3 py-2">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="min-w-0 truncate text-sm font-medium">{dayHeading(order, app.now)} · {fa(order.jd)} {JALALI_MONTHS[order.jm - 1]}</span>
+                    <span className={cn('shrink-0 text-[11px]', order.meal === 'lunch' ? 'text-lunch' : 'text-dinner')}>{order.meal === 'lunch' ? 'ناهار' : 'شام'}</span>
+                  </div>
+                  <p className="mt-1 break-words text-sm">{order.choice}</p>
+                </li>
+              ))}
+            </ul>
+          )}
+        </DashPanel>
+      </div>
+
+      <div className="grid gap-3 lg:grid-cols-2">
+        <DashPanel title="نزدیک‌ترین مهلت‌ها">
           <ul className="divide-y divide-line">
             {deadlines.map((item) => (
-              <li key={`${item.jd}-${item.meal}`} className="flex flex-wrap items-center justify-between gap-2 py-2.5 text-sm">
+              <li key={`${item.jd}-${item.meal}`} className="flex flex-wrap items-center justify-between gap-2 py-1.5 text-sm">
                 <span className="min-w-0">
                   <span className={cn('ms-2 text-xs', item.meal === 'lunch' ? 'text-lunch' : 'text-dinner')}>{item.meal === 'lunch' ? 'ناهار' : 'شام'}</span>
                   {fa(item.jd)} {JALALI_MONTHS[item.jm - 1]}
@@ -138,34 +157,51 @@ function EmployeeOverview() {
               </li>
             ))}
           </ul>
-        </Panel>
+        </DashPanel>
+        <DashPanel title="سفارش‌های اخیر">
+          {recent.length === 0 ? (
+            <p className="py-2 text-sm text-muted">سفارش اخیری برای این حساب نیست.</p>
+          ) : (
+            <ul className="divide-y divide-line">
+              {recent.map((item) => (
+                <li key={item.id} className="flex items-start justify-between gap-3 py-1.5 text-sm">
+                  <span className="min-w-0 break-words">{item.text}</span>
+                  <span className="shrink-0 text-[11px] text-muted">{item.at}</span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </DashPanel>
       </div>
-      <Panel title="سفارش‌های اخیر">
-        <ul className="divide-y divide-line">
-          {app.feed.filter((item) => item.employeeId === id).slice(0, 5).map((item) => (
-            <li key={item.id} className="flex items-start justify-between gap-3 py-2.5 text-sm">
-              <span>{item.text}</span>
-              <span className="shrink-0 text-xs text-muted">{item.at}</span>
-            </li>
-          ))}
-        </ul>
-      </Panel>
     </div>
+  )
+}
+
+function DashPanel({ title, action, children, className }: { title: string; action?: ReactNode; children: ReactNode; className?: string }) {
+  return (
+    <section className={cn('rounded-md border border-line bg-surface', className)}>
+      <div className="flex min-h-10 items-center justify-between gap-2 border-b border-line px-3">
+        <h2 className="text-sm font-semibold">{title}</h2>
+        {action}
+      </div>
+      <div className="p-3">{children}</div>
+    </section>
   )
 }
 
 function Bucket({ title, count, sample, onClick }: { title: string; count: number; sample: string[]; onClick?: () => void }) {
   const body = (
     <>
-      <span>
-        <span className="block text-sm">{title}</span>
-        <span className="text-xs text-muted">{sample.length ? sample.join('، ') : 'موردی نیست'}</span>
+      <span className="min-w-0">
+        <span className="block text-[13px] leading-5">{title}</span>
+        <span className="block truncate text-[11px] leading-4 text-muted">{sample.length ? sample.join('، ') : 'موردی نیست'}</span>
       </span>
-      <span className="text-lg font-semibold">{fa(count)}</span>
+      <span className="shrink-0 text-base font-semibold">{fa(count)}</span>
     </>
   )
-  if (!onClick) return <div className="flex min-h-11 items-center justify-between gap-3">{body}</div>
-  return <button type="button" className="flex min-h-11 w-full items-center justify-between gap-3 rounded-md text-start hover:bg-surface2" onClick={onClick}>{body}</button>
+  const className = 'flex min-h-11 w-full items-center justify-between gap-2 rounded-md border border-line bg-surface2 px-2.5 py-1.5 text-start'
+  if (!onClick) return <div className={className}>{body}</div>
+  return <button type="button" className={cn(className, 'hover:bg-elevated')} onClick={onClick}>{body}</button>
 }
 
 function SupportOverview() {
