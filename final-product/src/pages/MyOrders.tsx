@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Button, Dialog, Empty, MonthBar } from '../components/ui'
 import { SelectMealDialog } from '../components/SelectMealDialog'
 import { usePublishedMenu } from '../menus/usePublishedMenu'
@@ -8,6 +8,8 @@ import type { MonthDeadlines } from '../lib/deadlines'
 import { isSameDate, JALALI_MONTHS, type JalaliDateTime } from '../lib/jalali'
 import { can } from '../permissions'
 import { fa } from '../lib/text'
+import { AuthRequestError } from '../auth/errors'
+import { orderApi } from '../orders/client'
 import type { DayMenu, MealKind, Order } from '../types'
 
 export function MyOrdersPage() {
@@ -65,7 +67,7 @@ export function MyOrdersPage() {
                   note={lunchCancelled ? `${lunchCancelled.snapshotTitle ?? '—'} · لغو شده` : undefined}
                   status={day.lunch ? (isMealOpen(day, 'lunch', app.deadlines, app.now, app.mealDeadlineAt(day, 'lunch')) ? 'مهلت باز' : 'مهلت تمام') : undefined}
                   canEdit={canChange(app.role, day, 'lunch', app.deadlines, app.now, app.mealDeadlineAt(day, 'lunch'))}
-                  canRate={canGiveFeedback(lunch, app.now, app.mealServings)}
+                  canRate={app.mealServingsStatus === 'ready' && canGiveFeedback(lunch, app.now, app.mealServings)}
                   onEdit={() => setPicking({ day, meal: 'lunch' })}
                   onRate={() => lunch && setEditing(lunch)}
                 />
@@ -77,7 +79,7 @@ export function MyOrdersPage() {
                   note={dinnerCancelled ? `${dinnerCancelled.snapshotTitle ?? '—'} · لغو شده` : undefined}
                   status={day.dinner ? (isMealOpen(day, 'dinner', app.deadlines, app.now, app.mealDeadlineAt(day, 'dinner')) ? 'مهلت باز' : 'مهلت تمام') : undefined}
                   canEdit={canChange(app.role, day, 'dinner', app.deadlines, app.now, app.mealDeadlineAt(day, 'dinner'))}
-                  canRate={canGiveFeedback(dinner, app.now, app.mealServings)}
+                  canRate={app.mealServingsStatus === 'ready' && canGiveFeedback(dinner, app.now, app.mealServings)}
                   onEdit={() => setPicking({ day, meal: 'dinner' })}
                   onRate={() => dinner && setEditing(dinner)}
                 />
@@ -184,12 +186,28 @@ function RatingDialog({ order, onClose }: { order: Order; onClose: () => void })
   const [saving, setSaving] = useState(false)
   const [notice, setNotice] = useState<string | null>(null)
   const [failed, setFailed] = useState(false)
+  const [failMessage, setFailMessage] = useState('دیدگاه ذخیره نشد. این وعده باید گذشته باشد و غذای انتخاب‌شده داشته باشد.')
+  const [loadError, setLoadError] = useState('')
   const editing = Boolean(order.rating)
   const meal = order.meal === 'lunch' ? 'ناهار' : 'شام'
+  useEffect(() => {
+    const controller = new AbortController()
+    void orderApi.getRating(order.id, controller.signal).then((rating) => {
+      setScore(rating.score)
+      setComment(rating.comment ?? '')
+      app.syncOrderRating(order.id, { score: rating.score, comment: rating.comment ?? '' })
+    }).catch((error: unknown) => {
+      if (controller.signal.aborted) return
+      if (error instanceof AuthRequestError && error.kind === 'not_found') return
+      setLoadError(error instanceof AuthRequestError ? error.message : 'بارگذاری دیدگاه انجام نشد.')
+    })
+    return () => controller.abort()
+  }, [order.id])
   return (
     <Dialog open title={`${editing ? 'ویرایش دیدگاه' : 'ثبت دیدگاه'} ${meal} ${fa(order.jd)} ${JALALI_MONTHS[order.jm - 1]}`} onClose={onClose} locked={saving || Boolean(notice)}>
       <p className="text-sm text-muted">امتیاز ۱ تا ۵. توضیح اختیاری است. در این صفحه فقط دیدگاه خودتان دیده می‌شود.</p>
       {order.choice && <p className="mt-2 text-sm">غذای ثبت‌شده: {order.choice}</p>}
+      {loadError && <p className="mt-2 text-sm text-danger">{loadError}</p>}
       <fieldset className="mt-3" disabled={saving || Boolean(notice)}>
         <legend className="text-sm text-muted">امتیاز</legend>
         <div className="mt-2 flex flex-wrap gap-2">
@@ -206,7 +224,7 @@ function RatingDialog({ order, onClose }: { order: Order; onClose: () => void })
         <textarea value={comment} onChange={(event) => setComment(event.target.value)} rows={4} placeholder="توضیح، اگر لازم است" className="w-full rounded-md border border-line bg-surface px-3 py-2 text-base" />
       </label>
       {notice && <p className="mt-3 rounded-md bg-okbg px-3 py-2 text-sm text-ok" role="status">{notice}</p>}
-      {failed && <p className="mt-3 rounded-md bg-dangerbg px-3 py-2 text-sm text-danger" role="alert">دیدگاه ذخیره نشد. این وعده باید گذشته باشد و غذای انتخاب‌شده داشته باشد.</p>}
+      {failed && <p className="mt-3 rounded-md bg-dangerbg px-3 py-2 text-sm text-danger" role="alert">{failMessage}</p>}
       <div className="mt-3 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
         <Button variant="secondary" className="h-11 min-h-11" onClick={onClose} disabled={saving || Boolean(notice)}>انصراف</Button>
         <Button
@@ -215,16 +233,16 @@ function RatingDialog({ order, onClose }: { order: Order; onClose: () => void })
           onClick={() => {
             setSaving(true)
             setFailed(false)
-            window.setTimeout(() => {
-              const saved = app.rateMeal(order.id, score, comment)
+            void app.rateMeal(order.id, score, comment).then((result) => {
               setSaving(false)
-              if (!saved) {
+              if (!result.ok) {
                 setFailed(true)
+                setFailMessage(result.message || 'دیدگاه ذخیره نشد.')
                 return
               }
               setNotice(editing ? 'دیدگاه ویرایش شد.' : 'دیدگاه ثبت شد.')
               window.setTimeout(onClose, 900)
-            }, 400)
+            })
           }}
         >
           {saving ? 'در حال ذخیره' : notice ? 'ذخیره شد' : editing ? 'ویرایش دیدگاه' : 'ثبت دیدگاه'}

@@ -3,7 +3,7 @@ import { classifyEmployeeDeadline, isEmployeeDeadlineOpen, isMealOpen } from '..
 import { currentDateTime } from '../lib/jalali'
 import { defaultMonthDeadlines } from '../lib/deadlines'
 import type { DayMenu } from '../types'
-import { deadlineKey, isDeadlineOpen, mealDeadlineFromMap, parseBackendOrder, parseDeadline, toDeadlineMap, toUiOrder } from './map'
+import { deadlineKey, isDeadlineOpen, mealDeadlineFromMap, mealServingsFromSettings, parseBackendOrder, parseDeadline, parseMealSetting, parseStaffRating, toDeadlineMap, toUiOrder } from './map'
 
 const payload = {
   id: 'order-1',
@@ -42,6 +42,15 @@ describe('parseBackendOrder', () => {
     expect(ui?.menuItemId).toBe('item-uuid')
     expect(ui?.choice).toBe('چلوکباب')
     expect(ui?.meal).toBe('lunch')
+    expect(ui?.rating).toBeNull()
+  })
+
+  it('keeps a previously saved rating on the order after mapping', () => {
+    const ui = toUiOrder(parseBackendOrder({
+      ...payload,
+      rating: { id: 'r1', score: 4, comment: 'خوب', createdAt: '2026-11-01T00:00:00.000Z', updatedAt: '2026-11-01T00:00:00.000Z' },
+    })!)
+    expect(ui?.rating).toEqual({ score: 4, comment: 'خوب' })
   })
 
   it('does not treat a cancelled cycle as a current choice', () => {
@@ -75,6 +84,35 @@ describe('deadlines', () => {
     expect(parseDeadline(row)).toMatchObject({ mealDate: '2026-10-23', mealType: 'LUNCH', deadlineAt: null })
     expect(parseDeadline({ ...row, deadlineAt: '' })?.deadlineAt).toBeNull()
     expect(parseDeadline({ ...row, deadlineAt: '2026-10-23T06:30:00.000Z' })?.deadlineAt).toBe('2026-10-23T06:30:00.000Z')
+  })
+})
+
+describe('ratings and meal settings', () => {
+  it('parses a staff rating and serving clocks from the backend contract', () => {
+    const rating = parseStaffRating({
+      id: 'r1',
+      orderId: 'order-1',
+      orderCycleId: 'c1',
+      score: 5,
+      comment: 'عالی',
+      createdAt: '2026-11-01T00:00:00.000Z',
+      updatedAt: '2026-11-01T00:00:00.000Z',
+      userId: 'user-1',
+      mealDate: '2026-10-23',
+      jalaliDate: '1405/08/01',
+      mealType: 'LUNCH',
+      usernameSnapshot: 'emp',
+      mealTitleSnapshot: 'چلوکباب',
+      buildingNameSnapshot: 'اصلی',
+      cycleStatus: 'ACTIVE',
+    })
+    expect(rating?.orderId).toBe('order-1')
+    expect(rating?.score).toBe(5)
+    expect(parseMealSetting({ id: 's1', mealType: 'LUNCH', servingTime: '12:00', updatedBy: 'u1', updatedAt: '2026-11-01T00:00:00.000Z' })?.servingTime).toBe('12:00')
+    expect(mealServingsFromSettings([
+      { id: 's1', mealType: 'LUNCH', servingTime: '12:00', updatedBy: 'u1', updatedAt: '' },
+      { id: 's2', mealType: 'DINNER', servingTime: '19:00', updatedBy: 'u1', updatedAt: '' },
+    ])).toEqual({ lunch: '12:00', dinner: '19:00' })
   })
 })
 

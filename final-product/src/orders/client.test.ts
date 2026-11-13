@@ -292,4 +292,87 @@ describe('orderApi', () => {
     expect(rows[0]).toMatchObject({ mealType: 'LUNCH', deadlineAt: null })
     expect(rows[1]?.deadlineAt).toBe('2026-10-23T06:30:00.000Z')
   })
+
+  it('loads meal settings and upserts a personal rating with cookies', async () => {
+    const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
+      if (String(url).includes('/meal-settings') && (!init?.method || init.method === 'GET')) {
+        return new Response(JSON.stringify([
+          { id: 's1', mealType: 'LUNCH', servingTime: '12:00', updatedBy: 'u1', updatedAt: '2026-11-01T00:00:00.000Z' },
+        ]), { status: 200 })
+      }
+      if (String(url).includes('/meal-settings')) {
+        return new Response(JSON.stringify([
+          { id: 's1', mealType: 'LUNCH', servingTime: '12:30', updatedBy: 'u1', updatedAt: '2026-11-01T00:00:00.000Z' },
+          { id: 's2', mealType: 'DINNER', servingTime: '19:00', updatedBy: 'u1', updatedAt: '2026-11-01T00:00:00.000Z' },
+        ]), { status: 200 })
+      }
+      return new Response(JSON.stringify({
+        id: 'r1',
+        orderId: 'order-1',
+        orderCycleId: 'c1',
+        score: 4,
+        comment: null,
+        createdAt: '2026-11-01T00:00:00.000Z',
+        updatedAt: '2026-11-01T00:00:00.000Z',
+        userId: 'user-1',
+        mealDate: '2026-10-23',
+        jalaliDate: '1405/08/01',
+        mealType: 'LUNCH',
+        usernameSnapshot: 'emp',
+        mealTitleSnapshot: 'عدسی',
+        buildingNameSnapshot: null,
+        cycleStatus: 'ACTIVE',
+      }), { status: 200 })
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    const settings = await orderApi.mealSettings()
+    expect(settings[0]?.servingTime).toBe('12:00')
+    const saved = await orderApi.upsertRating('order-1', { score: 4 })
+    expect(String((fetchMock.mock.calls as unknown as Array<[string, RequestInit]>)[1][0])).toBe('/api/v1/orders/me/order-1/rating')
+    expect((fetchMock.mock.calls as unknown as Array<[string, RequestInit]>)[1][1].method).toBe('PUT')
+    expect((fetchMock.mock.calls as unknown as Array<[string, RequestInit]>)[1][1].credentials).toBe('include')
+    expect(saved.score).toBe(4)
+    const replaced = await orderApi.replaceMealSettings({ items: [{ mealType: 'LUNCH', servingTime: '12:30' }, { mealType: 'DINNER', servingTime: '19:00' }] })
+    expect((fetchMock.mock.calls as unknown as Array<[string, RequestInit]>)[2][1].method).toBe('PUT')
+    expect(replaced).toHaveLength(2)
+  })
+
+  it('treats a missing personal rating as not found and forbids unauthorized rating lists', async () => {
+    vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+      if (String(url).includes('/ratings')) return new Response(JSON.stringify({ message: 'به این بخش دسترسی ندارید.' }), { status: 403 })
+      return new Response(JSON.stringify({ message: 'نظرسنجی پیدا نشد.' }), { status: 404 })
+    }))
+    await expect(orderApi.getRating('order-1')).rejects.toMatchObject({ kind: 'not_found', status: 404 })
+    await expect(orderApi.listRatings()).rejects.toMatchObject({ kind: 'forbidden', status: 403 })
+  })
+
+  it('lists staff ratings without falling back to seed data', async () => {
+    const fetchMock = vi.fn(async () => new Response(JSON.stringify({
+      items: [{
+        id: 'r1',
+        orderId: 'order-1',
+        orderCycleId: 'c1',
+        score: 5,
+        comment: 'عالی',
+        createdAt: '2026-11-01T00:00:00.000Z',
+        updatedAt: '2026-11-01T00:00:00.000Z',
+        userId: 'user-1',
+        mealDate: '2026-10-23',
+        jalaliDate: '1405/08/01',
+        mealType: 'LUNCH',
+        usernameSnapshot: 'emp',
+        mealTitleSnapshot: 'عدسی',
+        buildingNameSnapshot: 'اصلی',
+        cycleStatus: 'ACTIVE',
+      }],
+      total: 1,
+      page: 1,
+      pageSize: 100,
+    }), { status: 200 }))
+    vi.stubGlobal('fetch', fetchMock)
+    const listed = await orderApi.listAllRatings()
+    expect(String((fetchMock.mock.calls as unknown as Array<[string, RequestInit]>)[0][0])).toContain('/api/v1/ratings')
+    expect(listed.items).toHaveLength(1)
+    expect(listed.items[0]?.orderId).toBe('order-1')
+  })
 })

@@ -8,6 +8,9 @@ export const ORDER_ENDPOINTS = {
   me: '/orders/me',
   one: (id: string) => `/orders/me/${id}`,
   cancel: (id: string) => `/orders/me/${id}/cancel`,
+  rating: (id: string) => `/orders/me/${id}/rating`,
+  ratings: '/ratings',
+  mealSettings: '/meal-settings',
   deadlines: (year: number, month: number) => `/order-deadlines/${year}/${month}`,
 } as const
 
@@ -69,6 +72,37 @@ export type CreateOrderBody = {
   mealDate: string
   mealType: BackendMealType
   menuItemId: string
+}
+
+export type UpsertRatingBody = {
+  score: number
+  comment?: string
+}
+
+export type BackendMealSetting = {
+  id: string
+  mealType: BackendMealType
+  servingTime: string
+  updatedBy: string
+  updatedAt: string
+}
+
+export type BackendStaffRating = {
+  id: string
+  orderId: string
+  orderCycleId: string
+  score: number
+  comment: string | null
+  createdAt: string
+  updatedAt: string
+  userId: string | null
+  mealDate: string | null
+  jalaliDate: string | null
+  mealType: BackendMealType | null
+  usernameSnapshot: string | null
+  mealTitleSnapshot: string | null
+  buildingNameSnapshot: string | null
+  cycleStatus: OrderCycleStatus | null
 }
 
 export type { MealKind }

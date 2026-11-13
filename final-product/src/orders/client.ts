@@ -1,7 +1,7 @@
 import { authRequest } from '../auth/client'
 import { AuthRequestError } from '../auth/errors'
-import { parseBackendOrder, parseDeadline, toUiOrder } from './map'
-import { ORDER_ENDPOINTS, type CreateOrderBody } from './types'
+import { parseBackendOrder, parseDeadline, parseMealSetting, parseStaffRating, toUiOrder } from './map'
+import { ORDER_ENDPOINTS, type CreateOrderBody, type UpsertRatingBody } from './types'
 import type { Order } from '../types'
 
 const session = { treatUnauthorizedAsSessionEnd: true as const }
@@ -100,5 +100,75 @@ export const orderApi = {
       const rows = Array.isArray(body) ? body : []
       return rows.map(parseDeadline).filter((item): item is NonNullable<typeof item> => item !== null)
     })
+  },
+
+  mealSettings(signal?: AbortSignal) {
+    return authRequest<unknown>(ORDER_ENDPOINTS.mealSettings, { ...session, signal }).then((body) => {
+      const rows = Array.isArray(body) ? body : []
+      return rows.map(parseMealSetting).filter((item): item is NonNullable<typeof item> => item !== null)
+    })
+  },
+
+  replaceMealSettings(body: { items: Array<{ mealType: 'LUNCH' | 'DINNER'; servingTime: string }> }) {
+    return authRequest<unknown>(ORDER_ENDPOINTS.mealSettings, { ...session, method: 'PUT', body }).then((value) => {
+      const rows = Array.isArray(value) ? value : []
+      return rows.map(parseMealSetting).filter((item): item is NonNullable<typeof item> => item !== null)
+    })
+  },
+
+  upsertRating(orderId: string, body: UpsertRatingBody) {
+    return authRequest<unknown>(ORDER_ENDPOINTS.rating(orderId), { ...session, method: 'PUT', body }).then((value) => {
+      const parsed = parseStaffRating(value)
+      if (!parsed) throw new Error('پاسخ ثبت دیدگاه نامعتبر است.')
+      return parsed
+    })
+  },
+
+  getRating(orderId: string, signal?: AbortSignal) {
+    return authRequest<unknown>(ORDER_ENDPOINTS.rating(orderId), { ...session, signal }).then((value) => {
+      const parsed = parseStaffRating(value)
+      if (!parsed) throw new Error('پاسخ دیدگاه نامعتبر است.')
+      return parsed
+    })
+  },
+
+  listRatings(query: { page?: number; pageSize?: number; mealDate?: string; mealType?: 'LUNCH' | 'DINNER'; userId?: string } = {}, signal?: AbortSignal) {
+    const params = new URLSearchParams()
+    params.set('page', String(query.page ?? 1))
+    params.set('pageSize', String(query.pageSize ?? 100))
+    if (query.mealDate) params.set('mealDate', query.mealDate)
+    if (query.mealType) params.set('mealType', query.mealType)
+    if (query.userId) params.set('userId', query.userId)
+    return authRequest<unknown>(`${ORDER_ENDPOINTS.ratings}?${params.toString()}`, { ...session, signal }).then((body) => {
+      const record = asRecord(body)
+      const items = Array.isArray(record?.items)
+        ? record.items.map(parseStaffRating).filter((item): item is NonNullable<typeof item> => item !== null)
+        : []
+      return {
+        items,
+        total: typeof record?.total === 'number' ? record.total : items.length,
+        page: typeof record?.page === 'number' ? record.page : query.page ?? 1,
+        pageSize: typeof record?.pageSize === 'number' ? record.pageSize : query.pageSize ?? items.length,
+      }
+    })
+  },
+
+  async listAllRatings(query: { mealDate?: string; mealType?: 'LUNCH' | 'DINNER'; userId?: string } = {}, signal?: AbortSignal) {
+    const pageSize = 100
+    const maxPages = 50
+    const incomplete = () => new AuthRequestError('http', 'بارگذاری همه دیدگاه‌ها کامل نشد.')
+    const collected: NonNullable<ReturnType<typeof parseStaffRating>>[] = []
+    let page = 1
+    let total = 0
+    for (;;) {
+      if (page > maxPages) throw incomplete()
+      const listed = await this.listRatings({ ...query, page, pageSize }, signal)
+      total = listed.total
+      if (listed.items.length === 0) break
+      collected.push(...listed.items)
+      if (page * pageSize >= total) break
+      page += 1
+    }
+    return { items: collected, total }
   },
 }

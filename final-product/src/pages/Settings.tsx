@@ -76,16 +76,24 @@ export function SettingsPage() {
         <section className="h-fit rounded-md border border-line bg-surface p-4">
           <h2 className="text-sm font-semibold">ساعت وعده‌های غذایی</h2>
           <p className="mt-1 text-xs text-muted">نظرسنجی فقط پس از این ساعت در همان روز شمسی ثبت می‌شود. تغییر ساعت، دیدگاه‌های قبلی را عوض نمی‌کند.</p>
+          {app.mealServingsStatus === 'loading' ? <p className="mt-3 text-sm text-muted">در حال خواندن ساعت وعده از سامانه…</p> : null}
+          {app.mealServingsStatus === 'unavailable' || app.mealServingsStatus === 'error' ? (
+            <div className="mt-3">
+              <p className="text-sm text-danger">{app.mealServingsMessage || 'ساعت وعده از سامانه خوانده نشد.'}</p>
+              <Button className="mt-2" variant="secondary" onClick={app.retryMealServings}>تلاش دوباره</Button>
+            </div>
+          ) : (
           <div className="mt-3 grid gap-3 sm:grid-cols-2">
             <label className="text-sm">
               <span className="mb-1 block text-muted">ناهار</span>
-              <input type="time" className="h-11 w-full rounded-md border border-line bg-bg px-3 text-base" value={app.mealServings.lunch} onChange={(event) => app.setMealServing('lunch', event.target.value)} />
+              <input type="time" className="h-11 w-full rounded-md border border-line bg-bg px-3 text-base" value={app.mealServings.lunch} onChange={(event) => void app.setMealServing('lunch', event.target.value)} />
             </label>
             <label className="text-sm">
               <span className="mb-1 block text-muted">شام</span>
-              <input type="time" className="h-11 w-full rounded-md border border-line bg-bg px-3 text-base" value={app.mealServings.dinner} onChange={(event) => app.setMealServing('dinner', event.target.value)} />
+              <input type="time" className="h-11 w-full rounded-md border border-line bg-bg px-3 text-base" value={app.mealServings.dinner} onChange={(event) => void app.setMealServing('dinner', event.target.value)} />
             </label>
           </div>
+          )}
         </section>
       )}
       <section className="h-fit rounded-md border border-line bg-surface p-4">

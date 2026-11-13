@@ -92,9 +92,11 @@ function parseServing(value: string): readonly [number, number] {
   return [Number(match[1]), Number(match[2])]
 }
 
-export function canGiveFeedback(order: Order | undefined, now: JalaliDateTime, servings: MealServings) {
-  if (!order?.choice) return false
-  const [hour, minute] = parseServing(servings[order.meal])
+export function canGiveFeedback(order: Order | undefined, now: JalaliDateTime, servings: MealServings | null) {
+  if (!order?.choice || !servings) return false
+  const clock = servings[order.meal]
+  if (!/^([01]\d|2[0-3]):([0-5]\d)$/.test(clock)) return false
+  const [hour, minute] = parseServing(clock)
   return clockKey(order, hour, minute) < clockKey(now, now.hour, now.minute)
 }
 

@@ -1,9 +1,11 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Empty } from '../components/ui'
+import { Button, Empty } from '../components/ui'
 import { fullName } from '../data'
 import { useApp } from '../store'
+import { jalaliFromMealDate } from '../menus/map'
 import { jalaliMonthLength, JALALI_MONTHS } from '../lib/jalali'
 import { fa } from '../lib/text'
+import { useStaffRatings } from '../orders/useStaffRatings'
 import type { MealKind } from '../types'
 
 type ReportTab = 'lunch' | 'dinner' | 'monthly' | 'comments'
@@ -58,7 +60,24 @@ export function ReportsPage() {
     })
   }, [app.employees, app.orders, app.buildings, app.selectedMonth.jy, app.selectedMonth.jm, from, to, buildingId, employeeId, groupId])
 
-  const comments = app.orders.filter((order) => order.rating && matchesScope(order) && (meal === 'all' || order.meal === meal))
+  const ratings = useStaffRatings()
+  const comments = ratings.items.filter((item) => {
+    const date = item.mealDate ? jalaliFromMealDate(item.mealDate) : null
+    if (!date || date.jy !== app.selectedMonth.jy || date.jm !== app.selectedMonth.jm) return false
+    if (date.jd < from || date.jd > to) return false
+    const itemMeal = item.mealType === 'DINNER' ? 'dinner' : item.mealType === 'LUNCH' ? 'lunch' : null
+    if (meal !== 'all' && itemMeal !== meal) return false
+    if (employeeId !== 'all' && item.userId !== employeeId) return false
+    if (buildingId !== 'all') {
+      const building = app.buildings.find((entry) => entry.id === buildingId)
+      if (!building || item.buildingNameSnapshot !== building.name) return false
+    }
+    if (groupId !== 'all') {
+      const employee = app.employees.find((entry) => entry.id === item.userId)
+      if (!employee?.groupIds.includes(groupId)) return false
+    }
+    return true
+  })
   const monthlyRows = monthly.filter((row) => (meal === 'lunch' ? row.lunch > 0 : meal === 'dinner' ? row.dinner > 0 : true))
 
   const lunchRows = daily.filter((order) => order.meal === 'lunch')
@@ -93,14 +112,24 @@ export function ReportsPage() {
       ) : (
         <div className="space-y-2">
           <p className="text-xs text-muted">دیدگاه کارکنان فقط برای پشتیبان، مدیریت و ادمین نمایش داده می‌شود.</p>
-          {comments.length === 0 ? <Empty title="دیدگاهی برای این فیلتر نیست" body="بازه تاریخ، ساختمان، کارمند، گروه یا وعده را تغییر دهید." /> : comments.map((order) => {
-            const employee = app.employees.find((item) => item.id === order.employeeId)
+          {ratings.status === 'loading' ? (
+            <Empty title="در حال بارگذاری دیدگاه‌ها" body="بازخوردها از سامانه خوانده می‌شوند." />
+          ) : ratings.status === 'forbidden' ? (
+            <Empty title="دسترسی ندارید" body={ratings.message || 'مشاهده دیدگاه‌ها برای این نقش مجاز نیست.'} />
+          ) : ratings.status === 'unavailable' || ratings.status === 'error' ? (
+            <div>
+              <Empty title="دیدگاه‌ها از سامانه خوانده نشد" body={ratings.message || 'داده نمایشی جایگزین نمی‌شود.'} />
+              <Button className="mt-2" variant="secondary" onClick={ratings.retry}>تلاش دوباره</Button>
+            </div>
+          ) : comments.length === 0 ? <Empty title="دیدگاهی برای این فیلتر نیست" body="بازه تاریخ، ساختمان، کارمند، گروه یا وعده را تغییر دهید." /> : comments.map((item) => {
+            const date = item.mealDate ? jalaliFromMealDate(item.mealDate) : null
             return (
-              <article key={order.id} className="rounded-md border border-line bg-surface px-3 py-2 text-sm">
-                <p className="font-medium">{employee ? fullName(employee) : 'کارمند'} · {order.meal === 'lunch' ? 'ناهار' : 'شام'} {fa(order.jd)} {JALALI_MONTHS[order.jm - 1]}</p>
-                <p className="text-muted">{app.buildings.find((item) => item.id === order.buildingId)?.name ?? '—'}</p>
-                <p>امتیاز {fa(order.rating?.score ?? 0)} از ۵</p>
-                <p className="break-words text-muted">{order.rating?.comment?.trim() ? order.rating.comment : 'بدون توضیح'}</p>
+              <article key={item.id} className="rounded-md border border-line bg-surface px-3 py-2 text-sm">
+                <p className="font-medium">{item.usernameSnapshot || 'کارمند'} · {item.mealType === 'DINNER' ? 'شام' : 'ناهار'} {date ? `${fa(date.jd)} ${JALALI_MONTHS[date.jm - 1]}` : item.jalaliDate}</p>
+                <p className="text-muted">{item.buildingNameSnapshot || '—'}</p>
+                {item.mealTitleSnapshot ? <p className="text-muted">{item.mealTitleSnapshot}</p> : null}
+                <p>امتیاز {fa(item.score)} از ۵</p>
+                <p className="break-words text-muted">{item.comment?.trim() ? item.comment : 'بدون توضیح'}</p>
               </article>
             )
           })}

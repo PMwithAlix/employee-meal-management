@@ -48,6 +48,15 @@ describe('authRequest', () => {
     expect(onUnauthorized).not.toHaveBeenCalled()
   })
 
+  it('sends PUT with credentials for rating and meal-settings writes', async () => {
+    const fetchMock = vi.fn(async () => new Response(JSON.stringify({ ok: true }), { status: 200 }))
+    vi.stubGlobal('fetch', fetchMock)
+    await authRequest('/orders/me/order-1/rating', { method: 'PUT', body: { score: 4 } })
+    const init = (fetchMock.mock.calls as unknown as Array<[string, RequestInit]>)[0][1]
+    expect(init.method).toBe('PUT')
+    expect(init.credentials).toBe('include')
+  })
+
   it('notifies the session handler only for authenticated 401s', async () => {
     const onUnauthorized = vi.fn()
     setUnauthorizedHandler(onUnauthorized)

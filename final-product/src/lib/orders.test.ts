@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { defaultMonthDeadlines } from './deadlines'
 import { currentDateTime } from './jalali'
-import { classifyEmployeeDeadline, findCancelledOrder, findOrder, isElapsedDeadlineDay, isEmployeeDeadlineOpen, isMealOpen, isOpenDeadlineDay, matchesStatus } from './orders'
+import { canGiveFeedback, classifyEmployeeDeadline, findCancelledOrder, findOrder, isElapsedDeadlineDay, isEmployeeDeadlineOpen, isMealOpen, isOpenDeadlineDay, matchesStatus } from './orders'
 import type { DayMenu, Order } from '../types'
 
 const day: DayMenu = {
@@ -82,6 +82,28 @@ describe('isElapsedDeadlineDay', () => {
     expect(classifyEmployeeDeadline({ at: '2026-08-22T07:00:00.000Z' }, now)).toBe('open')
     expect(classifyEmployeeDeadline({ at: '2026-08-22T06:00:00.000Z' }, now)).toBe('elapsed')
     expect(classifyEmployeeDeadline({ at: '2026-08-22T06:30:00.000Z' }, now)).toBe('elapsed')
+  })
+})
+
+describe('canGiveFeedback', () => {
+  const order: Order = {
+    id: 'o1',
+    employeeId: 'user-1',
+    buildingId: 'b1',
+    jy: 1405,
+    jm: 8,
+    jd: 1,
+    meal: 'lunch',
+    choice: 'عدسی',
+    rating: null,
+  }
+  const now = { jy: 1405, jm: 8, jd: 1, hour: 13, minute: 0 }
+
+  it('does not allow rating without backend serving clocks or a meal choice', () => {
+    expect(canGiveFeedback(order, now, null)).toBe(false)
+    expect(canGiveFeedback({ ...order, choice: null }, now, { lunch: '12:00', dinner: '19:00' })).toBe(false)
+    expect(canGiveFeedback(order, now, { lunch: '12:00', dinner: '19:00' })).toBe(true)
+    expect(canGiveFeedback(order, { ...now, hour: 11, minute: 0 }, { lunch: '12:00', dinner: '19:00' })).toBe(false)
   })
 })
 

@@ -9,7 +9,7 @@ import type { SessionUser } from './auth/roles'
 import { AuthRequestError } from './auth/errors'
 import { formatGregorianDate } from './menus/map'
 import { orderApi } from './orders/client'
-import { mealDeadlineFromMap, toDeadlineMap } from './orders/map'
+import { mealDeadlineFromMap, mealServingsFromSettings, toDeadlineMap, uiRatingFromStaff } from './orders/map'
 import { can, canAccess, LANDING_PAGE } from './permissions'
 import type {
   ActivityItem,
@@ -47,6 +47,8 @@ interface StoreValue {
   monthTitle: string
   now: JalaliDateTime
   mealServings: MealServings
+  mealServingsStatus: 'loading' | 'ready' | 'unavailable' | 'error'
+  mealServingsMessage: string
   deadlines: MonthDeadlines
   buildings: ReturnType<typeof createSnapshot>['buildings']
   groups: ReturnType<typeof createSnapshot>['groups']
@@ -82,12 +84,14 @@ interface StoreValue {
   clearMenuQuery: () => void
   shiftMonth: (delta: number) => void
   setMealDeadline: (meal: MealKind, patch: Partial<Pick<MealDeadline, 'relation' | 'hour' | 'minute'>>) => void
-  setMealServing: (meal: MealKind, clock: string) => void
+  setMealServing: (meal: MealKind, clock: string) => Promise<boolean>
   selectMeal: (employeeId: string, jd: number, meal: MealKind, choice: string | null, scope: 'self' | 'ops', menuItemId?: string | null) => Promise<boolean>
   mealDeadlineAt: (day: Pick<DayMenu, 'jy' | 'jm' | 'jd' | 'gregorianDate'>, meal: MealKind) => MealDeadlineState
   mealDeadlineSummary: (meal: MealKind, mealDates: string[]) => string
   retryMyOrders: () => void
-  rateMeal: (orderId: string, score: number, comment: string) => boolean
+  retryMealServings: () => void
+  syncOrderRating: (orderId: string, rating: { score: number; comment: string } | null) => void
+  rateMeal: (orderId: string, score: number, comment: string) => Promise<{ ok: boolean; message?: string }>
   saveEmployee: (input: {
     id?: string
     firstName?: string
@@ -157,7 +161,11 @@ export function StoreProvider({
   const [menus, setMenus] = useState<Record<string, DayMenu[]>>(() => ({ [monthKey(SEED_MONTH)]: initial.days }))
   const [deadlinesByMonth, setDeadlinesByMonth] = useState<Record<string, MonthDeadlines>>({})
   const [now, setNow] = useState(() => currentDateTime())
-  const [mealServings, setMealServings] = useState<MealServings>({ lunch: '12:00', dinner: '19:00' })
+  const [mealServings, setMealServings] = useState<MealServings>({ lunch: '', dinner: '' })
+  const [mealServingsStatus, setMealServingsStatus] = useState<'loading' | 'ready' | 'unavailable' | 'error'>('loading')
+  const [mealServingsMessage, setMealServingsMessage] = useState('')
+  const [mealServingsBoot, setMealServingsBoot] = useState(0)
+  const [ratingKey, setRatingKey] = useState<string | null>(null)
   const [buildings, setBuildings] = useState(initial.buildings)
   const [groups, setGroups] = useState(initial.groups)
   const [employees, setEmployees] = useState(initial.employees)
@@ -226,6 +234,28 @@ export function StoreProvider({
     })
     return () => controller.abort()
   }, [myOrdersBoot, selectedMonth.jy, selectedMonth.jm, session.id])
+
+  useEffect(() => {
+    const controller = new AbortController()
+    setMealServingsStatus('loading')
+    setMealServingsMessage('')
+    void orderApi.mealSettings(controller.signal).then((rows) => {
+      if (controller.signal.aborted) return
+      setMealServings(mealServingsFromSettings(rows))
+      setMealServingsStatus('ready')
+    }).catch((error: unknown) => {
+      if (controller.signal.aborted) return
+      setMealServings({ lunch: '', dinner: '' })
+      if (error instanceof AuthRequestError && error.kind === 'network') {
+        setMealServingsStatus('unavailable')
+        setMealServingsMessage(error.message)
+        return
+      }
+      setMealServingsStatus('error')
+      setMealServingsMessage(error instanceof AuthRequestError ? error.message : 'بارگذاری ساعت وعده انجام نشد.')
+    })
+    return () => controller.abort()
+  }, [mealServingsBoot, session.id])
 
   const monthId = monthKey(selectedMonth)
   const days = menus[monthId] ?? buildMonthMenu(selectedMonth)
@@ -374,25 +404,35 @@ export function StoreProvider({
     return true
   }
 
-  function rateMeal(orderId: string, score: number, comment: string) {
-    const order = myOrders.find((item) => item.id === orderId) ?? orders.find((item) => item.id === orderId)
-    if (!can(role, 'order.rate') || !order || order.employeeId !== session.id || !canGiveFeedback(order, now, mealServings)) return false
-    const patch = { score, comment: comment.trim() }
-    if (myOrders.some((item) => item.id === orderId)) {
-      setMyOrders((list) => list.map((item) => (item.id === orderId ? { ...item, rating: patch } : item)))
-    } else {
-      setOrders((list) => list.map((item) => (item.id === orderId ? { ...item, rating: patch } : item)))
+  async function rateMeal(orderId: string, score: number, comment: string) {
+    const order = myOrders.find((item) => item.id === orderId)
+    if (!can(role, 'order.rate') || !order || order.employeeId !== session.id) {
+      return { ok: false, message: 'اجازه ثبت دیدگاه برای این سفارش را ندارید.' }
     }
-    pushActivity({
-      actor: personaName,
-      action: order.rating ? 'ویرایش دیدگاه' : 'ثبت دیدگاه',
-      target: `${order.meal === 'lunch' ? 'ناهار' : 'شام'} ${fa(order.jd)} ${JALALI_MONTHS[order.jm - 1]}`,
-      at: 'همین حالا',
-      before: order.rating ? `${order.rating.score} از ۵` : '—',
-      after: `${score} از ۵`,
-    })
-    toast('ذخیره شد')
-    return true
+    if (mealServingsStatus !== 'ready' || !canGiveFeedback(order, now, mealServings)) {
+      return { ok: false, message: 'ثبت نظرسنجی فقط پس از پایان زمان وعده مجاز است.' }
+    }
+    if (ratingKey) return { ok: false, message: 'در حال ذخیره دیدگاه قبلی هستید.' }
+    setRatingKey(orderId)
+    try {
+      const saved = await orderApi.upsertRating(orderId, { score, comment: comment.trim() || undefined })
+      const patch = uiRatingFromStaff(saved)
+      setMyOrders((list) => list.map((item) => (item.id === orderId ? { ...item, rating: patch } : item)))
+      pushActivity({
+        actor: personaName,
+        action: order.rating ? 'ویرایش دیدگاه' : 'ثبت دیدگاه',
+        target: `${order.meal === 'lunch' ? 'ناهار' : 'شام'} ${fa(order.jd)} ${JALALI_MONTHS[order.jm - 1]}`,
+        at: 'همین حالا',
+        before: order.rating ? `${order.rating.score} از ۵` : '—',
+        after: `${saved.score} از ۵`,
+      })
+      toast('ذخیره شد')
+      return { ok: true }
+    } catch (error: unknown) {
+      return { ok: false, message: error instanceof AuthRequestError ? error.message : 'دیدگاه ذخیره نشد.' }
+    } finally {
+      setRatingKey(null)
+    }
   }
 
   function saveEmployee(input: {
@@ -734,6 +774,8 @@ export function StoreProvider({
     monthTitle: `${monthName} ${fa(selectedMonth.jy)}`,
     now,
     mealServings,
+    mealServingsStatus,
+    mealServingsMessage,
     deadlines,
     buildings,
     groups,
@@ -768,10 +810,25 @@ export function StoreProvider({
     setMenuQuery: (query) => setMenuQueryState((current) => ({ ...current, ...query })),
     clearMenuQuery: () => setMenuQueryState(emptyQuery),
     shiftMonth: (delta) => setSelectedMonth((month) => addMonths(month, delta)),
-    setMealServing: (meal, clock) => {
-      if (!can(role, 'settings.meals')) return
-      if (!/^([01]\d|2[0-3]):([0-5]\d)$/.test(clock)) return
-      setMealServings((current) => ({ ...current, [meal]: clock }))
+    setMealServing: async (meal, clock) => {
+      if (!can(role, 'settings.meals')) return false
+      if (!/^([01]\d|2[0-3]):([0-5]\d)$/.test(clock)) return false
+      const next = { ...mealServings, [meal]: clock }
+      if (!/^([01]\d|2[0-3]):([0-5]\d)$/.test(next.lunch) || !/^([01]\d|2[0-3]):([0-5]\d)$/.test(next.dinner)) return false
+      try {
+        const rows = await orderApi.replaceMealSettings({
+          items: [
+            { mealType: 'LUNCH', servingTime: next.lunch },
+            { mealType: 'DINNER', servingTime: next.dinner },
+          ],
+        })
+        setMealServings(mealServingsFromSettings(rows))
+        setMealServingsStatus('ready')
+        return true
+      } catch (error: unknown) {
+        setMealServingsMessage(error instanceof AuthRequestError ? error.message : 'ذخیره ساعت وعده انجام نشد.')
+        return false
+      }
     },
     setMealDeadline: (meal, patch) => {
       if (!can(role, 'menu.edit')) return
@@ -795,6 +852,10 @@ export function StoreProvider({
     mealDeadlineAt,
     mealDeadlineSummary,
     retryMyOrders: () => setMyOrdersBoot((value) => value + 1),
+    retryMealServings: () => setMealServingsBoot((value) => value + 1),
+    syncOrderRating: (orderId, rating) => {
+      setMyOrders((list) => list.map((item) => (item.id === orderId ? { ...item, rating } : item)))
+    },
     rateMeal,
     saveEmployee,
     changePassword,

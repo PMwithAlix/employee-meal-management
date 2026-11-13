@@ -1,7 +1,7 @@
 import { jalaliFromMealDate, toBackendMeal, toFrontendMeal } from '../menus/map'
 import type { MealDeadlineState } from '../lib/orders'
 import type { MealKind, Order } from '../types'
-import type { BackendDeadline, BackendOrder, OrderCycleStatus } from './types'
+import type { BackendDeadline, BackendMealSetting, BackendOrder, BackendStaffRating, OrderCycleStatus } from './types'
 
 function asRecord(value: unknown) {
   return value && typeof value === 'object' ? (value as Record<string, unknown>) : null
@@ -85,6 +85,57 @@ export function toUiOrder(payload: BackendOrder): Order | null {
       ? { score: payload.rating.score, comment: payload.rating.comment ?? '' }
       : null,
   }
+}
+
+export function parseStaffRating(value: unknown): BackendStaffRating | null {
+  const body = asRecord(value)
+  if (!body || typeof body.id !== 'string' || typeof body.orderId !== 'string') return null
+  if (typeof body.score !== 'number' || !Number.isInteger(body.score) || body.score < 1 || body.score > 5) return null
+  const mealType = body.mealType === 'LUNCH' || body.mealType === 'DINNER' ? body.mealType : null
+  return {
+    id: body.id,
+    orderId: body.orderId,
+    orderCycleId: typeof body.orderCycleId === 'string' ? body.orderCycleId : '',
+    score: body.score,
+    comment: typeof body.comment === 'string' ? body.comment : null,
+    createdAt: typeof body.createdAt === 'string' ? body.createdAt : '',
+    updatedAt: typeof body.updatedAt === 'string' ? body.updatedAt : '',
+    userId: typeof body.userId === 'string' ? body.userId : null,
+    mealDate: typeof body.mealDate === 'string' ? body.mealDate : null,
+    jalaliDate: typeof body.jalaliDate === 'string' ? body.jalaliDate : null,
+    mealType,
+    usernameSnapshot: typeof body.usernameSnapshot === 'string' ? body.usernameSnapshot : null,
+    mealTitleSnapshot: typeof body.mealTitleSnapshot === 'string' ? body.mealTitleSnapshot : null,
+    buildingNameSnapshot: typeof body.buildingNameSnapshot === 'string' ? body.buildingNameSnapshot : null,
+    cycleStatus: parseCycleStatus(body.cycleStatus),
+  }
+}
+
+export function parseMealSetting(value: unknown): BackendMealSetting | null {
+  const body = asRecord(value)
+  if (!body || typeof body.id !== 'string') return null
+  if (body.mealType !== 'LUNCH' && body.mealType !== 'DINNER') return null
+  if (typeof body.servingTime !== 'string' || !/^([01]\d|2[0-3]):([0-5]\d)$/.test(body.servingTime)) return null
+  return {
+    id: body.id,
+    mealType: body.mealType,
+    servingTime: body.servingTime,
+    updatedBy: typeof body.updatedBy === 'string' ? body.updatedBy : '',
+    updatedAt: typeof body.updatedAt === 'string' ? body.updatedAt : '',
+  }
+}
+
+export function mealServingsFromSettings(rows: BackendMealSetting[]) {
+  const next = { lunch: '', dinner: '' }
+  for (const row of rows) {
+    if (row.mealType === 'LUNCH') next.lunch = row.servingTime
+    if (row.mealType === 'DINNER') next.dinner = row.servingTime
+  }
+  return next
+}
+
+export function uiRatingFromStaff(rating: Pick<BackendStaffRating, 'score' | 'comment'>) {
+  return { score: rating.score, comment: rating.comment ?? '' }
 }
 
 export function parseDeadline(value: unknown): BackendDeadline | null {
