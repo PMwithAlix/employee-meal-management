@@ -646,4 +646,204 @@ describe('Orders (e2e)', () => {
     });
     expect(logs.length).toBeGreaterThan(0);
   });
+
+  it('snapshots only memberships valid at the cycle timestamp, using the target employee', async () => {
+    const now = new Date();
+    const future = await prisma.group.create({
+      data: { name: 'گروه سفارش آینده' },
+    });
+    const ended = await prisma.group.create({
+      data: { name: 'گروه سفارش پایان‌یافته' },
+    });
+    const supportGroup = await prisma.group.create({
+      data: { name: 'گروه سفارش پشتیبان' },
+    });
+    const support = await prisma.user.findUniqueOrThrow({
+      where: { username: 'e2e.order.support' },
+    });
+    await prisma.groupMembership.createMany({
+      data: [
+        {
+          groupId: future.id,
+          userId: employeeId,
+          startedAt: new Date(now.getTime() + 60 * 60 * 1000),
+        },
+        {
+          groupId: ended.id,
+          userId: employeeId,
+          startedAt: new Date(now.getTime() - 2 * 24 * 60 * 60 * 1000),
+          endedAt: new Date(now.getTime() - 1000),
+        },
+        {
+          groupId: supportGroup.id,
+          userId: support.id,
+          startedAt: new Date(now.getTime() - 60 * 60 * 1000),
+        },
+      ],
+    });
+    const created = await request(app.getHttpServer())
+      .post('/api/v1/orders')
+      .set('Cookie', supportCookie)
+      .send({
+        userId: employeeId,
+        mealDate: mealDate(2),
+        mealType: MealType.LUNCH,
+        menuItemId: day2Lunch,
+      });
+    expect(created.status).toBe(201);
+    const names = created.body.currentCycle.groups.map(
+      (group: { groupNameSnapshot: string }) => group.groupNameSnapshot,
+    );
+    expect(names).toEqual(expect.arrayContaining(['گروه سفارش ب']));
+    expect(names).not.toContain('گروه سفارش آینده');
+    expect(names).not.toContain('گروه سفارش پایان‌یافته');
+    expect(names).not.toContain('گروه سفارش پشتیبان');
+    await prisma.group.update({
+      where: { id: future.id },
+      data: { name: 'گروه سفارش آینده-تغییر' },
+    });
+    const again = await request(app.getHttpServer())
+      .get(`/api/v1/orders/${created.body.id as string}`)
+      .set('Cookie', supportCookie);
+    expect(again.body.currentCycle.groups).toEqual(
+      created.body.currentCycle.groups,
+    );
+  });
+
+  it('writes complete before/after deadline audits and rolls back on failure', async () => {
+    const support = await prisma.user.findUniqueOrThrow({
+      where: { username: 'e2e.order.support' },
+    });
+    const beforeCount = await prisma.auditLog.count({
+      where: { action: 'ORDER_DEADLINES_UPDATED' },
+    });
+    const future = new Date(Date.now() + 2 * 86400000).toISOString();
+    const updated = await request(app.getHttpServer())
+      .put(`/api/v1/order-deadlines/${YEAR}/${MONTH}`)
+      .set('Cookie', supportCookie)
+      .send({
+        items: [
+          {
+            mealDate: mealDate(1),
+            mealType: MealType.LUNCH,
+            deadlineAt: future,
+          },
+          {
+            mealDate: mealDate(1),
+            mealType: MealType.DINNER,
+            deadlineAt: future,
+          },
+        ],
+      });
+    expect(updated.status).toBe(200);
+    const failed = await request(app.getHttpServer())
+      .put(`/api/v1/order-deadlines/${YEAR}/${MONTH}`)
+      .set('Cookie', supportCookie)
+      .send({
+        items: [
+          {
+            mealDate: '2020-01-01',
+            mealType: MealType.LUNCH,
+            deadlineAt: future,
+          },
+        ],
+      });
+    expect(failed.status).toBe(422);
+    const audits = await prisma.auditLog.findMany({
+      where: { action: 'ORDER_DEADLINES_UPDATED' },
+      orderBy: { createdAt: 'desc' },
+    });
+    expect(audits).toHaveLength(beforeCount + 1);
+    const latest = audits[0];
+    expect(latest.actorId).toBe(support.id);
+    const beforeState = latest.beforeData as {
+      deadlines: { mealDate: string; mealType: string }[];
+    };
+    const afterState = latest.afterData as {
+      deadlines: { mealDate: string; mealType: string; deadlineAt: string }[];
+    };
+    expect(
+      beforeState.deadlines.some((row) => row.mealDate === mealDate(2)),
+    ).toBe(true);
+    expect(
+      afterState.deadlines.some((row) => row.mealDate === mealDate(2)),
+    ).toBe(false);
+    expect(
+      afterState.deadlines.filter((row) => row.mealDate === mealDate(1)),
+    ).toHaveLength(2);
+    await expect(
+      prisma.auditLog.update({
+        where: { id: latest.id },
+        data: { action: 'TAMPER' },
+      }),
+    ).rejects.toThrow();
+  });
+
+  it('keeps historical guest orders readable when the menu option cannot be resolved', async () => {
+    const admin = await prisma.user.findUniqueOrThrow({
+      where: { username: 'e2e.order.admin' },
+    });
+    const legacy = await prisma.guestOrder.create({
+      data: {
+        buildingId,
+        menuItemId: null,
+        mealDate: utcDateFromGregorian(jalaliToGregorian(YEAR, MONTH, 1)!),
+        mealType: MealType.LUNCH,
+        quantity: 3,
+        status: 'ACTIVE',
+        buildingNameSnapshot: null,
+        mealTitleSnapshot: null,
+        createdBy: admin.id,
+      },
+    });
+    await prisma.$executeRaw`
+      UPDATE "guest_orders" AS g
+      SET "buildingNameSnapshot" = b."name"
+      FROM "buildings" AS b
+      WHERE g."id" = ${legacy.id}::uuid AND g."buildingId" = b."id"
+    `;
+    await prisma.guestOrderHistory.create({
+      data: {
+        guestOrderId: legacy.id,
+        actorId: admin.id,
+        action: 'CREATED',
+        beforeData: {},
+        afterData: { legacy: true },
+      },
+    });
+    const read = await request(app.getHttpServer())
+      .get(`/api/v1/guest-orders/${legacy.id}`)
+      .set('Cookie', adminCookie);
+    expect(read.status).toBe(200);
+    expect(read.body.menuItemId).toBeNull();
+    expect(read.body.buildingNameSnapshot).toBe('e2e-order-main');
+    expect(read.body.history).toHaveLength(1);
+    expect(
+      (
+        await request(app.getHttpServer())
+          .post('/api/v1/guest-orders')
+          .set('Cookie', adminCookie)
+          .send({
+            buildingId,
+            mealDate: mealDate(1),
+            mealType: MealType.LUNCH,
+            menuItemId: '00000000-0000-0000-0000-000000000000',
+            quantity: 1,
+          })
+      ).status,
+    ).toBe(404);
+    const created = await request(app.getHttpServer())
+      .post('/api/v1/guest-orders')
+      .set('Cookie', adminCookie)
+      .send({
+        buildingId,
+        mealDate: mealDate(1),
+        mealType: MealType.LUNCH,
+        menuItemId: lunchA,
+        quantity: 2,
+      });
+    expect(created.status).toBe(201);
+    expect(created.body.menuItemId).toBe(lunchA);
+    expect(created.body.mealTitleSnapshot).toBe('چلوکباب');
+  });
 });

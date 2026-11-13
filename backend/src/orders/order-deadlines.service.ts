@@ -1,4 +1,5 @@
 import { Injectable, UnprocessableEntityException } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { AuditAction, AuditEntity } from '../audit/audit.actions';
 import { AuditService } from '../audit/audit.service';
 import type { AuthUser } from '../common/types/auth-user';
@@ -83,6 +84,13 @@ export class OrderDeadlinesService {
     const to = bounds[bounds.length - 1].utc;
 
     return this.prisma.$transaction(async (tx) => {
+      await tx.$queryRaw(
+        Prisma.sql`SELECT "id" FROM "order_deadlines" WHERE "mealDate" >= ${from} AND "mealDate" <= ${to} FOR UPDATE`,
+      );
+      const beforeRows = await tx.orderDeadline.findMany({
+        where: { mealDate: { gte: from, lte: to } },
+        orderBy: [{ mealDate: 'asc' }, { mealType: 'asc' }],
+      });
       await tx.orderDeadline.deleteMany({
         where: { mealDate: { gte: from, lte: to } },
       });
@@ -94,7 +102,7 @@ export class OrderDeadlinesService {
           createdBy: actor.id,
         })),
       });
-      const rows = await tx.orderDeadline.findMany({
+      const afterRows = await tx.orderDeadline.findMany({
         where: { mealDate: { gte: from, lte: to } },
         orderBy: [{ mealDate: 'asc' }, { mealType: 'asc' }],
       });
@@ -103,18 +111,36 @@ export class OrderDeadlinesService {
           actorId: actor.id,
           action: AuditAction.OrderDeadlinesUpdated,
           entityType: AuditEntity.OrderDeadline,
-          entityId: rows[0]?.id ?? actor.id,
+          entityId: afterRows[0]?.id ?? beforeRows[0]?.id ?? actor.id,
+          beforeData: {
+            jalaliYear: year,
+            jalaliMonth: month,
+            deadlines: beforeRows.map((row) => this.auditDeadline(row)),
+          },
           afterData: {
             jalaliYear: year,
             jalaliMonth: month,
-            count: rows.length,
-            mealTypes: [...new Set(rows.map((row) => row.mealType))],
+            deadlines: afterRows.map((row) => this.auditDeadline(row)),
           },
         },
         tx,
       );
-      return rows.map((row) => presentDeadline(row));
+      return afterRows.map((row) => presentDeadline(row));
     });
+  }
+
+  private auditDeadline(row: {
+    id: string;
+    mealDate: Date;
+    mealType: string;
+    deadlineAt: Date;
+  }) {
+    return {
+      id: row.id,
+      mealDate: formatDateOnly(row.mealDate),
+      mealType: row.mealType,
+      deadlineAt: row.deadlineAt.toISOString(),
+    };
   }
 
   private assertMonth(year: number, month: number) {

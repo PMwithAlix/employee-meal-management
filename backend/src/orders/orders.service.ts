@@ -19,6 +19,7 @@ import {
 import { CreateOrderDto } from './dto/create-order.dto';
 import { ListOrdersQueryDto } from './dto/list-orders.query';
 import { UpdateOrderDto } from './dto/update-order.dto';
+import { membershipsValidAtWhere } from './membership-snapshot';
 import { requirePublishedOption } from './order-option';
 import { orderCycleInclude, presentOrder } from './order.presenter';
 
@@ -293,11 +294,9 @@ export class OrdersService {
             (max, cycle) => Math.max(max, cycle.cycleNumber),
             0,
           ) ?? 0) + 1;
+        const snapshotAt = new Date();
         const memberships = await tx.groupMembership.findMany({
-          where: {
-            userId: input.userId,
-            endedAt: null,
-          },
+          where: membershipsValidAtWhere(input.userId, snapshotAt),
           include: { group: true },
         });
         const cycle = await tx.orderCycle.create({
@@ -305,6 +304,7 @@ export class OrdersService {
             orderId: order.id,
             menuItemId: item.id,
             cycleNumber,
+            createdAt: snapshotAt,
             usernameSnapshot: user.username,
             buildingIdSnapshot: user.buildingId,
             buildingNameSnapshot: user.building?.name ?? null,

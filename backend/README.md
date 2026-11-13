@@ -252,7 +252,7 @@ Employee quantity is always `1` (the field is not accepted on employee DTOs). Em
 
 Deadlines are stored per Gregorian `mealDate` + `mealType` (UTC `timestamptz`) and configured by Jalali month. Lunch and dinner are independent. Missing or elapsed deadlines close employee ordering. Weekends/holidays are not special-cased.
 
-Guest orders are a separate table (no User row). SUPPORT/ADMIN only. Quantity ≥ 1. Building name and option title are snapshotted.
+Guest orders are a separate table (no User row). SUPPORT/ADMIN only. Quantity ≥ 1. New guest orders snapshot building name and option title. Historical rows that predate option capture may have a null `menuItemId`; the API still returns them and never invents an option.
 
 | Method | Path | Access |
 |---|---|---|

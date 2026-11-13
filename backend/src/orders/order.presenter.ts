@@ -84,18 +84,18 @@ export function presentOrder(order: {
 export function presentGuestOrder(order: {
   id: string;
   buildingId: string;
-  menuItemId: string;
+  menuItemId: string | null;
   mealDate: Date;
   mealType: MealType;
   quantity: number;
   note: string | null;
   status: GuestOrderStatus;
-  buildingNameSnapshot: string;
-  mealTitleSnapshot: string;
+  buildingNameSnapshot: string | null;
+  mealTitleSnapshot: string | null;
   createdBy: string;
   createdAt: Date;
   updatedAt: Date;
-  menuItem?: { menuVersionId: string };
+  menuItem?: { menuVersionId: string } | null;
   history?: {
     id: string;
     actorId: string;
