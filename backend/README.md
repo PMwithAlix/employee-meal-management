@@ -136,11 +136,67 @@ Login body: `{ "username": "...", "password": "..." }`. Username is trimmed and 
 
 The session token is a cryptographically random value sent only in the `khaan.sid` HttpOnly cookie (`Path=/api/v1`). PostgreSQL stores SHA-256 of the token, never the raw value. `Secure` is enabled in production. `SameSite` defaults to `lax` (same-site localhost frontend/API). Mutating requests in production must send `Origin` equal to `FRONTEND_ORIGIN`.
 
-Logout clears the current session row and cookie. Logout-all deletes every session for that user. Change-password verifies the current password, checks the product policy (minimum 8 characters, at least one English letter and one digit), stores a new Argon2id hash, and revokes every session so the client must log in again. HR/Admin reset is not in this phase.
+Logout clears the current session row and cookie. Logout-all deletes every session for that user. Change-password verifies the current password, checks the product policy (minimum 8 characters, at least one English letter and one digit), stores a new Argon2id hash, and revokes every session so the client must log in again. Users cannot change their own username, role, or building through public APIs.
 
 `AuthGuard` loads the user from the session row (role comes from the database, never from a request header). `RolesGuard` plus `@Roles(...)` restrict endpoints. `@CurrentUser()` injects the authenticated principal. `@Public()` marks unauthenticated routes on a guarded controller.
 
 Login is rate-limited in process (default 5 attempts / 15 minutes per IP + username).
+
+## First ADMIN bootstrap
+
+There is no public registration and no HTTP endpoint that creates the first admin. After migrations, with an empty `users` table:
+
+```bash
+cd backend
+npm run build
+# PowerShell
+$env:BOOTSTRAP_ADMIN_USERNAME="admin"
+$env:BOOTSTRAP_ADMIN_PASSWORD="your-strong-password-1"
+npm run bootstrap:admin
+```
+
+Both variables are required. The password is hashed with the same Argon2id `PasswordService` as login. The raw password is not printed. Re-running bootstrap after any user exists exits with an error and does not overwrite accounts. The initial ADMIN may have no building.
+
+## Users, buildings, and groups
+
+All routes below require an authenticated HR or ADMIN session cookie. EMPLOYEE, SUPPORT, and MANAGEMENT receive `403`.
+
+| Method | Path | Notes |
+|---|---|---|
+| POST | `/api/v1/users` | Create account. Username is trimmed and lowercased; password is not normalized. |
+| GET | `/api/v1/users` | Filter `username`, `role`, `buildingId`, `isActive`; paginate `page`, `pageSize`; sort `sortBy`, `sortOrder`. |
+| GET | `/api/v1/users/:id` | Public user fields only (no password hash, no sessions). |
+| PATCH | `/api/v1/users/:id` | Role and/or `buildingId` only. Changing either revokes sessions. |
+| POST | `/api/v1/users/:id/deactivate` | Soft-disable; revokes sessions. Username stays reserved. |
+| POST | `/api/v1/users/:id/reactivate` | Does not rewrite history. |
+| POST | `/api/v1/users/:id/reset-password` | Body `{ "newPassword": "..." }`. Revokes sessions and sends an in-app notification (no secret in the message). |
+| POST | `/api/v1/buildings` | Name is not unique. |
+| GET | `/api/v1/buildings` | |
+| GET | `/api/v1/buildings/:id` | |
+| PATCH | `/api/v1/buildings/:id` | Rename only. No delete route; buildings with users cannot be removed. |
+| POST | `/api/v1/groups` | Unique Persian name (organization-wide). |
+| GET | `/api/v1/groups` | Active groups only. |
+| GET | `/api/v1/groups/:id` | |
+| PATCH | `/api/v1/groups/:id` | Rename. |
+| POST | `/api/v1/groups/:id/deactivate` | Sets `isActive=false` and closes open memberships. History is kept. |
+| GET | `/api/v1/groups/:id/members` | Active memberships (`endedAt` is null). |
+| POST | `/api/v1/groups/:id/members` | Body `{ "userId": "..." }`. Inactive users cannot be added. |
+| DELETE | `/api/v1/groups/:id/members/:userId` | Sets `endedAt`; does not delete the row. |
+| GET | `/api/v1/groups/:id/memberships/history` | All membership rows for reporting later. |
+
+### Role access matrix
+
+| Action | EMPLOYEE / SUPPORT / MANAGEMENT | HR | ADMIN |
+|---|---|---|---|
+| Auth (self login/logout/me/change-password) | Yes | Yes | Yes |
+| Create/list/update users | No | EMPLOYEE, SUPPORT, MANAGEMENT only | All roles |
+| Create ADMIN / manage ADMIN or HR accounts | No | No | Yes |
+| Deactivate / reset password | No | Same as create (not ADMIN or HR) | Yes |
+| Buildings and groups | No | Yes | Yes |
+
+Non-ADMIN users must have a `buildingId`. ADMIN may omit it. Group membership does not change role or building. Historical membership rows are never overwritten; re-adding a user after `endedAt` creates a new row. Overlapping intervals are rejected by the database exclusion constraint.
+
+Mutating operations write `audit_logs` in the same transaction when possible. Actor ID comes from the session, never from the request body. Passwords, hashes, and session tokens are stripped from before/after JSON.
 
 ## Tests
 
@@ -149,7 +205,7 @@ npm test
 npm run test:e2e
 ```
 
-Unit tests cover health and auth services/guards. Auth e2e tests need PostgreSQL and write temporary `e2e.auth.*` users, then delete them.
+Unit tests cover health, auth, user-access rules, and audit sanitization. Auth and organization e2e tests need PostgreSQL and write temporary `e2e.auth.*` / `e2e.org.*` users, then delete them.
 
 ## Production build
 
@@ -184,6 +240,11 @@ backend/
   src/
     common/           # filters, interceptors, guards, decorators
     auth/             # login, sessions, passwords, RBAC wiring
+    users/            # HR/Admin user administration
+    buildings/        # building CRUD (no delete)
+    groups/           # groups and membership history
+    audit/            # shared audit writer
+    cli/              # one-time bootstrap:admin
     config/           # environment validation
     database/         # PrismaService + DatabaseModule
     health/           # live health endpoint

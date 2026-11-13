@@ -1,0 +1,57 @@
+import {
+  Body,
+  Controller,
+  Get,
+  Param,
+  ParseUUIDPipe,
+  Patch,
+  Post,
+  UseGuards,
+} from '@nestjs/common';
+import { ApiCookieAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
+import { Role } from '@prisma/client';
+import { CurrentUser } from '../common/decorators/current-user.decorator';
+import { Roles } from '../common/decorators/roles.decorator';
+import { AuthGuard } from '../common/guards/auth.guard';
+import { RolesGuard } from '../common/guards/roles.guard';
+import type { AuthUser } from '../common/types/auth-user';
+import { BuildingsService } from './buildings.service';
+import { CreateBuildingDto } from './dto/create-building.dto';
+import { UpdateBuildingDto } from './dto/update-building.dto';
+
+@ApiTags('buildings')
+@ApiCookieAuth()
+@Controller('buildings')
+@UseGuards(AuthGuard, RolesGuard)
+@Roles(Role.ADMIN, Role.HR)
+export class BuildingsController {
+  constructor(private readonly buildings: BuildingsService) {}
+
+  @Post()
+  @ApiOperation({ summary: 'ایجاد ساختمان' })
+  create(@CurrentUser() actor: AuthUser, @Body() dto: CreateBuildingDto) {
+    return this.buildings.create(actor, dto);
+  }
+
+  @Get()
+  @ApiOperation({ summary: 'فهرست ساختمان‌ها' })
+  list() {
+    return this.buildings.list();
+  }
+
+  @Get(':id')
+  @ApiOperation({ summary: 'جزئیات ساختمان' })
+  get(@Param('id', ParseUUIDPipe) id: string) {
+    return this.buildings.get(id);
+  }
+
+  @Patch(':id')
+  @ApiOperation({ summary: 'ویرایش نام ساختمان' })
+  update(
+    @CurrentUser() actor: AuthUser,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: UpdateBuildingDto,
+  ) {
+    return this.buildings.update(actor, id, dto);
+  }
+}
