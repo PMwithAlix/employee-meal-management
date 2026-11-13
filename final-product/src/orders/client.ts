@@ -36,21 +36,31 @@ export const orderApi = {
   async listAllMine(signal?: AbortSignal) {
     const pageSize = 100
     const maxPages = 50
+    const incomplete = () => new AuthRequestError('http', 'بارگذاری همه سفارش‌ها کامل نشد.')
     const orders: Order[] = []
+    let received = 0
     let page = 1
-    let total = Number.POSITIVE_INFINITY
-    while (page <= maxPages) {
+    let total = 0
+    for (;;) {
+      if (page > maxPages) throw incomplete()
       const listed = await this.listMine({ page, pageSize }, signal)
-      orders.push(...listed.orders)
+      if (!Number.isFinite(listed.total) || listed.total < 0) throw incomplete()
       total = listed.total
-      if (listed.items.length === 0) break
-      const lastPage = listed.pageSize > 0 ? Math.ceil(total / listed.pageSize) : page
-      if (page >= lastPage) break
-      page += 1
-      if (page > maxPages) {
-        throw new AuthRequestError('http', 'بارگذاری همه سفارش‌ها کامل نشد.')
+      const size = listed.pageSize > 0 ? listed.pageSize : pageSize
+      const lastPage = total === 0 ? 1 : Math.ceil(total / size)
+      if (listed.items.length === 0) {
+        if (received < total) throw incomplete()
+        break
       }
+      received += listed.items.length
+      orders.push(...listed.orders)
+      if (page >= lastPage) {
+        if (received < total) throw incomplete()
+        break
+      }
+      page += 1
     }
+    if (received < total) throw incomplete()
     return { orders, total }
   },
 

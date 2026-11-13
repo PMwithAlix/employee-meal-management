@@ -4,6 +4,7 @@ import { MealBlock } from '../components/MealBlock'
 import { MealPicker } from '../components/MealPicker'
 import { Button, Empty, MonthBar, Segmented } from '../components/ui'
 import { WEEKDAYS } from '../data'
+import { formatGregorianDate } from '../menus/map'
 import { usePublishedMenu } from '../menus/usePublishedMenu'
 import { useApp } from '../store'
 import { addDays, isSameDate, JALALI_MONTHS } from '../lib/jalali'
@@ -31,6 +32,7 @@ export function MonthlyMenuPage() {
   }
 
   const days = published.pickerDays
+  const mealDates = (meal: MealKind) => days.filter((day) => day[meal]).map((day) => day.gregorianDate ?? formatGregorianDate(day.jy, day.jm, day.jd))
   const visible = days.filter((day) => rowMatches(day, app.myOrders, id, app.menuQuery, app.deadlines, app.now, app.mealDeadlineAt))
   const active = app.menuQuery.meal !== 'all' || app.menuQuery.status !== 'all' || app.menuQuery.q.trim()
 
@@ -39,7 +41,7 @@ export function MonthlyMenuPage() {
       <div className="space-y-2">
         <MonthBar icons />
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <p className="text-xs text-muted">ناهار و شام جدا انتخاب می‌شوند. ناهار: {app.mealDeadlineSummary('lunch')}. شام: {app.mealDeadlineSummary('dinner')}.</p>
+          <p className="text-xs text-muted">ناهار و شام جدا انتخاب می‌شوند. ناهار: {app.mealDeadlineSummary('lunch', mealDates('lunch'))}. شام: {app.mealDeadlineSummary('dinner', mealDates('dinner'))}.</p>
           <Segmented
             label="نمای منو"
             size="touch"

@@ -82,16 +82,23 @@ export function formatDeadlineFromInstant(deadlineAt: string, mealDate?: string)
   return `${when}، ${clock}`
 }
 
-export function summarizeBackendDeadlines(map: Record<string, string>, meal: MealKind) {
+export function summarizeBackendDeadlines(map: Record<string, string>, meal: MealKind, mealDates: string[]) {
   const suffix = meal === 'lunch' ? ':LUNCH' : ':DINNER'
+  if (mealDates.length === 0) return 'مهلت تعریف نشده'
   const labels = new Set<string>()
-  for (const [key, iso] of Object.entries(map)) {
-    if (!key.endsWith(suffix)) continue
-    const mealDate = key.slice(0, key.length - suffix.length)
+  let missing = 0
+  for (const mealDate of mealDates) {
+    const iso = map[`${mealDate}${suffix}`]
+    if (!iso) {
+      missing += 1
+      continue
+    }
     const label = formatDeadlineFromInstant(iso, mealDate)
     if (label) labels.add(label)
+    else missing += 1
   }
-  if (labels.size === 0) return 'مهلت تعریف نشده'
+  if (missing === mealDates.length) return 'مهلت تعریف نشده'
+  if (missing > 0) return 'بعضی روزها مهلت ندارند'
   if (labels.size === 1) return [...labels][0]
   return 'ساعت‌های متفاوت'
 }

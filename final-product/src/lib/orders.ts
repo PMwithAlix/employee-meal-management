@@ -42,12 +42,42 @@ export function mealDate(day: Pick<DayMenu, 'jy' | 'jm' | 'jd'>): JalaliDate {
 }
 
 export type MealDeadlineState = 'unknown' | 'absent' | { at: string }
+export type EmployeeDeadlineKind = 'unknown' | 'absent' | 'open' | 'elapsed'
+
+export function classifyEmployeeDeadline(state: MealDeadlineState, now = new Date()): EmployeeDeadlineKind {
+  if (state === 'unknown') return 'unknown'
+  if (state === 'absent') return 'absent'
+  const at = Date.parse(state.at)
+  if (Number.isNaN(at)) return 'elapsed'
+  return now.getTime() < at ? 'open' : 'elapsed'
+}
 
 export function isEmployeeDeadlineOpen(state: MealDeadlineState, now = new Date()) {
-  if (state === 'unknown' || state === 'absent') return false
-  const at = Date.parse(state.at)
-  if (Number.isNaN(at)) return false
-  return now.getTime() < at
+  return classifyEmployeeDeadline(state, now) === 'open'
+}
+
+function definedMeals(day: DayMenu) {
+  return (['lunch', 'dinner'] as const).filter((meal) => Boolean(day[meal]))
+}
+
+export function isOpenDeadlineDay(
+  day: DayMenu,
+  deadlineFor: (day: DayMenu, meal: MealKind) => MealDeadlineState,
+  now = new Date(),
+) {
+  return definedMeals(day).some((meal) => classifyEmployeeDeadline(deadlineFor(day, meal), now) === 'open')
+}
+
+export function isElapsedDeadlineDay(
+  day: DayMenu,
+  deadlineFor: (day: DayMenu, meal: MealKind) => MealDeadlineState,
+  now = new Date(),
+) {
+  const meals = definedMeals(day)
+  if (meals.length === 0) return false
+  const kinds = meals.map((meal) => classifyEmployeeDeadline(deadlineFor(day, meal), now))
+  if (kinds.some((kind) => kind === 'unknown')) return false
+  return kinds.every((kind) => kind !== 'open')
 }
 
 export function isMealOpen(day: DayMenu, meal: MealKind, deadlines: MonthDeadlines, now: JalaliDateTime, deadline?: MealDeadlineState) {

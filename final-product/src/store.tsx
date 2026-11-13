@@ -85,7 +85,7 @@ interface StoreValue {
   setMealServing: (meal: MealKind, clock: string) => void
   selectMeal: (employeeId: string, jd: number, meal: MealKind, choice: string | null, scope: 'self' | 'ops', menuItemId?: string | null) => Promise<boolean>
   mealDeadlineAt: (day: Pick<DayMenu, 'jy' | 'jm' | 'jd' | 'gregorianDate'>, meal: MealKind) => MealDeadlineState
-  mealDeadlineSummary: (meal: MealKind) => string
+  mealDeadlineSummary: (meal: MealKind, mealDates: string[]) => string
   retryMyOrders: () => void
   rateMeal: (orderId: string, score: number, comment: string) => boolean
   saveEmployee: (input: {
@@ -275,10 +275,10 @@ export function StoreProvider({
     return at ? { at } : 'absent'
   }
 
-  function mealDeadlineSummary(meal: MealKind) {
+  function mealDeadlineSummary(meal: MealKind, mealDates: string[]) {
     if (deadlineStatus === 'loading') return 'در حال خواندن'
     if (deadlineStatus !== 'ready') return 'خوانده نشد'
-    return summarizeBackendDeadlines(deadlineMap, meal)
+    return summarizeBackendDeadlines(deadlineMap, meal, mealDates)
   }
 
   function upsertMyOrder(next: Order) {

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { defaultMonthDeadlines } from './deadlines'
 import { currentDateTime } from './jalali'
-import { findCancelledOrder, findOrder, isEmployeeDeadlineOpen, isMealOpen, matchesStatus } from './orders'
+import { classifyEmployeeDeadline, findCancelledOrder, findOrder, isElapsedDeadlineDay, isEmployeeDeadlineOpen, isMealOpen, isOpenDeadlineDay, matchesStatus } from './orders'
 import type { DayMenu, Order } from '../types'
 
 const day: DayMenu = {
@@ -49,6 +49,27 @@ describe('matchesStatus open filter', () => {
     expect(matchesStatus(day, undefined, 'lunch', query.status, local, now, 'unknown')).toBe(false)
     expect(matchesStatus(day, undefined, 'lunch', query.status, local, now, { at: '2000-01-01T00:00:00.000Z' })).toBe(false)
     expect(matchesStatus(day, undefined, 'dinner', query.status, local, now, { at: '2099-01-01T00:00:00.000Z' })).toBe(true)
+  })
+})
+
+describe('isElapsedDeadlineDay', () => {
+  const past = { at: '2000-01-01T00:00:00.000Z' }
+  const future = { at: '2099-01-01T00:00:00.000Z' }
+  const empty: DayMenu = { ...day, lunch: null, dinner: null }
+
+  it('counts a day as elapsed only when every defined meal has a definite closed deadline', () => {
+    expect(isElapsedDeadlineDay(day, () => past)).toBe(true)
+    expect(isElapsedDeadlineDay(day, (_d, meal) => (meal === 'lunch' ? future : past))).toBe(false)
+    expect(isElapsedDeadlineDay(day, (_d, meal) => (meal === 'lunch' ? 'unknown' : past))).toBe(false)
+    expect(isElapsedDeadlineDay(day, (_d, meal) => (meal === 'lunch' ? 'absent' : past))).toBe(true)
+    expect(isElapsedDeadlineDay(empty, () => past)).toBe(false)
+  })
+
+  it('does not treat loading or failed deadline lookup as elapsed or open', () => {
+    expect(isElapsedDeadlineDay(day, () => 'unknown')).toBe(false)
+    expect(isOpenDeadlineDay(day, () => 'unknown')).toBe(false)
+    expect(classifyEmployeeDeadline('unknown')).toBe('unknown')
+    expect(classifyEmployeeDeadline('absent')).toBe('absent')
   })
 })
 

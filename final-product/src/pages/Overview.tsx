@@ -2,7 +2,7 @@ import type { ReactNode } from 'react'
 import { CalendarClock, Moon, Sun, Utensils } from 'lucide-react'
 import { useApp } from '../store'
 import { formatDeadlineFromInstant } from '../lib/deadlines'
-import { deadlineLabel, findOrder, isMealOpen, upcomingChosenMeals } from '../lib/orders'
+import { classifyEmployeeDeadline, deadlineLabel, findOrder, isElapsedDeadlineDay, isMealOpen, isOpenDeadlineDay, upcomingChosenMeals } from '../lib/orders'
 import { addDays, isSameDate, JALALI_MONTHS, weekdayName, type JalaliDate, type JalaliDateTime } from '../lib/jalali'
 import { fa, cn } from '../lib/text'
 import type { MealFilter, StatusFilter } from '../types'
@@ -61,23 +61,20 @@ function EmployeeOverview() {
   const mine = app.myOrders.filter((order) => order.employeeId === id && order.jy === app.selectedMonth.jy && order.jm === app.selectedMonth.jm)
   const lunchCount = mine.filter((order) => order.meal === 'lunch' && order.choice).length
   const dinnerCount = mine.filter((order) => order.meal === 'dinner' && order.choice).length
-  const mealOpen = (day: (typeof app.days)[number], meal: 'lunch' | 'dinner') => isMealOpen(day, meal, app.deadlines, app.now, app.mealDeadlineAt(day, meal))
-  const openDays = app.days.filter((day) => (day.lunch && mealOpen(day, 'lunch')) || (day.dinner && mealOpen(day, 'dinner')))
+  const deadlineFor = app.mealDeadlineAt
+  const openDays = app.days.filter((day) => isOpenDeadlineDay(day, deadlineFor))
   const upcoming = openDays
   const selectedDays = app.days.filter((day) => mine.some((order) => order.jd === day.jd && order.choice))
   const missingLunch = app.days.filter((day) => {
-    if (!day.lunch || !mealOpen(day, 'lunch')) return false
+    if (!day.lunch || classifyEmployeeDeadline(deadlineFor(day, 'lunch')) !== 'open') return false
     return !findOrder(app.myOrders, id, day, day.jd, 'lunch')?.choice
   })
   const upcomingMeals = upcomingChosenMeals(app.myOrders, id, app.now, app.mealServings)
-  const passed = app.days.filter((day) => {
-    const defined = (['lunch', 'dinner'] as const).filter((meal) => day[meal])
-    return defined.length > 0 && defined.every((meal) => !mealOpen(day, meal))
-  })
+  const passed = app.days.filter((day) => isElapsedDeadlineDay(day, deadlineFor))
   const deadlines = openDays
     .flatMap((day) =>
       (['lunch', 'dinner'] as const)
-        .filter((meal) => day[meal] && mealOpen(day, meal))
+        .filter((meal) => day[meal] && classifyEmployeeDeadline(deadlineFor(day, meal)) === 'open')
         .map((meal) => {
           const state = app.mealDeadlineAt(day, meal)
           const text = typeof state === 'object' ? formatDeadlineFromInstant(state.at, day.gregorianDate) ?? 'مهلت باز' : 'مهلت باز'
