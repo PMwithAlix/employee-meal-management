@@ -17,6 +17,15 @@ function focusableElements(root: HTMLElement) {
   })
 }
 
+function canRestoreFocus(element: HTMLElement | null): element is HTMLElement {
+  if (!element?.isConnected || window.matchMedia('(min-width: 768px)').matches) return false
+  if (element.hasAttribute('disabled')) return false
+  if (element.getAttribute('aria-hidden') === 'true') return false
+  const style = getComputedStyle(element)
+  if (style.display === 'none' || style.visibility === 'hidden') return false
+  return element.getClientRects().length > 0
+}
+
 export function BottomNav() {
   const app = useApp()
   const primary = primaryNavPages(app.role)
@@ -80,7 +89,8 @@ export function BottomNav() {
     return () => {
       document.body.style.overflow = previousOverflow
       document.removeEventListener('keydown', onKey)
-      moreButtonRef.current?.focus()
+      const trigger = moreButtonRef.current
+      if (canRestoreFocus(trigger)) trigger.focus()
     }
   }, [open])
 
@@ -181,8 +191,7 @@ export function BottomNav() {
                 type="button"
                 aria-label="بیشتر"
                 aria-expanded={open}
-                aria-controls="more-pages"
-                aria-current={moreActive ? 'page' : undefined}
+                aria-controls={open ? 'more-pages' : undefined}
                 onClick={() => setOpen((value) => !value)}
                 className={cn(
                   'flex min-h-11 w-full flex-col items-center justify-center gap-0.5 px-1 py-1.5 text-[11px] leading-tight',
