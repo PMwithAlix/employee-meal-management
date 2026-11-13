@@ -366,6 +366,25 @@ describe('orderApi', () => {
     await expect(orderApi.listRatings()).rejects.toMatchObject({ kind: 'forbidden', status: 403 })
   })
 
+  it('rejects a staff-rating response whose items field is missing or not an array', async () => {
+    const invalid = { kind: 'http', message: 'بارگذاری همه دیدگاه‌ها کامل نشد.' }
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ total: 0, page: 1, pageSize: 100 }), { status: 200 })))
+    await expect(orderApi.listRatings()).rejects.toMatchObject(invalid)
+
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ items: null, total: 0, page: 1, pageSize: 100 }), { status: 200 })))
+    await expect(orderApi.listRatings()).rejects.toMatchObject(invalid)
+
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ items: {}, total: 0, page: 1, pageSize: 100 }), { status: 200 })))
+    await expect(orderApi.listRatings()).rejects.toMatchObject(invalid)
+  })
+
+  it('accepts an empty staff-rating page when total is zero', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => jsonPage(1, 0, [])))
+    const listed = await orderApi.listAllRatings()
+    expect(listed.items).toEqual([])
+    expect(listed.total).toBe(0)
+  })
+
   it('lists staff ratings without falling back to seed data', async () => {
     const fetchMock = vi.fn(async () => new Response(JSON.stringify({
       items: [{

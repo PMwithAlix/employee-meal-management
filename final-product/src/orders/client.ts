@@ -141,14 +141,15 @@ export const orderApi = {
     if (query.userId) params.set('userId', query.userId)
     return authRequest<unknown>(`${ORDER_ENDPOINTS.ratings}?${params.toString()}`, { ...session, signal }).then((body) => {
       const record = asRecord(body)
-      const items = Array.isArray(record?.items)
-        ? record.items.map(parseStaffRating).filter((item): item is NonNullable<typeof item> => item !== null)
-        : []
+      if (!Array.isArray(record?.items)) {
+        throw new AuthRequestError('http', 'بارگذاری همه دیدگاه‌ها کامل نشد.')
+      }
+      const items = record.items.map(parseStaffRating).filter((item): item is NonNullable<typeof item> => item !== null)
       return {
         items,
-        total: typeof record?.total === 'number' ? record.total : Number.NaN,
-        page: typeof record?.page === 'number' ? record.page : Number.NaN,
-        pageSize: typeof record?.pageSize === 'number' ? record.pageSize : Number.NaN,
+        total: typeof record.total === 'number' ? record.total : Number.NaN,
+        page: typeof record.page === 'number' ? record.page : Number.NaN,
+        pageSize: typeof record.pageSize === 'number' ? record.pageSize : Number.NaN,
       }
     })
   },
