@@ -1,4 +1,4 @@
-import { isPastDate, JALALI_MONTHS, type JalaliDate, type JalaliDateTime } from './jalali'
+import { compareDates, dateKey, isPastDate, JALALI_MONTHS, type JalaliDate, type JalaliDateTime } from './jalali'
 import { formatDeadline, isOrderingOpen, type MonthDeadlines } from './deadlines'
 import { fa } from './text'
 import type { DayMenu, MealKind, MenuQuery, Order } from '../types'
@@ -69,4 +69,31 @@ export function rowMatches(
 export function deadlineLabel(day: DayMenu, meal: MealKind, deadlines: MonthDeadlines) {
   if (!day[meal]) return 'منو تعریف نشده'
   return formatDeadline(deadlines[meal])
+}
+
+const MEAL_CLOCK: Record<MealKind, readonly [number, number]> = {
+  lunch: [12, 0],
+  dinner: [19, 0],
+}
+
+function clockKey(date: JalaliDate, hour: number, minute: number) {
+  return dateKey(date) * 10000 + hour * 60 + minute
+}
+
+export function isUpcomingMeal(order: Pick<Order, 'jy' | 'jm' | 'jd' | 'meal'>, now: JalaliDateTime) {
+  const [hour, minute] = MEAL_CLOCK[order.meal]
+  return clockKey(order, hour, minute) > clockKey(now, now.hour, now.minute)
+}
+
+export function compareMeals(a: Pick<Order, 'jy' | 'jm' | 'jd' | 'meal'>, b: Pick<Order, 'jy' | 'jm' | 'jd' | 'meal'>) {
+  const date = compareDates(a, b)
+  if (date !== 0) return date
+  return a.meal === b.meal ? 0 : a.meal === 'lunch' ? -1 : 1
+}
+
+export function upcomingChosenMeals(orders: Order[], employeeId: string, now: JalaliDateTime, limit = 3) {
+  return orders
+    .filter((order) => order.employeeId === employeeId && Boolean(order.choice) && isUpcomingMeal(order, now))
+    .sort(compareMeals)
+    .slice(0, limit)
 }

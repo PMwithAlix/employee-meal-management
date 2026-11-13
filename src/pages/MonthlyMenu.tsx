@@ -1,11 +1,11 @@
-import { useState } from 'react'
-import { Search, X } from 'lucide-react'
+import { useEffect, useRef, useState } from 'react'
+import { Check, Lock, Minus, Search, X } from 'lucide-react'
 import { MealBlock } from '../components/MealBlock'
-import { SelectMealDialog } from '../components/SelectMealDialog'
+import { MealPicker } from '../components/MealPicker'
 import { Button, Empty, MonthBar, Segmented } from '../components/ui'
 import { WEEKDAYS } from '../data'
 import { useApp } from '../store'
-import { isSameDate, JALALI_MONTHS } from '../lib/jalali'
+import { addDays, isSameDate, JALALI_MONTHS } from '../lib/jalali'
 import { findOrder, isMealOpen, rowMatches } from '../lib/orders'
 import { formatDeadline } from '../lib/deadlines'
 import { can } from '../permissions'
@@ -35,7 +35,7 @@ export function MonthlyMenuPage() {
   return (
     <div className="space-y-3">
       <div className="space-y-2">
-        <MonthBar />
+        <MonthBar icons />
         <div className="flex flex-wrap items-center justify-between gap-3">
           <p className="text-xs text-muted">ناهار و شام جدا انتخاب می‌شوند. ناهار: {formatDeadline(app.deadlines.lunch)}. شام: {formatDeadline(app.deadlines.dinner)}.</p>
           <Segmented
@@ -192,18 +192,145 @@ function Calendar({ days, visible }: { days: DayMenu[]; visible: Set<number> }) 
           ))}
         </div>
       </div>
-      <div className="space-y-2 lg:hidden">
-        {days.filter((day) => visible.has(day.jd)).map((day) => (
-          <article key={day.jd} className="rounded-md border border-line bg-surface p-3">
-            <p className="mb-2 text-sm font-medium">{fa(day.jd)} {JALALI_MONTHS[day.jm - 1]} · {day.weekday}</p>
-            <div className="space-y-2">
-              <Cell day={day} meal="lunch" choice={findOrder(app.orders, id, day, day.jd, 'lunch')?.choice ?? null} />
-              <Cell day={day} meal="dinner" choice={findOrder(app.orders, id, day, day.jd, 'dinner')?.choice ?? null} />
-            </div>
-          </article>
-        ))}
-      </div>
+      <MobileCalendar days={days} visible={visible} />
     </>
+  )
+}
+
+function pickCalendarDay(days: DayMenu[], now: { jy: number; jm: number; jd: number }, visible: Set<number>) {
+  const today = days.find((day) => isSameDate(day, now))
+  if (today) return today.jd
+  const firstVisible = days.find((day) => visible.has(day.jd))
+  return firstVisible?.jd ?? days[0]?.jd ?? 1
+}
+
+function mealMark(day: DayMenu, meal: MealKind, choice: string | null, open: boolean) {
+  if (!day[meal]) return { defined: false, selected: false, closed: false }
+  return { defined: true, selected: Boolean(choice), closed: !open }
+}
+
+function MealMark({ kind, defined, selected, closed }: { kind: MealKind; defined: boolean; selected: boolean; closed: boolean }) {
+  const lunch = kind === 'lunch'
+  const label = lunch ? 'ناهار' : 'شام'
+  const state = !defined ? 'تعریف نشده' : selected ? (closed ? 'انتخاب شده، مهلت تمام' : 'انتخاب شده') : closed ? 'مهلت تمام' : 'باز'
+  const Icon = !defined ? Minus : closed && !selected ? Lock : selected ? Check : null
+  return (
+    <span
+      className={cn(
+        'grid h-4 w-4 place-items-center',
+        lunch ? 'rounded-[3px]' : 'rounded-full',
+        !defined && 'border border-dashed border-faint text-faint',
+        defined && selected && lunch && 'bg-lunch text-onprimary',
+        defined && selected && !lunch && 'bg-dinner text-onprimary',
+        defined && !selected && lunch && 'border border-lunch text-lunch',
+        defined && !selected && !lunch && 'border border-dinner text-dinner',
+        defined && closed && selected && 'opacity-80',
+      )}
+      title={`${label}: ${state}`}
+    >
+      {Icon ? <Icon size={9} strokeWidth={2.4} aria-hidden /> : null}
+      <span className="sr-only">{label} {state}</span>
+    </span>
+  )
+}
+
+function MobileCalendar({ days, visible }: { days: DayMenu[]; visible: Set<number> }) {
+  const app = useApp()
+  const id = app.personaId!
+  const lead = Math.max(0, WEEKDAYS.indexOf(days[0]?.weekday as (typeof WEEKDAYS)[number]))
+  const trail = (7 - ((lead + days.length) % 7)) % 7
+  const leading = days[0] ? Array.from({ length: lead }, (_, index) => addDays(days[0], index - lead)) : []
+  const trailing = days.length ? Array.from({ length: trail }, (_, index) => addDays(days[days.length - 1], index + 1)) : []
+  const monthStamp = days[0] ? `${days[0].jy}-${days[0].jm}` : ''
+  const [selectedJd, setSelectedJd] = useState(() => pickCalendarDay(days, app.now, visible))
+
+  useEffect(() => {
+    setSelectedJd(pickCalendarDay(days, app.now, visible))
+  }, [monthStamp])
+
+  const selected = days.find((day) => day.jd === selectedJd) ?? days[0]
+  const lunch = selected ? findOrder(app.orders, id, selected, selected.jd, 'lunch') : undefined
+  const dinner = selected ? findOrder(app.orders, id, selected, selected.jd, 'dinner') : undefined
+
+  return (
+    <div className="lg:hidden">
+      <div className="overflow-hidden rounded-md border border-line bg-surface">
+        <div className="flex items-center justify-between gap-2 border-b border-divider px-3 py-2">
+          <p className="text-sm font-medium">{days[0] ? `${JALALI_MONTHS[days[0].jm - 1]} ${fa(days[0].jy)}` : app.monthTitle}</p>
+          <p className="text-[11px] text-muted">
+            <span className="ms-2 inline-flex items-center gap-1"><span className="inline-block h-2 w-2 rounded-[2px] bg-lunch" aria-hidden /> ناهار</span>
+            <span className="ms-2 inline-flex items-center gap-1"><span className="inline-block h-2 w-2 rounded-full bg-dinner" aria-hidden /> شام</span>
+          </p>
+        </div>
+        <div className="grid grid-cols-7 bg-surface2 text-center text-[11px] text-muted">
+          {WEEKDAYS.map((name) => (
+            <div key={name} className="px-0.5 py-1.5" title={name}>{name.slice(0, 1)}</div>
+          ))}
+        </div>
+        <div className="grid grid-cols-7">
+          {leading.map((date) => (
+            <div key={`l-${date.jy}-${date.jm}-${date.jd}`} className="flex min-h-12 min-w-0 flex-col items-center justify-between gap-0.5 border-t border-line px-0.5 py-1 text-faint" aria-hidden>
+              <span className="grid h-6 w-6 place-items-center text-xs leading-none">{fa(date.jd)}</span>
+              <span className="h-4" />
+            </div>
+          ))}
+          {days.map((day) => {
+            const today = isSameDate(day, app.now)
+            const active = day.jd === selectedJd
+            const lunchChoice = findOrder(app.orders, id, day, day.jd, 'lunch')?.choice ?? null
+            const dinnerChoice = findOrder(app.orders, id, day, day.jd, 'dinner')?.choice ?? null
+            const lunchOpen = isMealOpen(day, 'lunch', app.deadlines, app.now)
+            const dinnerOpen = isMealOpen(day, 'dinner', app.deadlines, app.now)
+            return (
+              <button
+                key={day.jd}
+                type="button"
+                onClick={() => setSelectedJd(day.jd)}
+                aria-pressed={active}
+                aria-current={today ? 'date' : undefined}
+                aria-label={`${day.weekday} ${fa(day.jd)} ${JALALI_MONTHS[day.jm - 1]}`}
+                className={cn(
+                  'flex min-h-12 min-w-0 flex-col items-center justify-between gap-0.5 border-t border-line px-0.5 py-1',
+                  active && 'bg-brandsubtle ring-1 ring-inset ring-primary',
+                  !visible.has(day.jd) && 'opacity-40',
+                )}
+              >
+                <span className={cn(
+                  'grid h-6 w-6 place-items-center rounded-full text-xs leading-none',
+                  today && 'bg-primary font-medium text-onprimary',
+                  active && !today && 'font-medium text-primary',
+                )}>
+                  {fa(day.jd)}
+                </span>
+                <span className="flex h-4 items-center gap-0.5">
+                  <MealMark kind="lunch" {...mealMark(day, 'lunch', lunchChoice, lunchOpen)} />
+                  <MealMark kind="dinner" {...mealMark(day, 'dinner', dinnerChoice, dinnerOpen)} />
+                </span>
+              </button>
+            )
+          })}
+          {trailing.map((date) => (
+            <div key={`t-${date.jy}-${date.jm}-${date.jd}`} className="flex min-h-12 min-w-0 flex-col items-center justify-between gap-0.5 border-t border-line px-0.5 py-1 text-faint" aria-hidden>
+              <span className="grid h-6 w-6 place-items-center text-xs leading-none">{fa(date.jd)}</span>
+              <span className="h-4" />
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {selected && (
+        <section className="mt-2 overflow-hidden rounded-md border border-line" aria-live="polite">
+          <div className="flex items-center justify-between gap-2 bg-elevated px-3 py-2">
+            <p className="text-sm font-medium">{fa(selected.jd)} {JALALI_MONTHS[selected.jm - 1]} · {selected.weekday}{isSameDate(selected, app.now) ? ' · امروز' : ''}</p>
+            {!visible.has(selected.jd) && <span className="text-[11px] text-muted">خارج از فیلتر</span>}
+          </div>
+          <div className="space-y-2 bg-surface p-3">
+            <Cell key={`${selected.jd}-lunch`} day={selected} meal="lunch" choice={lunch?.choice ?? null} />
+            <Cell key={`${selected.jd}-dinner`} day={selected} meal="dinner" choice={dinner?.choice ?? null} />
+          </div>
+        </section>
+      )}
+    </div>
   )
 }
 
@@ -212,11 +339,12 @@ function Cell({ day, meal, choice, dense }: { day: DayMenu; meal: MealKind; choi
   const id = app.personaId
   const options = day[meal]
   const [open, setOpen] = useState(false)
+  const triggerRef = useRef<HTMLDivElement>(null)
   const orphan = Boolean(choice && options && !options.includes(choice))
   const orderingOpen = isMealOpen(day, meal, app.deadlines, app.now)
   const canEdit = Boolean(id && options) && (orderingOpen ? can(app.role, 'order.self') : can(app.role, 'order.ops'))
   return (
-    <>
+    <div ref={triggerRef}>
       <MealBlock
         kind={meal}
         choice={choice}
@@ -224,14 +352,14 @@ function Cell({ day, meal, choice, dense }: { day: DayMenu; meal: MealKind; choi
         defined={Boolean(options)}
         orphan={orphan}
         dense={dense}
-        onSelect={canEdit ? () => setOpen(true) : undefined}
+        expanded={open}
+        onSelect={canEdit ? () => setOpen((value) => !value) : undefined}
       />
-      {open && canEdit && options && id && (
-        <SelectMealDialog
+      {canEdit && options && id && (
+        <MealPicker
+          open={open}
+          trigger={triggerRef.current}
           kind={meal}
-          jd={day.jd}
-          weekday={day.weekday}
-          monthName={JALALI_MONTHS[day.jm - 1]}
           options={options}
           current={choice}
           locked={!orderingOpen}
@@ -240,7 +368,7 @@ function Cell({ day, meal, choice, dense }: { day: DayMenu; meal: MealKind; choi
           onSave={(next) => app.selectMeal(id, day.jd, meal, next, 'self')}
         />
       )}
-    </>
+    </div>
   )
 }
 
