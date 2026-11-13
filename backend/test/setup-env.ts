@@ -1,5 +1,15 @@
-process.env.NODE_ENV ??= 'test';
+process.env.NODE_ENV = 'test';
 process.env.PORT ??= '3000';
 process.env.DATABASE_URL ??=
   'postgresql://khaan:khaan@localhost:5432/khaan?schema=public';
 process.env.FRONTEND_ORIGIN ??= 'http://localhost:5173';
+process.env.SESSION_TTL_SECONDS ??= '3600';
+process.env.SESSION_COOKIE_NAME ??= 'khaan.sid';
+process.env.SESSION_COOKIE_PATH ??= '/api/v1';
+process.env.SESSION_SAMESITE ??= 'lax';
+process.env.SESSION_SECURE ??= 'false';
+process.env.ARGON2_MEMORY_KIB ??= '4096';
+process.env.ARGON2_TIME_COST ??= '1';
+process.env.ARGON2_PARALLELISM ??= '1';
+process.env.LOGIN_RATE_LIMIT_MAX ??= '1000';
+process.env.LOGIN_RATE_LIMIT_WINDOW_SECONDS ??= '900';

@@ -28,6 +28,13 @@ Required variables:
 | `PORT` | HTTP port (default in example: `3000`) |
 | `DATABASE_URL` | Prisma PostgreSQL connection string |
 | `FRONTEND_ORIGIN` | Allowed CORS origin (credentials enabled) |
+| `SESSION_TTL_SECONDS` | Absolute session lifetime (default 28800) |
+| `SESSION_COOKIE_NAME` | HttpOnly cookie name (default `khaan.sid`) |
+| `SESSION_COOKIE_PATH` | Cookie path (default `/api/v1`) |
+| `SESSION_SAMESITE` | `lax`, `strict`, or `none` |
+| `SESSION_SECURE` | `true` in production |
+| `ARGON2_MEMORY_KIB` / `ARGON2_TIME_COST` / `ARGON2_PARALLELISM` | Argon2id parameters |
+| `LOGIN_RATE_LIMIT_MAX` / `LOGIN_RATE_LIMIT_WINDOW_SECONDS` | In-process login throttle |
 
 Docker Compose also reads:
 
@@ -101,7 +108,7 @@ Defined in the init migration, not in Prisma schema:
 - Guest order quantity ≥ 1; rating score 1–5
 - `audit_logs` cannot be updated or deleted
 
-Role/building rules must still be enforced in the future service layer. Argon2id hashing is not implemented here; `users.passwordHash` only stores the hash.
+Role/building rules must still be enforced in the future service layer. Passwords are stored only as Argon2id hashes.
 
 ## Starting the backend in development
 
@@ -112,6 +119,29 @@ npm run start:dev
 
 API base prefix: `/api/v1`
 
+## Authentication
+
+Session cookies, not JWT. There is no public registration.
+
+| Method | Path | Access |
+|---|---|---|
+| POST | `/api/v1/auth/login` | Public |
+| POST | `/api/v1/auth/logout` | Session |
+| GET | `/api/v1/auth/me` | Session |
+| POST | `/api/v1/auth/change-password` | Session |
+| POST | `/api/v1/auth/logout-all` | Session |
+| GET | `/api/v1/health` | Public |
+
+Login body: `{ "username": "...", "password": "..." }`. Username is trimmed and lowercased; the password is not normalized. Invalid username and wrong password return the same 401. Inactive accounts return 403 after a correct password.
+
+The session token is a cryptographically random value sent only in the `khaan.sid` HttpOnly cookie (`Path=/api/v1`). PostgreSQL stores SHA-256 of the token, never the raw value. `Secure` is enabled in production. `SameSite` defaults to `lax` (same-site localhost frontend/API). Mutating requests in production must send `Origin` equal to `FRONTEND_ORIGIN`.
+
+Logout clears the current session row and cookie. Logout-all deletes every session for that user. Change-password verifies the current password, checks the product policy (minimum 8 characters, at least one English letter and one digit), stores a new Argon2id hash, and revokes every session so the client must log in again. HR/Admin reset is not in this phase.
+
+`AuthGuard` loads the user from the session row (role comes from the database, never from a request header). `RolesGuard` plus `@Roles(...)` restrict endpoints. `@CurrentUser()` injects the authenticated principal. `@Public()` marks unauthenticated routes on a guarded controller.
+
+Login is rate-limited in process (default 5 attempts / 15 minutes per IP + username).
+
 ## Tests
 
 ```bash
@@ -119,7 +149,7 @@ npm test
 npm run test:e2e
 ```
 
-Unit tests cover health-check success and database failure. E2E tests boot the Nest application with a mocked Prisma client so they do not require a live database.
+Unit tests cover health and auth services/guards. Auth e2e tests need PostgreSQL and write temporary `e2e.auth.*` users, then delete them.
 
 ## Production build
 
@@ -152,7 +182,8 @@ HTTP `503` is returned when the database is unavailable.
 ```
 backend/
   src/
-    common/           # HTTP filter and request logging
+    common/           # filters, interceptors, guards, decorators
+    auth/             # login, sessions, passwords, RBAC wiring
     config/           # environment validation
     database/         # PrismaService + DatabaseModule
     health/           # live health endpoint

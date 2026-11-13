@@ -20,8 +20,9 @@ export class LoggingInterceptor implements NestInterceptor {
 
     return next.handle().pipe(
       tap(() => {
+        const path = request.originalUrl.split('?')[0];
         this.logger.log(
-          `${request.method} ${request.originalUrl} ${response.statusCode} ${Date.now() - started}ms`,
+          `${request.method} ${path} ${response.statusCode} ${Date.now() - started}ms`,
         );
       }),
     );

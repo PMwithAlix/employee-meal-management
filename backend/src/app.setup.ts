@@ -2,6 +2,7 @@ import { INestApplication, ValidationPipe } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { HttpExceptionFilter } from './common/filters/http-exception.filter';
 import { LoggingInterceptor } from './common/interceptors/logging.interceptor';
+import { OriginInterceptor } from './common/interceptors/origin.interceptor';
 import { EnvironmentVariables } from './config/env.validation';
 
 export function configureApp(
@@ -18,7 +19,10 @@ export function configureApp(
     }),
   );
   app.useGlobalFilters(new HttpExceptionFilter());
-  app.useGlobalInterceptors(new LoggingInterceptor());
+  app.useGlobalInterceptors(
+    new LoggingInterceptor(),
+    new OriginInterceptor(config),
+  );
   app.enableCors({
     origin: config.get('FRONTEND_ORIGIN', { infer: true }),
     credentials: true,
