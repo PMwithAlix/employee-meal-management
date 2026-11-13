@@ -1,0 +1,16 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// Phase 0 foundation only. Business models are intentionally omitted.
+//
+// Time and date conventions for later schema work:
+// - Persist timestamps as timestamptz; treat stored values as UTC.
+// - Persist date-only business values as PostgreSQL DATE (Gregorian).
+// - Business timezone is Asia/Tehran; keep conversion explicit in application code.
+// - Do not store Jalali dates as strings.

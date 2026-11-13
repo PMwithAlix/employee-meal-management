@@ -1,0 +1,28 @@
+# compiled
+/dist
+/coverage
+*.tsbuildinfo
+
+# dependencies
+/node_modules
+
+# environment
+.env
+.env.local
+.env.*.local
+!.env.example
+
+# logs
+logs
+*.log
+npm-debug.log*
+
+# prisma
+/src/generated
+
+# os / ide
+.DS_Store
+Thumbs.db
+.idea
+.vscode/*
+!.vscode/extensions.json
