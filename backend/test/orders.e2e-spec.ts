@@ -586,6 +586,19 @@ describe('Orders (e2e)', () => {
           group.groupNameSnapshot === 'گروه سفارش الف',
       ),
     ).toBe(true);
+    await prisma.groupMembership.updateMany({
+      where: { userId: employeeId, groupId },
+      data: { endedAt: new Date() },
+    });
+    const afterRemoval = await request(app.getHttpServer())
+      .get(`/api/v1/orders/me/${orderId}`)
+      .set('Cookie', employeeCookie);
+    expect(afterRemoval.body.currentCycle.groups).toEqual(
+      after.body.currentCycle.groups,
+    );
+    expect(afterRemoval.body.currentCycle.buildingNameSnapshot).toBe(
+      before.buildingNameSnapshot,
+    );
   });
 
   it('manages guest orders without creating users', async () => {
@@ -658,6 +671,9 @@ describe('Orders (e2e)', () => {
     const supportGroup = await prisma.group.create({
       data: { name: 'گروه سفارش پشتیبان' },
     });
+    const extra = await prisma.group.create({
+      data: { name: 'گروه سفارش همزمان-معتبر' },
+    });
     const support = await prisma.user.findUniqueOrThrow({
       where: { username: 'e2e.order.support' },
     });
@@ -679,6 +695,11 @@ describe('Orders (e2e)', () => {
           userId: support.id,
           startedAt: new Date(now.getTime() - 60 * 60 * 1000),
         },
+        {
+          groupId: extra.id,
+          userId: employeeId,
+          startedAt: new Date(now.getTime() - 60 * 60 * 1000),
+        },
       ],
     });
     const created = await request(app.getHttpServer())
@@ -694,7 +715,9 @@ describe('Orders (e2e)', () => {
     const names = created.body.currentCycle.groups.map(
       (group: { groupNameSnapshot: string }) => group.groupNameSnapshot,
     );
-    expect(names).toEqual(expect.arrayContaining(['گروه سفارش ب']));
+    expect(names).toEqual(
+      expect.arrayContaining(['گروه سفارش ب', 'گروه سفارش همزمان-معتبر']),
+    );
     expect(names).not.toContain('گروه سفارش آینده');
     expect(names).not.toContain('گروه سفارش پایان‌یافته');
     expect(names).not.toContain('گروه سفارش پشتیبان');
@@ -702,6 +725,33 @@ describe('Orders (e2e)', () => {
       where: { id: future.id },
       data: { name: 'گروه سفارش آینده-تغییر' },
     });
+    await prisma.groupMembership.updateMany({
+      where: { userId: employeeId, groupId: extra.id },
+      data: { endedAt: new Date() },
+    });
+    const deadlineSwap = await request(app.getHttpServer())
+      .put(`/api/v1/order-deadlines/${YEAR}/${MONTH}`)
+      .set('Cookie', supportCookie)
+      .send({
+        items: [
+          {
+            mealDate: mealDate(1),
+            mealType: MealType.LUNCH,
+            deadlineAt: new Date(Date.now() + 2 * 86400000).toISOString(),
+          },
+          {
+            mealDate: mealDate(1),
+            mealType: MealType.DINNER,
+            deadlineAt: new Date(Date.now() + 2 * 86400000).toISOString(),
+          },
+          {
+            mealDate: mealDate(2),
+            mealType: MealType.LUNCH,
+            deadlineAt: new Date(Date.now() + 2 * 86400000).toISOString(),
+          },
+        ],
+      });
+    expect(deadlineSwap.status).toBe(200);
     const again = await request(app.getHttpServer())
       .get(`/api/v1/orders/${created.body.id as string}`)
       .set('Cookie', supportCookie);
@@ -777,6 +827,43 @@ describe('Orders (e2e)', () => {
         data: { action: 'TAMPER' },
       }),
     ).rejects.toThrow();
+
+    const concurrentA = {
+      items: [
+        {
+          mealDate: mealDate(1),
+          mealType: MealType.LUNCH,
+          deadlineAt: future,
+        },
+      ],
+    };
+    const concurrentB = {
+      items: [
+        {
+          mealDate: mealDate(1),
+          mealType: MealType.DINNER,
+          deadlineAt: future,
+        },
+      ],
+    };
+    const [left, right] = await Promise.all([
+      request(app.getHttpServer())
+        .put(`/api/v1/order-deadlines/${YEAR}/${MONTH}`)
+        .set('Cookie', supportCookie)
+        .send(concurrentA),
+      request(app.getHttpServer())
+        .put(`/api/v1/order-deadlines/${YEAR}/${MONTH}`)
+        .set('Cookie', adminCookie)
+        .send(concurrentB),
+    ]);
+    expect([left.status, right.status].sort()).toEqual([200, 200]);
+    const listed = await request(app.getHttpServer())
+      .get(`/api/v1/order-deadlines/${YEAR}/${MONTH}`)
+      .set('Cookie', supportCookie);
+    const types = listed.body.map((row: { mealType: string }) => row.mealType);
+    expect(listed.body).toHaveLength(1);
+    expect(['LUNCH', 'DINNER']).toContain(types[0]);
+    expect(listed.body[0].mealDate).toBe(mealDate(1));
   });
 
   it('keeps historical guest orders readable when the menu option cannot be resolved', async () => {

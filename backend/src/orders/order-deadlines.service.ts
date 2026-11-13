@@ -13,6 +13,7 @@ import {
   formatDateOnly,
   isValidJalaliMonth,
 } from '../dates/jalali';
+import { deadlineTxOptions, lockDeadlineMonth } from './deadline-lock';
 import { UpsertDeadlinesDto } from './dto/upsert-deadlines.dto';
 import { presentDeadline } from './order.presenter';
 
@@ -84,6 +85,7 @@ export class OrderDeadlinesService {
     const to = bounds[bounds.length - 1].utc;
 
     return this.prisma.$transaction(async (tx) => {
+      await lockDeadlineMonth(tx, year, month);
       await tx.$queryRaw(
         Prisma.sql`SELECT "id" FROM "order_deadlines" WHERE "mealDate" >= ${from} AND "mealDate" <= ${to} FOR UPDATE`,
       );
@@ -126,7 +128,7 @@ export class OrderDeadlinesService {
         tx,
       );
       return afterRows.map((row) => presentDeadline(row));
-    });
+    }, deadlineTxOptions);
   }
 
   private auditDeadline(row: {

@@ -19,6 +19,12 @@ import {
 import { CreateOrderDto } from './dto/create-order.dto';
 import { ListOrdersQueryDto } from './dto/list-orders.query';
 import { UpdateOrderDto } from './dto/update-order.dto';
+import {
+  deadlineTxOptions,
+  lockDeadlineMonthForMealDate,
+  lockDeadlineRow,
+  lockOrderRow,
+} from './deadline-lock';
 import { membershipsValidAtWhere } from './membership-snapshot';
 import { requirePublishedOption } from './order-option';
 import { orderCycleInclude, presentOrder } from './order.presenter';
@@ -74,6 +80,13 @@ export class OrdersService {
     );
     const bypass = canBypassEmployeeDeadline(actor.role);
     return this.prisma.$transaction(async (tx) => {
+      await lockDeadlineMonthForMealDate(tx, existing.mealDate);
+      await lockOrderRow(tx, {
+        orderId: existing.id,
+        userId: existing.userId,
+        mealDate: existing.mealDate,
+        mealType: existing.mealType,
+      });
       const order = await tx.order.findUniqueOrThrow({
         where: { id: existing.id },
         include: { currentCycle: true },
@@ -116,7 +129,7 @@ export class OrdersService {
         tx,
       );
       return this.loadPresented(tx, order.id);
-    });
+    }, deadlineTxOptions);
   }
 
   async getMine(actor: AuthUser, id: string) {
@@ -213,6 +226,8 @@ export class OrdersService {
     const bypass = canBypassEmployeeDeadline(actor.role);
     try {
       return await this.prisma.$transaction(async (tx) => {
+        await lockDeadlineMonthForMealDate(tx, input.mealDate);
+        await lockOrderRow(tx, input);
         const user = await tx.user.findUnique({
           where: { id: input.userId },
           include: { building: true },
@@ -352,7 +367,7 @@ export class OrdersService {
           tx,
         );
         return this.loadPresented(tx, order.id);
-      });
+      }, deadlineTxOptions);
     } catch (error) {
       if (
         error instanceof Prisma.PrismaClientKnownRequestError &&
@@ -372,6 +387,7 @@ export class OrdersService {
     mealType: MealType,
     bypass: boolean,
   ) {
+    await lockDeadlineRow(tx, mealDate, mealType);
     if (bypass) {
       return;
     }
