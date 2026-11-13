@@ -10,6 +10,7 @@ export function MealBlock({
   orphan,
   onSelect,
   dense,
+  expanded,
 }: {
   kind: MealKind
   choice: string | null
@@ -18,6 +19,7 @@ export function MealBlock({
   orphan?: boolean
   onSelect?: () => void
   dense?: boolean
+  expanded?: boolean
 }) {
   const lunch = kind === 'lunch'
   const Icon = lunch ? Sun : Moon
@@ -74,7 +76,14 @@ export function MealBlock({
 
   if (!onSelect) return <div className={className}>{inner}</div>
   return (
-    <button type="button" onClick={onSelect} className={className} aria-label={accessible}>
+    <button
+      type="button"
+      onClick={onSelect}
+      className={className}
+      aria-label={accessible}
+      aria-haspopup="listbox"
+      aria-expanded={expanded ?? false}
+    >
       {inner}
     </button>
   )

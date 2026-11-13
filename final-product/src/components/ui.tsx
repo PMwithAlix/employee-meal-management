@@ -1,5 +1,5 @@
 import { useLayoutEffect, useRef, type ReactNode } from 'react'
-import { X } from 'lucide-react'
+import { ChevronLeft, ChevronRight, X } from 'lucide-react'
 import { cn } from '../lib/text'
 import { useApp } from '../store'
 
@@ -183,13 +183,38 @@ export function Dialog({
   )
 }
 
-export function MonthBar() {
+export function MonthBar({ icons }: { icons?: boolean }) {
   const app = useApp()
+  if (!icons) {
+    return (
+      <div className="flex items-center justify-between gap-2">
+        <button type="button" className="min-h-11 rounded-md px-3 text-sm text-link" onClick={() => app.shiftMonth(-1)}>ماه قبل</button>
+        <p className="min-w-0 truncate text-center text-sm font-semibold">{app.monthTitle}</p>
+        <button type="button" className="min-h-11 rounded-md px-3 text-sm text-link" onClick={() => app.shiftMonth(1)}>ماه بعد</button>
+      </div>
+    )
+  }
   return (
-    <div className="flex items-center justify-between gap-2">
-      <button type="button" className="min-h-11 rounded-md px-3 text-sm text-link" onClick={() => app.shiftMonth(-1)}>ماه قبل</button>
-      <p className="min-w-0 truncate text-center text-sm font-semibold">{app.monthTitle}</p>
-      <button type="button" className="min-h-11 rounded-md px-3 text-sm text-link" onClick={() => app.shiftMonth(1)}>ماه بعد</button>
+    <div className="inline-flex max-w-full items-center gap-0.5">
+      <button
+        type="button"
+        className="grid h-11 w-11 shrink-0 place-items-center rounded-md text-link hover:bg-surface2"
+        aria-label="ماه قبل"
+        title="ماه قبل"
+        onClick={() => app.shiftMonth(-1)}
+      >
+        <ChevronRight size={18} aria-hidden />
+      </button>
+      <p className="min-w-0 truncate px-1.5 text-center text-sm font-semibold">{app.monthTitle}</p>
+      <button
+        type="button"
+        className="grid h-11 w-11 shrink-0 place-items-center rounded-md text-link hover:bg-surface2"
+        aria-label="ماه بعد"
+        title="ماه بعد"
+        onClick={() => app.shiftMonth(1)}
+      >
+        <ChevronLeft size={18} aria-hidden />
+      </button>
     </div>
   )
 }

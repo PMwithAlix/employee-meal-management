@@ -1,7 +1,7 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { Search, X } from 'lucide-react'
 import { MealBlock } from '../components/MealBlock'
-import { SelectMealDialog } from '../components/SelectMealDialog'
+import { MealPicker } from '../components/MealPicker'
 import { Button, Empty, MonthBar, Segmented } from '../components/ui'
 import { WEEKDAYS } from '../data'
 import { useApp } from '../store'
@@ -35,7 +35,7 @@ export function MonthlyMenuPage() {
   return (
     <div className="space-y-3">
       <div className="space-y-2">
-        <MonthBar />
+        <MonthBar icons />
         <div className="flex flex-wrap items-center justify-between gap-3">
           <p className="text-xs text-muted">ناهار و شام جدا انتخاب می‌شوند. ناهار: {formatDeadline(app.deadlines.lunch)}. شام: {formatDeadline(app.deadlines.dinner)}.</p>
           <Segmented
@@ -212,11 +212,12 @@ function Cell({ day, meal, choice, dense }: { day: DayMenu; meal: MealKind; choi
   const id = app.personaId
   const options = day[meal]
   const [open, setOpen] = useState(false)
+  const triggerRef = useRef<HTMLDivElement>(null)
   const orphan = Boolean(choice && options && !options.includes(choice))
   const orderingOpen = isMealOpen(day, meal, app.deadlines, app.now)
   const canEdit = Boolean(id && options) && (orderingOpen ? can(app.role, 'order.self') : can(app.role, 'order.ops'))
   return (
-    <>
+    <div ref={triggerRef}>
       <MealBlock
         kind={meal}
         choice={choice}
@@ -224,14 +225,14 @@ function Cell({ day, meal, choice, dense }: { day: DayMenu; meal: MealKind; choi
         defined={Boolean(options)}
         orphan={orphan}
         dense={dense}
-        onSelect={canEdit ? () => setOpen(true) : undefined}
+        expanded={open}
+        onSelect={canEdit ? () => setOpen((value) => !value) : undefined}
       />
-      {open && canEdit && options && id && (
-        <SelectMealDialog
+      {canEdit && options && id && (
+        <MealPicker
+          open={open}
+          trigger={triggerRef.current}
           kind={meal}
-          jd={day.jd}
-          weekday={day.weekday}
-          monthName={JALALI_MONTHS[day.jm - 1]}
           options={options}
           current={choice}
           locked={!orderingOpen}
@@ -240,7 +241,7 @@ function Cell({ day, meal, choice, dense }: { day: DayMenu; meal: MealKind; choi
           onSave={(next) => app.selectMeal(id, day.jd, meal, next, 'self')}
         />
       )}
-    </>
+    </div>
   )
 }
 
