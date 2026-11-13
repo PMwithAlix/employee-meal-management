@@ -10,7 +10,7 @@ export function apiBaseUrl() {
 }
 
 type RequestOptions = {
-  method?: 'GET' | 'POST' | 'PATCH' | 'PUT'
+  method?: 'GET' | 'POST' | 'PATCH' | 'PUT' | 'DELETE'
   body?: unknown
   signal?: AbortSignal
   treatUnauthorizedAsSessionEnd?: boolean

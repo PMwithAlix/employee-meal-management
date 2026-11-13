@@ -48,6 +48,15 @@ describe('authRequest', () => {
     expect(onUnauthorized).not.toHaveBeenCalled()
   })
 
+  it('sends DELETE with credentials for group membership removal', async () => {
+    const fetchMock = vi.fn(async () => new Response(JSON.stringify({ id: 'm1' }), { status: 200 }))
+    vi.stubGlobal('fetch', fetchMock)
+    await authRequest('/groups/g1/members/u1', { method: 'DELETE' })
+    const init = (fetchMock.mock.calls as unknown as Array<[string, RequestInit]>)[0][1]
+    expect(init.method).toBe('DELETE')
+    expect(init.credentials).toBe('include')
+  })
+
   it('sends PUT with credentials for rating and meal-settings writes', async () => {
     const fetchMock = vi.fn(async () => new Response(JSON.stringify({ ok: true }), { status: 200 }))
     vi.stubGlobal('fetch', fetchMock)
