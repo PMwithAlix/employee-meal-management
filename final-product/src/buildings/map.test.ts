@@ -1,0 +1,40 @@
+import { describe, expect, it } from 'vitest'
+import { activeMemberCount, parseBuilding, parseBuildingDetail } from './map'
+
+describe('parseBuilding', () => {
+  it('keeps id and name from the backend payload', () => {
+    expect(parseBuilding({ id: 'b1', name: 'اصلی', createdAt: '2026-11-01T00:00:00.000Z' })).toEqual({
+      id: 'b1',
+      name: 'اصلی',
+    })
+  })
+
+  it('rejects an incomplete building instead of using seed data', () => {
+    expect(parseBuilding({ name: 'اصلی' })).toBeNull()
+    expect(parseBuilding({ items: [] })).toBeNull()
+  })
+})
+
+describe('parseBuildingDetail', () => {
+  it('reuses _count.users when the detail payload includes it', () => {
+    expect(parseBuildingDetail({
+      id: 'b1',
+      name: 'اصلی',
+      _count: { users: 4 },
+    })).toEqual({ id: 'b1', name: 'اصلی', usersCount: 4 })
+  })
+
+  it('does not invent a member count when _count is missing', () => {
+    expect(parseBuildingDetail({ id: 'b1', name: 'اصلی' })?.usersCount).toBeNull()
+  })
+})
+
+describe('activeMemberCount', () => {
+  it('counts only active users of the selected building', () => {
+    expect(activeMemberCount([
+      { buildingId: 'b1', isActive: true },
+      { buildingId: 'b1', isActive: false },
+      { buildingId: 'b2', isActive: true },
+    ], 'b1')).toBe(1)
+  })
+})

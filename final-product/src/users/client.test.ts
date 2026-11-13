@@ -96,6 +96,15 @@ describe('userApi', () => {
     expect((await userApi.get('u1')).username).toBe('emp.u1')
   })
 
+  it('lists members of a building using buildingId and backend total', async () => {
+    const fetchMock = vi.fn(async () => jsonPage(1, 2, [user('u1'), user('u2')], 100))
+    vi.stubGlobal('fetch', fetchMock)
+    const listed = await userApi.listAll({ buildingId: 'b1' })
+    expect(String((fetchMock.mock.calls as unknown as Array<[string]>)[0][0])).toContain('buildingId=b1')
+    expect(listed.total).toBe(2)
+    expect(listed.items.every((item) => item.buildingId === 'b1')).toBe(true)
+  })
+
   it('does not treat a reset response without ok as success', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ passwordHash: 'nope' }), { status: 200 })))
     await expect(userApi.resetPassword('u1', 'Newpass12')).rejects.toMatchObject({ kind: 'http' })
