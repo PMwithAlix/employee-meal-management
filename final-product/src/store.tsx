@@ -1,6 +1,6 @@
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react'
 import { buildMonthMenu, createSnapshot, fullName, PERSONA_ID, ROLE_LABEL, SEED_MONTH } from './data'
-import { defaultMonthDeadlines, isOrderingOpen, type MealDeadline, type MonthDeadlines } from './lib/deadlines'
+import { defaultMonthDeadlines, formatDeadline, isOrderingOpen, type MealDeadline, type MonthDeadlines } from './lib/deadlines'
 import { addMonths, currentDateTime, isPastDate, JALALI_MONTHS, monthKey, type JalaliDate, type JalaliDateTime } from './lib/jalali'
 import { fa } from './lib/text'
 import { can, canAccess, LANDING_PAGE } from './permissions'
@@ -407,9 +407,19 @@ export function StoreProvider({ children, onLogout }: { children: ReactNode; onL
 
   function updateDayOptions(jd: number, meal: MealKind, options: string[]) {
     if (!can(role, 'menu.edit')) return
+    const previous = days.find((day) => day.jd === jd)?.[meal] ?? []
+    if (previous.join('\0') === options.join('\0')) return
     setMenus((map) => {
       const list = map[monthId] ?? days
       return { ...map, [monthId]: list.map((day) => (day.jd === jd ? { ...day, [meal]: options.length ? options : null } : day)) }
+    })
+    pushActivity({
+      actor: personaName,
+      action: meal === 'lunch' ? 'ویرایش گزینه‌های ناهار' : 'ویرایش گزینه‌های شام',
+      target: `${fa(jd)} ${monthName}`,
+      at: 'همین حالا',
+      before: previous.length ? previous.join('، ') : 'بدون گزینه',
+      after: options.length ? options.join('، ') : 'بدون گزینه',
     })
     toast('ذخیره شد')
   }
@@ -521,9 +531,20 @@ export function StoreProvider({ children, onLogout }: { children: ReactNode; onL
     shiftMonth: (delta) => setSelectedMonth((month) => addMonths(month, delta)),
     setMealDeadline: (meal, patch) => {
       if (!can(role, 'menu.edit')) return
+      const current = deadlines[meal]
+      const next = { ...current, ...patch, meal }
+      if (next.relation === current.relation && next.hour === current.hour && next.minute === current.minute) return
       setDeadlinesByMonth((map) => {
-        const current = map[monthId] ?? defaultMonthDeadlines()
-        return { ...map, [monthId]: { ...current, [meal]: { ...current[meal], ...patch, meal } } }
+        const monthDeadlines = map[monthId] ?? defaultMonthDeadlines()
+        return { ...map, [monthId]: { ...monthDeadlines, [meal]: next } }
+      })
+      pushActivity({
+        actor: personaName,
+        action: meal === 'lunch' ? 'تغییر مهلت ناهار' : 'تغییر مهلت شام',
+        target: `${monthName} ${fa(selectedMonth.jy)}`,
+        at: 'همین حالا',
+        before: formatDeadline(current),
+        after: formatDeadline(next),
       })
     },
     selectMeal,
