@@ -1,65 +1,66 @@
 import { authRequest } from '../auth/client'
 import { AuthRequestError } from '../auth/errors'
+import { parseManagedUser, parseResetPasswordResult, type ManagedUser } from './map'
 
 const session = { treatUnauthorizedAsSessionEnd: true as const }
+
+export type DirectoryUser = ManagedUser
+
+export type UserListQuery = {
+  page?: number
+  pageSize?: number
+  role?: string
+  isActive?: boolean
+  username?: string
+  buildingId?: string
+}
 
 function asRecord(value: unknown) {
   return value && typeof value === 'object' ? (value as Record<string, unknown>) : null
 }
 
-export interface DirectoryUser {
-  id: string
-  username: string
-  role: string
-  buildingId: string | null
-  isActive: boolean
-}
+const incomplete = () => new AuthRequestError('http', 'بارگذاری فهرست کاربران کامل نشد.')
+const invalidUser = () => new AuthRequestError('http', 'پاسخ کاربر نامعتبر است.')
 
-function parseUser(value: unknown): DirectoryUser | null {
-  const body = asRecord(value)
-  if (!body || typeof body.id !== 'string' || typeof body.username !== 'string') return null
-  if (typeof body.role !== 'string') return null
+function parseListed(body: unknown) {
+  const record = asRecord(body)
+  if (!record || !Array.isArray(record.items)) throw incomplete()
+  const items: ManagedUser[] = []
+  for (const item of record.items) {
+    const parsed = parseManagedUser(item)
+    if (!parsed) throw incomplete()
+    items.push(parsed)
+  }
   return {
-    id: body.id,
-    username: body.username,
-    role: body.role,
-    buildingId: typeof body.buildingId === 'string' ? body.buildingId : null,
-    isActive: body.isActive === true,
+    items,
+    total: typeof record.total === 'number' ? record.total : Number.NaN,
+    page: typeof record.page === 'number' ? record.page : Number.NaN,
+    pageSize: typeof record.pageSize === 'number' ? record.pageSize : Number.NaN,
   }
 }
 
-const incomplete = () => new AuthRequestError('http', 'بارگذاری فهرست کاربران کامل نشد.')
+function requireUser(value: unknown) {
+  const parsed = parseManagedUser(value)
+  if (!parsed) throw invalidUser()
+  return parsed
+}
 
 export const userApi = {
-  list(query: { page?: number; pageSize?: number; role?: string; isActive?: boolean; username?: string } = {}, signal?: AbortSignal) {
+  list(query: UserListQuery = {}, signal?: AbortSignal) {
     const params = new URLSearchParams()
     params.set('page', String(query.page ?? 1))
     params.set('pageSize', String(query.pageSize ?? 100))
     if (query.role) params.set('role', query.role)
     if (query.isActive !== undefined) params.set('isActive', String(query.isActive))
     if (query.username) params.set('username', query.username)
-    return authRequest<unknown>(`/users?${params.toString()}`, { ...session, signal }).then((body) => {
-      const record = asRecord(body)
-      if (!record || !Array.isArray(record.items)) throw incomplete()
-      const items: DirectoryUser[] = []
-      for (const item of record.items) {
-        const parsed = parseUser(item)
-        if (!parsed) throw incomplete()
-        items.push(parsed)
-      }
-      return {
-        items,
-        total: typeof record.total === 'number' ? record.total : Number.NaN,
-        page: typeof record.page === 'number' ? record.page : Number.NaN,
-        pageSize: typeof record.pageSize === 'number' ? record.pageSize : Number.NaN,
-      }
-    })
+    if (query.buildingId) params.set('buildingId', query.buildingId)
+    return authRequest<unknown>(`/users?${params.toString()}`, { ...session, signal }).then(parseListed)
   },
 
-  async listAll(query: { role?: string; isActive?: boolean } = {}, signal?: AbortSignal) {
+  async listAll(query: Omit<UserListQuery, 'page' | 'pageSize'> = {}, signal?: AbortSignal) {
     const pageSize = 100
     const maxPages = 50
-    const collected: DirectoryUser[] = []
+    const collected: ManagedUser[] = []
     let received = 0
     let page = 1
     let total: number | null = null
@@ -84,5 +85,39 @@ export const userApi = {
     }
     if (total === null || received !== total) throw incomplete()
     return { items: collected, total }
+  },
+
+  get(id: string, signal?: AbortSignal) {
+    return authRequest<unknown>(`/users/${id}`, { ...session, signal }).then(requireUser)
+  },
+
+  create(body: { username: string; password: string; role: string; buildingId: string }, signal?: AbortSignal) {
+    return authRequest<unknown>('/users', { ...session, method: 'POST', body, signal }).then(requireUser)
+  },
+
+  update(id: string, body: { buildingId?: string | null; role?: string }, signal?: AbortSignal) {
+    return authRequest<unknown>(`/users/${id}`, { ...session, method: 'PATCH', body, signal }).then(requireUser)
+  },
+
+  deactivate(id: string, signal?: AbortSignal) {
+    return authRequest<unknown>(`/users/${id}/deactivate`, { ...session, method: 'POST', signal }).then(requireUser)
+  },
+
+  reactivate(id: string, signal?: AbortSignal) {
+    return authRequest<unknown>(`/users/${id}/reactivate`, { ...session, method: 'POST', signal }).then(requireUser)
+  },
+
+  resetPassword(id: string, newPassword: string, signal?: AbortSignal) {
+    return authRequest<unknown>(`/users/${id}/reset-password`, {
+      ...session,
+      method: 'POST',
+      body: { newPassword },
+      signal,
+    }).then((value) => {
+      if (!parseResetPasswordResult(value)) {
+        throw new AuthRequestError('http', 'بازنشانی رمز عبور تأیید نشد.')
+      }
+      return { ok: true as const }
+    })
   },
 }
