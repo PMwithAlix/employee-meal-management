@@ -24,7 +24,7 @@ export const PAGE_TITLES: Record<Page, string> = {
   groups: 'گروه‌های کارکنان',
   reports: 'گزارش‌ها',
   activity: 'تاریخچه فعالیت‌ها',
-  settings: 'تنظیمات',
+  settings: 'حساب کاربری',
 }
 
 export const NAV_ITEMS: Array<{ id: Page; label: string; group: string; icon: LucideIcon }> = [
