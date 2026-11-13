@@ -8,8 +8,26 @@ const sessionSecrets = new Map<string, string>()
 export const DEMO_PASSWORD = 'Kavosh-1405'
 export const ADMIN_ACCOUNT_ID = 'admin'
 
+const USERNAME_CHARS = /^[a-z0-9._-]+$/
+
 export function normalizeUsername(value: string) {
   return value.trim().replace(/[A-Z]/g, (letter) => letter.toLowerCase())
+}
+
+export function sanitizeUsernameInput(value: string) {
+  return value.replace(/[^A-Za-z0-9._-]/g, '').replace(/[A-Z]/g, (letter) => letter.toLowerCase())
+}
+
+export function usernameIssue(value: string) {
+  const username = normalizeUsername(value)
+  if (!username) return 'نام کاربری را وارد کنید.'
+  if (!USERNAME_CHARS.test(username)) return 'نام کاربری فقط می‌تواند حروف انگلیسی، عدد، نقطه، خط تیره یا زیرخط باشد.'
+  return ''
+}
+
+export function usernameInitials(username: string) {
+  const value = normalizeUsername(username)
+  return (value.slice(0, 2) || '?').toUpperCase()
 }
 
 export function passwordIssue(value: string) {

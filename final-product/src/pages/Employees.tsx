@@ -4,7 +4,7 @@ import { CredentialHandoff } from '../components/CredentialHandoff'
 import { SecretField } from '../components/SecretField'
 import { Badge, Button, Dialog, Empty, Field, controlClass } from '../components/ui'
 import { fullName } from '../data'
-import { generatePassword, normalizeUsername, passwordIssue } from '../lib/credentials'
+import { generatePassword, normalizeUsername, passwordIssue, sanitizeUsernameInput, usernameIssue } from '../lib/credentials'
 import { can } from '../permissions'
 import { cn } from '../lib/text'
 import { useApp } from '../store'
@@ -17,6 +17,7 @@ export function EmployeesPage() {
   const [status, setStatus] = useState<'all' | 'active' | 'inactive'>('all')
   const [editing, setEditing] = useState<string | 'new' | null>(null)
   const [resetting, setResetting] = useState(false)
+  const [resetHandoff, setResetHandoff] = useState<{ username: string; password: string } | null>(null)
   const [selected, setSelected] = useState<string | null>(app.employees[0]?.id ?? null)
   const rows = useMemo(() => app.employees.filter((employee) => {
     const blob = `${fullName(employee)} ${employee.username}`
@@ -111,7 +112,21 @@ export function EmployeesPage() {
         </aside>
       )}
       {editing && <EmployeeForm id={editing === 'new' ? undefined : editing} onClose={() => setEditing(null)} />}
-      {resetting && current && <ResetPasswordDialog employeeId={current.id} onClose={() => setResetting(false)} />}
+      {resetting && current && (
+        <ResetPasswordDialog
+          employeeId={current.id}
+          onClose={() => setResetting(false)}
+          onReset={(username, password) => {
+            setResetting(false)
+            setResetHandoff({ username, password })
+          }}
+        />
+      )}
+      {resetHandoff && (
+        <Dialog open title="رمز جدید برای تحویل" onClose={() => setResetHandoff(null)}>
+          <CredentialHandoff username={resetHandoff.username} password={resetHandoff.password} title="رمز عبور در این نشست بازنشانی شد." onDone={() => setResetHandoff(null)} />
+        </Dialog>
+      )}
     </div>
   )
 }
@@ -128,6 +143,7 @@ function Row({ label, value, ltr }: { label: string; value: string; ltr?: boolea
 function EmployeeForm({ id, onClose }: { id?: string; onClose: () => void }) {
   const app = useApp()
   const current = app.employees.find((employee) => employee.id === id)
+  const creating = !id
   const [firstName, setFirstName] = useState(current?.firstName ?? '')
   const [lastName, setLastName] = useState(current?.lastName ?? '')
   const [username, setUsername] = useState(current?.username ?? '')
@@ -140,10 +156,8 @@ function EmployeeForm({ id, onClose }: { id?: string; onClose: () => void }) {
   const normalized = normalizeUsername(username)
   const duplicate = app.employees.some((employee) => normalizeUsername(employee.username) === normalized && employee.id !== id)
   const fields = {
-    firstName: firstName.trim() ? '' : 'نام را وارد کنید.',
-    lastName: lastName.trim() ? '' : 'نام خانوادگی را وارد کنید.',
-    username: !normalized ? 'نام کاربری را وارد کنید.' : duplicate ? 'این نام کاربری قبلاً ثبت شده است.' : '',
-    password: !id ? passwordIssue(password) : '',
+    username: usernameIssue(normalized) || (duplicate ? 'این نام کاربری قبلاً ثبت شده است.' : ''),
+    password: creating ? passwordIssue(password) : '',
     building: buildingId ? '' : 'ساختمان را انتخاب کنید.',
   }
 
@@ -156,30 +170,43 @@ function EmployeeForm({ id, onClose }: { id?: string; onClose: () => void }) {
         className="grid gap-3 sm:grid-cols-2"
         onSubmit={(event) => {
           event.preventDefault()
-          if (fields.firstName || fields.lastName || fields.username || fields.password || fields.building) {
+          if (fields.username || fields.password || fields.building) {
             setTried(true)
             return
           }
-          const message = app.saveEmployee({ id, firstName, lastName, username: normalized, buildingId, groupIds, initialPassword: id ? undefined : password })
+          const message = app.saveEmployee({
+            id,
+            firstName: creating ? '' : firstName,
+            lastName: creating ? '' : lastName,
+            username: normalized,
+            buildingId,
+            groupIds,
+            initialPassword: creating ? password : undefined,
+          })
           if (message) setError(message)
-          else if (!id) setHandoff({ username: normalized, password })
+          else if (creating) setHandoff({ username: normalized, password })
           else onClose()
         }}
       >
-        <Field label="نام"><input className={controlClass} value={firstName} onChange={(event) => setFirstName(event.target.value)} />{tried && fields.firstName && <p className="mt-1 text-sm text-danger">{fields.firstName}</p>}</Field>
-        <Field label="نام خانوادگی"><input className={controlClass} value={lastName} onChange={(event) => setLastName(event.target.value)} />{tried && fields.lastName && <p className="mt-1 text-sm text-danger">{fields.lastName}</p>}</Field>
+        {!creating && (
+          <>
+            <Field label="نام"><input className={controlClass} value={firstName} onChange={(event) => setFirstName(event.target.value)} /></Field>
+            <Field label="نام خانوادگی"><input className={controlClass} value={lastName} onChange={(event) => setLastName(event.target.value)} /></Field>
+          </>
+        )}
         <Field label="نام کاربری">
           <input
             className={controlClass}
             dir="ltr"
             value={username}
-            onChange={(event) => setUsername(event.target.value.replace(/[A-Z]/g, (letter) => letter.toLowerCase()))}
+            autoComplete="off"
+            onChange={(event) => setUsername(sanitizeUsernameInput(event.target.value))}
             onBlur={() => setUsername(normalized)}
           />
-          <p className="mt-1 text-xs text-muted">حروف انگلیسی کوچک ذخیره می‌شود{normalized ? `، مثل ${normalized}` : ''}.</p>
+          <p className="mt-1 text-xs text-muted">فقط حروف انگلیسی، عدد، نقطه، خط تیره و زیرخط. حروف بزرگ به کوچک تبدیل می‌شوند.</p>
           {(tried || duplicate) && fields.username && <p className="mt-1 text-sm text-danger">{fields.username}</p>}
         </Field>
-        {!id && (
+        {creating && (
           <div className="sm:col-span-2">
             <SecretField
               label="رمز عبور اولیه"
@@ -235,22 +262,26 @@ function EmployeeForm({ id, onClose }: { id?: string; onClose: () => void }) {
   )
 }
 
-function ResetPasswordDialog({ employeeId, onClose }: { employeeId: string; onClose: () => void }) {
+function ResetPasswordDialog({
+  employeeId,
+  onClose,
+  onReset,
+}: {
+  employeeId: string
+  onClose: () => void
+  onReset: (username: string, password: string) => void
+}) {
   const app = useApp()
   const employee = app.employees.find((item) => item.id === employeeId)
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
   const [tried, setTried] = useState(false)
   const [saving, setSaving] = useState(false)
-  const [handoff, setHandoff] = useState<string | null>(null)
   const issue = passwordIssue(password)
 
   if (!employee) return null
   return (
-    <Dialog open title={handoff ? 'رمز جدید برای تحویل' : 'بازنشانی رمز عبور'} onClose={onClose}>
-      {handoff ? (
-        <CredentialHandoff username={employee.username} password={handoff} title={`رمز ${fullName(employee)} در این نشست بازنشانی شد.`} onDone={onClose} />
-      ) : (
+    <Dialog open title="بازنشانی رمز عبور" onClose={onClose}>
         <form
           className="space-y-3"
           onSubmit={(event) => {
@@ -261,10 +292,13 @@ function ResetPasswordDialog({ employeeId, onClose }: { employeeId: string; onCl
             const message = app.resetEmployeePassword(employeeId, password)
             setSaving(false)
             if (message) setError(message)
-            else setHandoff(password)
+            else onReset(employee.username, password)
           }}
         >
           <p className="text-sm text-muted">رمز فعلی کارمند لازم نیست. پس از تأیید، اعلان برای همان کارمند ساخته می‌شود و رمز در اعلان نمی‌آید.</p>
+          <Field label="نام کاربری">
+            <input className={controlClass} dir="ltr" value={employee.username} readOnly />
+          </Field>
           <SecretField
             label="رمز عبور جدید"
             value={password}
@@ -288,7 +322,6 @@ function ResetPasswordDialog({ employeeId, onClose }: { employeeId: string; onCl
             <Button type="submit" disabled={saving}>{saving ? 'در حال ذخیره' : 'تأیید بازنشانی'}</Button>
           </div>
         </form>
-      )}
     </Dialog>
   )
 }

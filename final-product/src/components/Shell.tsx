@@ -9,6 +9,7 @@ import {
   X,
 } from 'lucide-react'
 import { PERSONA_ID, ROLE_LABEL } from '../data'
+import { usernameInitials } from '../lib/credentials'
 import { canAccess, ROLES } from '../permissions'
 import { NAV_ITEMS, PAGE_TITLES } from '../navigation'
 import { useApp } from '../store'
@@ -198,19 +199,18 @@ export function Shell() {
             </div>
             <div className="relative">
               <button className="flex h-11 shrink-0 items-center gap-2 rounded-md px-1.5 hover:bg-surface" aria-label="حساب" aria-expanded={profileOpen} onClick={() => { setProfileOpen((value) => !value); setNotesOpen(false) }}>
-                <span className="grid h-7 w-7 place-items-center rounded-full bg-surface2 text-xs">{app.personaName.slice(0, 1)}</span>
-                <span className="hidden text-start sm:block">
-                  <span className="block text-xs font-medium leading-4">{app.personaName}</span>
+                <span className="grid h-7 w-7 place-items-center rounded-full bg-surface2 text-[11px]">{usernameInitials(app.personaUsername)}</span>
+                <span className="hidden min-w-0 text-start sm:block">
+                  <span className="block truncate text-xs font-medium leading-4" dir="ltr">{app.personaUsername}</span>
                   <span className="block text-[11px] leading-4 text-muted">{ROLE_LABEL[app.role]}</span>
                 </span>
               </button>
               {profileOpen && (
                 <div className="absolute end-0 z-30 mt-1 w-[min(18rem,calc(100vw-1.5rem))] rounded-md border border-line bg-surface p-2 text-sm shadow-card">
                   <div className="flex items-center gap-2 px-2 py-2">
-                    <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-surface2 text-sm">{app.personaName.slice(0, 1)}</span>
+                    <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-surface2 text-sm">{usernameInitials(app.personaUsername)}</span>
                     <span className="min-w-0">
-                      <span className="block truncate font-medium">{app.personaName}</span>
-                      <span className="block truncate text-xs text-muted" dir="ltr">{app.personaUsername}</span>
+                      <span className="block truncate font-medium" dir="ltr">{app.personaUsername}</span>
                     </span>
                   </div>
                   <p className="px-2 text-xs text-muted">{ROLE_LABEL[app.role]}</p>

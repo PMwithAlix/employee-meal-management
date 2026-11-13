@@ -1,5 +1,4 @@
 import { useState } from 'react'
-import { ROLE_LABEL } from '../data'
 import { DEMO_PASSWORD, passwordIssue } from '../lib/credentials'
 import { useApp } from '../store'
 import { Button, Segmented } from '../components/ui'
@@ -26,13 +25,10 @@ export function SettingsPage() {
       <div className="space-y-3">
         <section className="rounded-md border border-line bg-surface p-4">
           <h2 className="text-sm font-semibold">اطلاعات حساب</h2>
-          <dl className="mt-3 grid gap-2 text-sm sm:grid-cols-2">
-            <Info label="نام" value={app.personaName} />
+          <dl className="mt-3 grid gap-2 text-sm">
             <Info label="نام کاربری" value={app.personaUsername} ltr />
-            <Info label="نقش" value={ROLE_LABEL[app.role]} />
-            <Info label="ساختمان" value={app.buildingName} />
           </dl>
-          <p className="mt-3 text-xs text-muted">سامانه شماره موبایل و ایمیل جمع نمی‌کند. ویرایش مشخصات حساب از مدیریت کارکنان انجام می‌شود.</p>
+          <p className="mt-3 text-xs text-muted">شناسه قابل مشاهده حساب، نام کاربری است. سامانه شماره موبایل و ایمیل جمع نمی‌کند.</p>
         </section>
 
         <section className="rounded-md border border-line bg-surface p-4">

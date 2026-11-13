@@ -2,7 +2,7 @@ import { createContext, useContext, useEffect, useMemo, useState, type ReactNode
 import { buildMonthMenu, createSnapshot, fullName, PERSONA_ID, ROLE_LABEL, SEED_MONTH } from './data'
 import { defaultMonthDeadlines, formatDeadline, isOrderingOpen, type MealDeadline, type MonthDeadlines } from './lib/deadlines'
 import { addMonths, currentDateTime, isPastDate, JALALI_MONTHS, monthKey, type JalaliDate, type JalaliDateTime } from './lib/jalali'
-import { ADMIN_ACCOUNT_ID, normalizeUsername, passwordIssue, setSessionSecret, verifySessionSecret } from './lib/credentials'
+import { ADMIN_ACCOUNT_ID, normalizeUsername, passwordIssue, setSessionSecret, usernameIssue, verifySessionSecret } from './lib/credentials'
 import { fa } from './lib/text'
 import { can, canAccess, LANDING_PAGE } from './permissions'
 import type {
@@ -68,7 +68,15 @@ interface StoreValue {
   setMealDeadline: (meal: MealKind, patch: Partial<Pick<MealDeadline, 'relation' | 'hour' | 'minute'>>) => void
   selectMeal: (employeeId: string, jd: number, meal: MealKind, choice: string | null, scope: 'self' | 'ops') => boolean
   rateMeal: (orderId: string, score: number, comment: string) => boolean
-  saveEmployee: (input: Omit<Employee, 'id' | 'created' | 'active'> & { id?: string; initialPassword?: string }) => string | null
+  saveEmployee: (input: {
+    id?: string
+    firstName?: string
+    lastName?: string
+    username: string
+    buildingId: string
+    groupIds: string[]
+    initialPassword?: string
+  }) => string | null
   changePassword: (current: string, next: string) => string | null
   resetEmployeePassword: (employeeId: string, password: string) => string | null
   setEmployeeActive: (id: string, active: boolean) => void
@@ -251,17 +259,31 @@ export function StoreProvider({ children, onLogout }: { children: ReactNode; onL
     return true
   }
 
-  function saveEmployee(input: Omit<Employee, 'id' | 'created' | 'active'> & { id?: string; initialPassword?: string }) {
+  function saveEmployee(input: {
+    id?: string
+    firstName?: string
+    lastName?: string
+    username: string
+    buildingId: string
+    groupIds: string[]
+    initialPassword?: string
+  }) {
     if (!can(role, 'employee.edit')) return 'اجازه این کار را ندارید.'
     const username = normalizeUsername(input.username)
+    const nameError = usernameIssue(username)
+    if (nameError) return nameError
     const duplicate = employees.some((item) => normalizeUsername(item.username) === username && item.id !== input.id)
-    if (!input.firstName.trim() || !input.lastName.trim() || !username || !input.buildingId || duplicate) return 'نام، نام خانوادگی، نام کاربری یکتا و ساختمان لازم است.'
+    if (duplicate) return 'این نام کاربری قبلاً ثبت شده است.'
+    if (!input.buildingId) return 'ساختمان را انتخاب کنید.'
+    const previous = input.id ? employees.find((item) => item.id === input.id) : undefined
+    const firstName = (input.firstName ?? previous?.firstName ?? '').trim()
+    const lastName = (input.lastName ?? previous?.lastName ?? '').trim()
     if (input.id) {
-      const previous = employees.find((item) => item.id === input.id)
+      if (!previous) return 'کارمند پیدا نشد.'
       setEmployees((list) => list.map((item) => (item.id === input.id ? {
         ...item,
-        firstName: input.firstName.trim(),
-        lastName: input.lastName.trim(),
+        firstName,
+        lastName,
         username,
         buildingId: input.buildingId,
         groupIds: input.groupIds,
@@ -269,10 +291,10 @@ export function StoreProvider({ children, onLogout }: { children: ReactNode; onL
       pushActivity({
         actor: personaName,
         action: 'ویرایش کارمند',
-        target: `${input.firstName.trim()} ${input.lastName.trim()}`,
+        target: username,
         at: 'همین حالا',
-        before: previous ? fullName(previous) : '—',
-        after: `${input.firstName.trim()} ${input.lastName.trim()}`,
+        before: previous.username,
+        after: username,
       })
     } else {
       const passwordError = passwordIssue(input.initialPassword ?? '')
@@ -281,8 +303,8 @@ export function StoreProvider({ children, onLogout }: { children: ReactNode; onL
       setEmployees((list) => [
         {
           id,
-          firstName: input.firstName.trim(),
-          lastName: input.lastName.trim(),
+          firstName,
+          lastName,
           username,
           buildingId: input.buildingId,
           groupIds: input.groupIds,
@@ -295,7 +317,7 @@ export function StoreProvider({ children, onLogout }: { children: ReactNode; onL
       pushActivity({
         actor: personaName,
         action: 'ایجاد حساب کارمند',
-        target: `${input.firstName.trim()} ${input.lastName.trim()}`,
+        target: username,
         at: 'همین حالا',
         before: '—',
         after: username,
