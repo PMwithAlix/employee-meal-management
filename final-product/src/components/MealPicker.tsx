@@ -1,14 +1,14 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { cn } from '../lib/text'
-import type { MealKind } from '../types'
+import type { MealKind, MealOptionChoice } from '../types'
 
 export function MealPicker({
   open,
   trigger,
   kind,
   options,
-  current,
+  currentId,
   locked,
   ops,
   onClose,
@@ -17,12 +17,12 @@ export function MealPicker({
   open: boolean
   trigger: HTMLElement | null
   kind: MealKind
-  options: string[]
-  current: string | null
+  options: MealOptionChoice[]
+  currentId: string | null
   locked: boolean
   ops: boolean
   onClose: () => void
-  onSave: (choice: string | null) => boolean
+  onSave: (menuItemId: string | null) => boolean | Promise<boolean>
 }) {
   const panelRef = useRef<HTMLDivElement>(null)
   const tokenRef = useRef(`picker-${Math.random().toString(36).slice(2)}`)
@@ -114,16 +114,20 @@ export function MealPicker({
 
   function pick(next: string | null) {
     if (saving) return
-    if (next === current) {
+    if (next === currentId) {
       onClose()
       return
     }
     setSaving(true)
     setFailed(false)
-    const saved = onSave(next)
-    setSaving(false)
-    if (saved) onClose()
-    else setFailed(true)
+    void Promise.resolve(onSave(next)).then((saved) => {
+      setSaving(false)
+      if (saved) onClose()
+      else setFailed(true)
+    }).catch(() => {
+      setSaving(false)
+      setFailed(true)
+    })
   }
 
   if (!open) return null
@@ -139,27 +143,27 @@ export function MealPicker({
         <p className="px-3 py-1.5 text-[11px] text-warn">مهلت گذشته است. این تغییر به‌عنوان عملیات پشتیبانی ثبت می‌شود.</p>
       )}
       {options.map((option) => {
-        const active = current === option
+        const active = currentId === option.id
         return (
           <button
-            key={option}
+            key={option.id}
             type="button"
             role="option"
             aria-selected={active}
             disabled={saving}
-            onClick={() => pick(option)}
+            onClick={() => pick(option.id)}
             className={cn(
               'flex min-h-11 w-full items-center gap-2 px-3 text-start text-sm',
               active ? 'bg-brandsubtle font-medium text-ink' : 'text-ink hover:bg-surface2',
               saving && 'opacity-60',
             )}
           >
-            <span className="min-w-0 flex-1 break-words">{option}</span>
+            <span className="min-w-0 flex-1 break-words">{option.title}</span>
             {active && <span className="shrink-0 text-[11px] text-muted">ثبت‌شده</span>}
           </button>
         )
       })}
-      {current && (
+      {currentId && (
         <button
           type="button"
           role="option"

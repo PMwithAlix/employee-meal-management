@@ -497,8 +497,8 @@ function StaffOrders() {
           jd={target.jd}
           weekday={day.weekday}
           monthName={JALALI_MONTHS[day.jm - 1]}
-          options={options}
-          current={current?.choice ?? null}
+          options={options.map((title) => ({ id: title, title }))}
+          currentId={current?.choice ?? null}
           locked={!isMealOpen(day, target.meal, app.deadlines, app.now)}
           ops
           who={fullName(app.employees.find((employee) => employee.id === employeeId) ?? { firstName: 'کارمند', lastName: '' })}

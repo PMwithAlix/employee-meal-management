@@ -6,6 +6,10 @@ import { canGiveFeedback } from './lib/orders'
 import { ADMIN_ACCOUNT_ID, normalizeUsername, passwordIssue, setSessionSecret, usernameIssue, verifySessionSecret } from './lib/credentials'
 import { fa } from './lib/text'
 import type { SessionUser } from './auth/roles'
+import { AuthRequestError } from './auth/errors'
+import { formatGregorianDate } from './menus/map'
+import { orderApi } from './orders/client'
+import { deadlineKey } from './orders/map'
 import { can, canAccess, LANDING_PAGE } from './permissions'
 import type {
   ActivityItem,
@@ -20,6 +24,7 @@ import type {
   MenuQuery,
   MenuView,
   Note,
+  Order,
   Page,
   ReplacePolicy,
   Role,
@@ -48,6 +53,11 @@ interface StoreValue {
   employees: Employee[]
   days: ReturnType<typeof createSnapshot>['days']
   orders: ReturnType<typeof createSnapshot>['orders']
+  myOrders: Order[]
+  myOrdersStatus: 'loading' | 'ready' | 'unavailable' | 'error'
+  myOrdersMessage: string
+  orderingKey: string | null
+  selfId: string
   guests: GuestOrder[]
   activity: ActivityItem[]
   notes: Note[]
@@ -71,7 +81,9 @@ interface StoreValue {
   shiftMonth: (delta: number) => void
   setMealDeadline: (meal: MealKind, patch: Partial<Pick<MealDeadline, 'relation' | 'hour' | 'minute'>>) => void
   setMealServing: (meal: MealKind, clock: string) => void
-  selectMeal: (employeeId: string, jd: number, meal: MealKind, choice: string | null, scope: 'self' | 'ops') => boolean
+  selectMeal: (employeeId: string, jd: number, meal: MealKind, choice: string | null, scope: 'self' | 'ops', menuItemId?: string | null) => Promise<boolean>
+  mealDeadlineAt: (day: Pick<DayMenu, 'jy' | 'jm' | 'jd' | 'gregorianDate'>, meal: MealKind) => string | null
+  retryMyOrders: () => void
   rateMeal: (orderId: string, score: number, comment: string) => boolean
   saveEmployee: (input: {
     id?: string
@@ -147,6 +159,12 @@ export function StoreProvider({
   const [groups, setGroups] = useState(initial.groups)
   const [employees, setEmployees] = useState(initial.employees)
   const [orders, setOrders] = useState(initial.orders)
+  const [myOrders, setMyOrders] = useState<Order[]>([])
+  const [myOrdersStatus, setMyOrdersStatus] = useState<'loading' | 'ready' | 'unavailable' | 'error'>('loading')
+  const [myOrdersMessage, setMyOrdersMessage] = useState('')
+  const [myOrdersBoot, setMyOrdersBoot] = useState(0)
+  const [orderingKey, setOrderingKey] = useState<string | null>(null)
+  const [deadlineMap, setDeadlineMap] = useState<Record<string, string>>({})
   const [guests, setGuests] = useState(initial.guests)
   const [activity, setActivity] = useState(initial.activity)
   const [notes, setNotes] = useState(initial.notes)
@@ -164,6 +182,37 @@ export function StoreProvider({
     const id = window.setInterval(() => setNow(currentDateTime()), 15000)
     return () => window.clearInterval(id)
   }, [])
+
+  useEffect(() => {
+    const controller = new AbortController()
+    setMyOrdersStatus('loading')
+    setMyOrdersMessage('')
+    void Promise.all([
+      orderApi.listMine({ pageSize: 100 }, controller.signal),
+      orderApi.deadlines(selectedMonth.jy, selectedMonth.jm, controller.signal),
+    ])
+      .then(([listed, rows]) => {
+        if (controller.signal.aborted) return
+        setMyOrders(listed.orders)
+        const next: Record<string, string> = {}
+        for (const row of rows) next[deadlineKey(row.mealDate, row.mealType)] = row.deadlineAt
+        setDeadlineMap(next)
+        setMyOrdersStatus('ready')
+      })
+      .catch((error: unknown) => {
+        if (controller.signal.aborted) return
+        setMyOrders([])
+        setDeadlineMap({})
+        if (error instanceof AuthRequestError && error.kind === 'network') {
+          setMyOrdersStatus('unavailable')
+          setMyOrdersMessage(error.message)
+          return
+        }
+        setMyOrdersStatus('error')
+        setMyOrdersMessage(error instanceof AuthRequestError ? error.message : 'بارگذاری سفارش‌ها انجام نشد.')
+      })
+    return () => controller.abort()
+  }, [myOrdersBoot, selectedMonth.jy, selectedMonth.jm, session.id])
 
   const monthId = monthKey(selectedMonth)
   const days = menus[monthId] ?? buildMonthMenu(selectedMonth)
@@ -204,15 +253,60 @@ export function StoreProvider({
     setMobileNav(false)
   }
 
-  function selectMeal(employeeId: string, jd: number, meal: MealKind, choice: string | null, scope: 'self' | 'ops') {
+  function mealDeadlineAt(day: Pick<DayMenu, 'jy' | 'jm' | 'jd' | 'gregorianDate'>, meal: MealKind) {
+    const date = day.gregorianDate ?? formatGregorianDate(day.jy, day.jm, day.jd)
+    return deadlineMap[deadlineKey(date, meal)] ?? null
+  }
+
+  function upsertMyOrder(next: Order) {
+    setMyOrders((list) => {
+      const rest = list.filter((item) => item.id !== next.id)
+      return [...rest, next]
+    })
+  }
+
+  async function selectMeal(employeeId: string, jd: number, meal: MealKind, choice: string | null, scope: 'self' | 'ops', menuItemId?: string | null) {
     const mealDate = { ...selectedMonth, jd }
-    const locked = !isOrderingOpen(mealDate, deadlines[meal], now)
+    const gregorian = formatGregorianDate(selectedMonth.jy, selectedMonth.jm, jd)
+    const locked = mealDeadlineAt({ ...selectedMonth, jd, gregorianDate: gregorian }, meal)
+      ? Date.now() >= Date.parse(mealDeadlineAt({ ...selectedMonth, jd, gregorianDate: gregorian }, meal)!)
+      : !isOrderingOpen(mealDate, deadlines[meal], now)
     if (scope === 'self') {
-      if (!can(role, 'order.self') || employeeId !== personaId) return false
+      if (!can(role, 'order.self') || employeeId !== session.id) return false
       if (locked && !can(role, 'order.ops')) return false
-    } else if (!can(role, 'order.ops')) {
-      return false
+      const key = `${jd}-${meal}`
+      if (orderingKey) return false
+      const current = myOrders.find((item) => item.employeeId === session.id && item.jy === selectedMonth.jy && item.jm === selectedMonth.jm && item.jd === jd && item.meal === meal && item.cycleStatus !== 'CANCELLED')
+      if (menuItemId === undefined) return false
+      if (!current && menuItemId === null) return false
+      if (current && current.menuItemId === menuItemId) return true
+      setOrderingKey(key)
+      try {
+        let saved: Order
+        if (menuItemId === null && current) {
+          saved = await orderApi.cancel(current.id)
+        } else if (current && menuItemId) {
+          saved = await orderApi.update(current.id, menuItemId)
+        } else if (menuItemId) {
+          saved = await orderApi.create({
+            mealDate: gregorian,
+            mealType: meal === 'lunch' ? 'LUNCH' : 'DINNER',
+            menuItemId,
+          })
+        } else {
+          return false
+        }
+        upsertMyOrder(saved)
+        toast(menuItemId === null ? 'انتخاب حذف شد' : 'سفارش ذخیره شد')
+        return true
+      } catch (error) {
+        toast(error instanceof AuthRequestError ? error.message : 'ذخیره سفارش انجام نشد.')
+        return false
+      } finally {
+        setOrderingKey(null)
+      }
     }
+    if (!can(role, 'order.ops')) return false
     const current = orders.find((item) => item.employeeId === employeeId && item.jy === selectedMonth.jy && item.jm === selectedMonth.jm && item.jd === jd && item.meal === meal)
     const employee = employees.find((item) => item.id === employeeId)
     if (!employee || (current && current.choice === choice) || (!current && choice === null)) return false
@@ -262,9 +356,14 @@ export function StoreProvider({
   }
 
   function rateMeal(orderId: string, score: number, comment: string) {
-    const order = orders.find((item) => item.id === orderId)
-    if (!can(role, 'order.rate') || !order || order.employeeId !== personaId || !canGiveFeedback(order, now, mealServings)) return false
-    setOrders((list) => list.map((item) => (item.id === orderId ? { ...item, rating: { score, comment: comment.trim() } } : item)))
+    const order = myOrders.find((item) => item.id === orderId) ?? orders.find((item) => item.id === orderId)
+    if (!can(role, 'order.rate') || !order || order.employeeId !== session.id || !canGiveFeedback(order, now, mealServings)) return false
+    const patch = { score, comment: comment.trim() }
+    if (myOrders.some((item) => item.id === orderId)) {
+      setMyOrders((list) => list.map((item) => (item.id === orderId ? { ...item, rating: patch } : item)))
+    } else {
+      setOrders((list) => list.map((item) => (item.id === orderId ? { ...item, rating: patch } : item)))
+    }
     pushActivity({
       actor: personaName,
       action: order.rating ? 'ویرایش دیدگاه' : 'ثبت دیدگاه',
@@ -622,6 +721,11 @@ export function StoreProvider({
     employees,
     days,
     orders,
+    myOrders,
+    myOrdersStatus,
+    myOrdersMessage,
+    orderingKey,
+    selfId: session.id,
     guests,
     activity,
     notes,
@@ -667,6 +771,8 @@ export function StoreProvider({
       })
     },
     selectMeal,
+    mealDeadlineAt,
+    retryMyOrders: () => setMyOrdersBoot((value) => value + 1),
     rateMeal,
     saveEmployee,
     changePassword,

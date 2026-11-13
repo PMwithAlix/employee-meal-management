@@ -50,6 +50,11 @@ export interface Employee {
   created: string
 }
 
+export interface MealOptionChoice {
+  id: string
+  title: string
+}
+
 export interface DayMenu {
   jd: number
   jy: number
@@ -57,6 +62,9 @@ export interface DayMenu {
   weekday: string
   lunch: string[] | null
   dinner: string[] | null
+  lunchChoices?: MealOptionChoice[] | null
+  dinnerChoices?: MealOptionChoice[] | null
+  gregorianDate?: string
 }
 
 export interface Rating {
@@ -73,6 +81,8 @@ export interface Order {
   jd: number
   meal: MealKind
   choice: string | null
+  menuItemId?: string | null
+  cycleStatus?: 'ACTIVE' | 'CANCELLED' | null
   rating: Rating | null
 }
 

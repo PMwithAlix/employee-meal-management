@@ -7,7 +7,7 @@ import { WEEKDAYS } from '../data'
 import { usePublishedMenu } from '../menus/usePublishedMenu'
 import { useApp } from '../store'
 import { addDays, isSameDate, JALALI_MONTHS } from '../lib/jalali'
-import { findOrder, isMealOpen, rowMatches } from '../lib/orders'
+import { findOrder, isMealOpen, mealChoices, rowMatches } from '../lib/orders'
 import { formatDeadline } from '../lib/deadlines'
 import { can } from '../permissions'
 import { cn, fa } from '../lib/text'
@@ -17,7 +17,7 @@ export function MonthlyMenuPage() {
   const app = useApp()
   const published = usePublishedMenu(app.selectedMonth.jy, app.selectedMonth.jm)
   const [filtersOpen, setFiltersOpen] = useState(false)
-  const id = app.personaId
+  const id = app.role === 'admin' ? null : app.selfId
 
   if (!id) {
     return (
@@ -32,7 +32,7 @@ export function MonthlyMenuPage() {
   }
 
   const days = published.pickerDays
-  const visible = days.filter((day) => rowMatches(day, app.orders, id, app.menuQuery, app.deadlines, app.now))
+  const visible = days.filter((day) => rowMatches(day, app.myOrders, id, app.menuQuery, app.deadlines, app.now))
   const active = app.menuQuery.meal !== 'all' || app.menuQuery.status !== 'all' || app.menuQuery.q.trim()
 
   return (
@@ -102,6 +102,9 @@ export function MonthlyMenuPage() {
         )}
       </div>
 
+      {app.myOrdersStatus === 'unavailable' && (
+        <Empty title="سفارش‌ها از سامانه خوانده نشد" body={app.myOrdersMessage || 'این به‌معنای حذف سفارش نیست. دوباره تلاش کنید.'} />
+      )}
       {published.status === 'loading' ? (
         <Empty title="در حال بارگذاری منو" body="منوی منتشرشده این ماه از سامانه خوانده می‌شود." />
       ) : published.status === 'unavailable' ? (
@@ -144,8 +147,8 @@ function DayList({ days }: { days: DayMenu[] }) {
           </thead>
           <tbody>
             {days.map((day) => {
-              const lunch = findOrder(app.orders, id, day, day.jd, 'lunch')
-              const dinner = findOrder(app.orders, id, day, day.jd, 'dinner')
+              const lunch = findOrder(app.myOrders, id, day, day.jd, 'lunch')
+              const dinner = findOrder(app.myOrders, id, day, day.jd, 'dinner')
               return (
                 <tr key={day.jd} className={cn('border-t border-divider align-top', isSameDate(day, app.now) && 'bg-brandsubtle')}>
                   <td className="px-3 py-3 font-medium">{fa(day.jd)} {JALALI_MONTHS[day.jm - 1]}</td>
@@ -161,8 +164,8 @@ function DayList({ days }: { days: DayMenu[] }) {
       </div>
       <div className="space-y-2 md:hidden">
         {days.map((day) => {
-          const lunch = findOrder(app.orders, id, day, day.jd, 'lunch')
-          const dinner = findOrder(app.orders, id, day, day.jd, 'dinner')
+          const lunch = findOrder(app.myOrders, id, day, day.jd, 'lunch')
+          const dinner = findOrder(app.myOrders, id, day, day.jd, 'dinner')
           return (
             <article key={day.jd} className={cn('rounded-md border border-line bg-surface p-3', isSameDate(day, app.now) && 'border-primary')}>
               <div className="mb-2 flex items-center justify-between gap-2 text-sm">
@@ -201,8 +204,8 @@ function Calendar({ days, visible }: { days: DayMenu[]; visible: Set<number> }) 
                 {!visible.has(day.jd) && <span className="text-[10px] text-muted">خارج از فیلتر</span>}
               </div>
               <div className="space-y-1">
-                <Cell day={day} meal="lunch" choice={findOrder(app.orders, id, day, day.jd, 'lunch')?.choice ?? null} dense />
-                <Cell day={day} meal="dinner" choice={findOrder(app.orders, id, day, day.jd, 'dinner')?.choice ?? null} dense />
+                <Cell day={day} meal="lunch" choice={findOrder(app.myOrders, id, day, day.jd, 'lunch')?.choice ?? null} dense />
+                <Cell day={day} meal="dinner" choice={findOrder(app.myOrders, id, day, day.jd, 'dinner')?.choice ?? null} dense />
               </div>
             </div>
           ))}
@@ -265,8 +268,8 @@ function MobileCalendar({ days, visible }: { days: DayMenu[]; visible: Set<numbe
   }, [monthStamp])
 
   const selected = days.find((day) => day.jd === selectedJd) ?? days[0]
-  const lunch = selected ? findOrder(app.orders, id, selected, selected.jd, 'lunch') : undefined
-  const dinner = selected ? findOrder(app.orders, id, selected, selected.jd, 'dinner') : undefined
+  const lunch = selected ? findOrder(app.myOrders, id, selected, selected.jd, 'lunch') : undefined
+  const dinner = selected ? findOrder(app.myOrders, id, selected, selected.jd, 'dinner') : undefined
 
   return (
     <div className="lg:hidden">
@@ -293,10 +296,10 @@ function MobileCalendar({ days, visible }: { days: DayMenu[]; visible: Set<numbe
           {days.map((day) => {
             const today = isSameDate(day, app.now)
             const active = day.jd === selectedJd
-            const lunchChoice = findOrder(app.orders, id, day, day.jd, 'lunch')?.choice ?? null
-            const dinnerChoice = findOrder(app.orders, id, day, day.jd, 'dinner')?.choice ?? null
-            const lunchOpen = isMealOpen(day, 'lunch', app.deadlines, app.now)
-            const dinnerOpen = isMealOpen(day, 'dinner', app.deadlines, app.now)
+            const lunchChoice = findOrder(app.myOrders, id, day, day.jd, 'lunch')?.choice ?? null
+            const dinnerChoice = findOrder(app.myOrders, id, day, day.jd, 'dinner')?.choice ?? null
+            const lunchOpen = isMealOpen(day, 'lunch', app.deadlines, app.now, app.mealDeadlineAt(day, 'lunch'))
+            const dinnerOpen = isMealOpen(day, 'dinner', app.deadlines, app.now, app.mealDeadlineAt(day, 'dinner'))
             return (
               <button
                 key={day.jd}
@@ -352,24 +355,27 @@ function MobileCalendar({ days, visible }: { days: DayMenu[]; visible: Set<numbe
 
 function Cell({ day, meal, choice, dense }: { day: DayMenu; meal: MealKind; choice: string | null; dense?: boolean }) {
   const app = useApp()
-  const id = app.personaId
-  const options = day[meal]
+  const id = app.role === 'admin' ? null : app.selfId
+  const options = mealChoices(day, meal)
+  const titles = day[meal]
   const [open, setOpen] = useState(false)
   const triggerRef = useRef<HTMLDivElement>(null)
-  const orphan = Boolean(choice && options && !options.includes(choice))
-  const orderingOpen = isMealOpen(day, meal, app.deadlines, app.now)
-  const canEdit = Boolean(id && options) && (orderingOpen ? can(app.role, 'order.self') : can(app.role, 'order.ops'))
+  const current = id ? findOrder(app.myOrders, id, day, day.jd, meal) : undefined
+  const orphan = Boolean(choice && titles && !titles.includes(choice))
+  const orderingOpen = isMealOpen(day, meal, app.deadlines, app.now, app.mealDeadlineAt(day, meal))
+  const canEdit = Boolean(id && options?.length) && (orderingOpen ? can(app.role, 'order.self') : can(app.role, 'order.ops'))
+  const busy = Boolean(app.orderingKey)
   return (
     <div ref={triggerRef}>
       <MealBlock
         kind={meal}
         choice={choice}
         locked={!orderingOpen}
-        defined={Boolean(options)}
+        defined={Boolean(titles)}
         orphan={orphan}
         dense={dense}
         expanded={open}
-        onSelect={canEdit ? () => setOpen((value) => !value) : undefined}
+        onSelect={canEdit && !busy ? () => setOpen((value) => !value) : undefined}
       />
       {canEdit && options && id && (
         <MealPicker
@@ -377,11 +383,11 @@ function Cell({ day, meal, choice, dense }: { day: DayMenu; meal: MealKind; choi
           trigger={triggerRef.current}
           kind={meal}
           options={options}
-          current={choice}
+          currentId={current?.menuItemId ?? null}
           locked={!orderingOpen}
           ops={can(app.role, 'order.ops')}
           onClose={() => setOpen(false)}
-          onSave={(next) => app.selectMeal(id, day.jd, meal, next, 'self')}
+          onSave={(next) => app.selectMeal(id, day.jd, meal, null, 'self', next)}
         />
       )}
     </div>
@@ -391,7 +397,7 @@ function Cell({ day, meal, choice, dense }: { day: DayMenu; meal: MealKind; choi
 function summary(day: DayMenu, lunch: string | null, dinner: string | null, app: ReturnType<typeof useApp>) {
   if (!day.lunch && !day.dinner) return 'منو تعریف نشده'
   const parts: string[] = []
-  if (day.lunch) parts.push(`ناهار ${lunch ? 'انتخاب شده' : 'انتخاب نشده'}، ${isMealOpen(day, 'lunch', app.deadlines, app.now) ? 'باز' : 'مهلت تمام'}`)
-  if (day.dinner) parts.push(`شام ${dinner ? 'انتخاب شده' : 'انتخاب نشده'}، ${isMealOpen(day, 'dinner', app.deadlines, app.now) ? 'باز' : 'مهلت تمام'}`)
+  if (day.lunch) parts.push(`ناهار ${lunch ? 'انتخاب شده' : 'انتخاب نشده'}، ${isMealOpen(day, 'lunch', app.deadlines, app.now, app.mealDeadlineAt(day, 'lunch')) ? 'باز' : 'مهلت تمام'}`)
+  if (day.dinner) parts.push(`شام ${dinner ? 'انتخاب شده' : 'انتخاب نشده'}، ${isMealOpen(day, 'dinner', app.deadlines, app.now, app.mealDeadlineAt(day, 'dinner')) ? 'باز' : 'مهلت تمام'}`)
   return parts.join(' · ')
 }

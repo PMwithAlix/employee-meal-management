@@ -55,9 +55,9 @@ export function OverviewPage() {
 
 function EmployeeOverview() {
   const app = useApp()
-  const id = app.personaId
+  const id = app.role === 'admin' ? null : app.selfId
   if (!id) return null
-  const mine = app.orders.filter((order) => order.employeeId === id && order.jy === app.selectedMonth.jy && order.jm === app.selectedMonth.jm)
+  const mine = app.myOrders.filter((order) => order.employeeId === id && order.jy === app.selectedMonth.jy && order.jm === app.selectedMonth.jm)
   const lunchCount = mine.filter((order) => order.meal === 'lunch' && order.choice).length
   const dinnerCount = mine.filter((order) => order.meal === 'dinner' && order.choice).length
   const openDays = app.days.filter((day) => (day.lunch && isMealOpen(day, 'lunch', app.deadlines, app.now)) || (day.dinner && isMealOpen(day, 'dinner', app.deadlines, app.now)))
@@ -65,9 +65,9 @@ function EmployeeOverview() {
   const selectedDays = app.days.filter((day) => mine.some((order) => order.jd === day.jd && order.choice))
   const missingLunch = app.days.filter((day) => {
     if (!day.lunch || !isMealOpen(day, 'lunch', app.deadlines, app.now)) return false
-    return !findOrder(app.orders, id, day, day.jd, 'lunch')?.choice
+    return !findOrder(app.myOrders, id, day, day.jd, 'lunch')?.choice
   })
-  const upcomingMeals = upcomingChosenMeals(app.orders, id, app.now, app.mealServings)
+  const upcomingMeals = upcomingChosenMeals(app.myOrders, id, app.now, app.mealServings)
   const passed = app.days.filter((day) => {
     const defined = (['lunch', 'dinner'] as const).filter((meal) => day[meal])
     return defined.length > 0 && defined.every((meal) => !isMealOpen(day, meal, app.deadlines, app.now))

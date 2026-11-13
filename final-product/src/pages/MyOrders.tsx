@@ -1,8 +1,9 @@
 import { useState } from 'react'
 import { Button, Dialog, Empty, MonthBar } from '../components/ui'
 import { SelectMealDialog } from '../components/SelectMealDialog'
+import { usePublishedMenu } from '../menus/usePublishedMenu'
 import { useApp } from '../store'
-import { canGiveFeedback, findOrder, isMealOpen } from '../lib/orders'
+import { canGiveFeedback, findOrder, isMealOpen, mealChoices } from '../lib/orders'
 import type { MonthDeadlines } from '../lib/deadlines'
 import { isSameDate, JALALI_MONTHS, type JalaliDateTime } from '../lib/jalali'
 import { can } from '../permissions'
@@ -11,16 +12,17 @@ import type { DayMenu, MealKind, Order } from '../types'
 
 export function MyOrdersPage() {
   const app = useApp()
-  const id = app.personaId
+  const published = usePublishedMenu(app.selectedMonth.jy, app.selectedMonth.jm)
+  const id = app.role === 'admin' ? null : app.selfId
   const [editing, setEditing] = useState<Order | null>(null)
   const [picking, setPicking] = useState<{ day: DayMenu; meal: MealKind } | null>(null)
   if (!id) return <Empty title="سفارش شخصی ندارید" body="نقش ادمین به ساختمان و سفارش شخصی متصل نیست." />
 
-  const days = [...app.days].reverse().filter((day) => day.lunch || day.dinner)
-  const past = app.past.filter((item) => item.employeeId === id)
-  const pickedDay = picking ? app.days.find((day) => day.jd === picking.day.jd && day.jm === picking.day.jm && day.jy === picking.day.jy) : undefined
-  const pickedOptions = pickedDay && picking ? pickedDay[picking.meal] : null
-  const pickedOrder = pickedDay && picking ? findOrder(app.orders, id, pickedDay, pickedDay.jd, picking.meal) : undefined
+  const days = [...published.pickerDays].reverse().filter((day) => day.lunch || day.dinner)
+  const past = app.myOrders.filter((item) => item.employeeId === id && (item.jy !== app.selectedMonth.jy || item.jm !== app.selectedMonth.jm) && item.choice)
+  const pickedDay = picking ? published.pickerDays.find((day) => day.jd === picking.day.jd && day.jm === picking.day.jm && day.jy === picking.day.jy) : undefined
+  const pickedOptions = pickedDay && picking ? mealChoices(pickedDay, picking.meal) : null
+  const pickedOrder = pickedDay && picking ? findOrder(app.myOrders, id, pickedDay, pickedDay.jd, picking.meal) : undefined
 
   return (
     <div className="space-y-4">
@@ -29,10 +31,24 @@ export function MyOrdersPage() {
           <MonthBar />
           <p className="text-xs text-muted">سفارش‌های خودتان در این ماه. ناهار و شام جدا هستند و دیدگاه هر وعده فقط برای خودتان در این صفحه دیده می‌شود.</p>
         </header>
+        {app.myOrdersStatus === 'loading' && <p className="px-4 py-3 text-sm text-muted">در حال خواندن سفارش‌های شما از سامانه…</p>}
+        {app.myOrdersStatus === 'unavailable' && (
+          <div className="px-4 py-3">
+            <Empty title="سامانه در دسترس نیست" body={app.myOrdersMessage || 'سفارش‌های محلی جایگزین نمی‌شوند.'} />
+            <Button className="mt-2" variant="secondary" onClick={app.retryMyOrders}>تلاش دوباره</Button>
+          </div>
+        )}
+        {app.myOrdersStatus === 'error' && (
+          <div className="px-4 py-3">
+            <Empty title="بارگذاری سفارش انجام نشد" body={app.myOrdersMessage} />
+            <Button className="mt-2" variant="secondary" onClick={app.retryMyOrders}>تلاش دوباره</Button>
+          </div>
+        )}
+        {published.status === 'empty' && <div className="p-4"><Empty title="منوی منتشرشده‌ای برای این ماه نیست" body="تا انتشار منو، سفارشی ثبت نمی‌شود." /></div>}
         <div className="divide-y divide-line">
           {days.map((day) => {
-            const lunch = findOrder(app.orders, id, day, day.jd, 'lunch')
-            const dinner = findOrder(app.orders, id, day, day.jd, 'dinner')
+            const lunch = findOrder(app.myOrders, id, day, day.jd, 'lunch')
+            const dinner = findOrder(app.myOrders, id, day, day.jd, 'dinner')
             return (
               <div key={day.jd} className="grid gap-3 px-4 py-3 md:grid-cols-[8rem_1fr_1fr]">
                 <div>
@@ -44,8 +60,8 @@ export function MyOrdersPage() {
                   name={day.lunch ? lunch?.choice ?? null : undefined}
                   missing={!day.lunch}
                   order={lunch}
-                  status={day.lunch ? (isMealOpen(day, 'lunch', app.deadlines, app.now) ? 'مهلت باز' : 'مهلت تمام') : undefined}
-                  canEdit={canChange(app.role, day, 'lunch', app.deadlines, app.now)}
+                  status={day.lunch ? (isMealOpen(day, 'lunch', app.deadlines, app.now, app.mealDeadlineAt(day, 'lunch')) ? 'مهلت باز' : 'مهلت تمام') : undefined}
+                  canEdit={canChange(app.role, day, 'lunch', app.deadlines, app.now, app.mealDeadlineAt(day, 'lunch'))}
                   canRate={canGiveFeedback(lunch, app.now, app.mealServings)}
                   onEdit={() => setPicking({ day, meal: 'lunch' })}
                   onRate={() => lunch && setEditing(lunch)}
@@ -55,8 +71,8 @@ export function MyOrdersPage() {
                   name={day.dinner ? dinner?.choice ?? null : undefined}
                   missing={!day.dinner}
                   order={dinner}
-                  status={day.dinner ? (isMealOpen(day, 'dinner', app.deadlines, app.now) ? 'مهلت باز' : 'مهلت تمام') : undefined}
-                  canEdit={canChange(app.role, day, 'dinner', app.deadlines, app.now)}
+                  status={day.dinner ? (isMealOpen(day, 'dinner', app.deadlines, app.now, app.mealDeadlineAt(day, 'dinner')) ? 'مهلت باز' : 'مهلت تمام') : undefined}
+                  canEdit={canChange(app.role, day, 'dinner', app.deadlines, app.now, app.mealDeadlineAt(day, 'dinner'))}
                   canRate={canGiveFeedback(dinner, app.now, app.mealServings)}
                   onEdit={() => setPicking({ day, meal: 'dinner' })}
                   onRate={() => dinner && setEditing(dinner)}
@@ -76,10 +92,10 @@ export function MyOrdersPage() {
         ) : (
           <ul className="divide-y divide-line">
             {past.map((item) => (
-              <li key={`${item.employeeId}-${item.date}-${item.meal}`} className="flex flex-col gap-1 px-4 py-3 text-sm sm:flex-row sm:items-center sm:justify-between">
-                <span className="min-w-0 break-words">{item.date} · {item.weekday} · {item.meal === 'lunch' ? 'ناهار' : 'شام'}</span>
+              <li key={item.id} className="flex flex-col gap-1 px-4 py-3 text-sm sm:flex-row sm:items-center sm:justify-between">
+                <span className="min-w-0 break-words">{fa(item.jd)} {JALALI_MONTHS[item.jm - 1]} {fa(item.jy)} · {item.meal === 'lunch' ? 'ناهار' : 'شام'}</span>
                 <span className="font-medium">{item.choice}</span>
-                <span className="text-xs text-muted">{item.status}</span>
+                <span className="text-xs text-muted">{item.cycleStatus === 'CANCELLED' ? 'لغو شده' : 'ثبت‌شده'}</span>
               </li>
             ))}
           </ul>
@@ -93,20 +109,20 @@ export function MyOrdersPage() {
           weekday={pickedDay.weekday}
           monthName={JALALI_MONTHS[pickedDay.jm - 1]}
           options={pickedOptions}
-          current={pickedOrder?.choice ?? null}
-          locked={!isMealOpen(pickedDay, picking.meal, app.deadlines, app.now)}
+          currentId={pickedOrder?.menuItemId ?? null}
+          locked={!isMealOpen(pickedDay, picking.meal, app.deadlines, app.now, app.mealDeadlineAt(pickedDay, picking.meal))}
           ops={can(app.role, 'order.ops')}
           onClose={() => setPicking(null)}
-          onSave={(choice) => app.selectMeal(id, pickedDay.jd, picking.meal, choice, 'self')}
+          onSave={(menuItemId) => app.selectMeal(id, pickedDay.jd, picking.meal, null, 'self', menuItemId)}
         />
       )}
     </div>
   )
 }
 
-function canChange(role: Parameters<typeof can>[0], day: DayMenu, meal: MealKind, deadlines: MonthDeadlines, now: JalaliDateTime) {
+function canChange(role: Parameters<typeof can>[0], day: DayMenu, meal: MealKind, deadlines: MonthDeadlines, now: JalaliDateTime, deadlineAt?: string | null) {
   if (!day[meal]) return false
-  return isMealOpen(day, meal, deadlines, now) ? can(role, 'order.self') : can(role, 'order.ops')
+  return isMealOpen(day, meal, deadlines, now, deadlineAt) ? can(role, 'order.self') : can(role, 'order.ops')
 }
 
 function OrderLine({

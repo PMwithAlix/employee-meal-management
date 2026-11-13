@@ -95,6 +95,9 @@ export function toPickerDay(day: MenuDay): DayMenu {
     weekday: day.weekday,
     lunch: day.lunch?.map((option) => option.title) ?? null,
     dinner: day.dinner?.map((option) => option.title) ?? null,
+    lunchChoices: day.lunch,
+    dinnerChoices: day.dinner,
+    gregorianDate: day.mealDate,
   }
 }
 

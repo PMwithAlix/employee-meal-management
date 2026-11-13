@@ -26,6 +26,7 @@ describe('overlayMeals', () => {
     expect(days[2]?.dinner).toBeNull()
     expect(days[0]?.lunch).toBeNull()
     expect(toPickerDay(days[2]!).lunch).toEqual(['چلوکباب'])
+    expect(toPickerDay(days[2]!).lunchChoices).toEqual([{ id: 'opt-1', title: 'چلوکباب', displayOrder: 1 }])
   })
 
   it('does not invent seed titles when there are no meals', () => {

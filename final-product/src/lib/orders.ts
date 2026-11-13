@@ -10,15 +10,24 @@ export function findOrder(
   jd: number,
   meal: MealKind,
 ) {
-  return orders.find((item) => item.employeeId === employeeId && item.jy === month.jy && item.jm === month.jm && item.jd === jd && item.meal === meal)
+  const matches = orders.filter((item) => item.employeeId === employeeId && item.jy === month.jy && item.jm === month.jm && item.jd === jd && item.meal === meal)
+  return matches.find((item) => item.cycleStatus !== 'CANCELLED') ?? matches[0]
+}
+
+export function mealChoices(day: DayMenu, meal: MealKind) {
+  return meal === 'lunch' ? day.lunchChoices ?? null : day.dinnerChoices ?? null
 }
 
 export function mealDate(day: Pick<DayMenu, 'jy' | 'jm' | 'jd'>): JalaliDate {
   return { jy: day.jy, jm: day.jm, jd: day.jd }
 }
 
-export function isMealOpen(day: DayMenu, meal: MealKind, deadlines: MonthDeadlines, now: JalaliDateTime) {
+export function isMealOpen(day: DayMenu, meal: MealKind, deadlines: MonthDeadlines, now: JalaliDateTime, deadlineAt?: string | null) {
   if (!day[meal]) return false
+  if (deadlineAt) {
+    const at = Date.parse(deadlineAt)
+    return Number.isNaN(at) ? false : Date.now() < at
+  }
   return isOrderingOpen(mealDate(day), deadlines[meal], now)
 }
 
