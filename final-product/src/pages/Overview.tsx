@@ -67,7 +67,7 @@ function EmployeeOverview() {
     if (!day.lunch || !isMealOpen(day, 'lunch', app.deadlines, app.now)) return false
     return !findOrder(app.orders, id, day, day.jd, 'lunch')?.choice
   })
-  const upcomingMeals = upcomingChosenMeals(app.orders, id, app.now)
+  const upcomingMeals = upcomingChosenMeals(app.orders, id, app.now, app.mealServings)
   const passed = app.days.filter((day) => {
     const defined = (['lunch', 'dinner'] as const).filter((meal) => day[meal])
     return defined.length > 0 && defined.every((meal) => !isMealOpen(day, meal, app.deadlines, app.now))

@@ -203,6 +203,7 @@ model Order {
   user         User         @relation(fields: [userId], references: [id], onDelete: Restrict, onUpdate: Restrict)
   currentCycle OrderCycle?  @relation("OrderCurrentCycle", fields: [currentCycleId], references: [id], onDelete: Restrict, onUpdate: Restrict)
   cycles       OrderCycle[] @relation("OrderCycles")
+  rating       Rating?
 
   @@unique([userId, mealDate, mealType])
   @@index([userId])
@@ -357,12 +358,14 @@ model MealSetting {
 
 model Rating {
   id           String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  orderId      String   @unique @db.Uuid
   orderCycleId String   @unique @db.Uuid
   score        Int
   comment      String?
   createdAt    DateTime @default(now()) @db.Timestamptz(6)
   updatedAt    DateTime @updatedAt @db.Timestamptz(6)
 
+  order      Order      @relation(fields: [orderId], references: [id], onDelete: Restrict, onUpdate: Restrict)
   orderCycle OrderCycle @relation(fields: [orderCycleId], references: [id], onDelete: Restrict, onUpdate: Restrict)
 
   @@map("ratings")

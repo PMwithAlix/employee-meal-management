@@ -1,7 +1,7 @@
-import { compareDates, dateKey, isPastDate, JALALI_MONTHS, type JalaliDate, type JalaliDateTime } from './jalali'
+import { compareDates, dateKey, JALALI_MONTHS, type JalaliDate, type JalaliDateTime } from './jalali'
 import { formatDeadline, isOrderingOpen, type MonthDeadlines } from './deadlines'
 import { fa } from './text'
-import type { DayMenu, MealKind, MenuQuery, Order } from '../types'
+import type { DayMenu, MealKind, MealServings, MenuQuery, Order } from '../types'
 
 export function findOrder(
   orders: Order[],
@@ -22,9 +22,16 @@ export function isMealOpen(day: DayMenu, meal: MealKind, deadlines: MonthDeadlin
   return isOrderingOpen(mealDate(day), deadlines[meal], now)
 }
 
-export function canGiveFeedback(order: Order | undefined, today: JalaliDate) {
+function parseServing(value: string): readonly [number, number] {
+  const match = /^([01]\d|2[0-3]):([0-5]\d)$/.exec(value)
+  if (!match) return [12, 0]
+  return [Number(match[1]), Number(match[2])]
+}
+
+export function canGiveFeedback(order: Order | undefined, now: JalaliDateTime, servings: MealServings) {
   if (!order?.choice) return false
-  return isPastDate({ jy: order.jy, jm: order.jm, jd: order.jd }, today)
+  const [hour, minute] = parseServing(servings[order.meal])
+  return clockKey(order, hour, minute) < clockKey(now, now.hour, now.minute)
 }
 
 function toLatin(value: string) {
@@ -71,17 +78,12 @@ export function deadlineLabel(day: DayMenu, meal: MealKind, deadlines: MonthDead
   return formatDeadline(deadlines[meal])
 }
 
-const MEAL_CLOCK: Record<MealKind, readonly [number, number]> = {
-  lunch: [12, 0],
-  dinner: [19, 0],
-}
-
 function clockKey(date: JalaliDate, hour: number, minute: number) {
   return dateKey(date) * 10000 + hour * 60 + minute
 }
 
-export function isUpcomingMeal(order: Pick<Order, 'jy' | 'jm' | 'jd' | 'meal'>, now: JalaliDateTime) {
-  const [hour, minute] = MEAL_CLOCK[order.meal]
+export function isUpcomingMeal(order: Pick<Order, 'jy' | 'jm' | 'jd' | 'meal'>, now: JalaliDateTime, servings: MealServings) {
+  const [hour, minute] = parseServing(servings[order.meal])
   return clockKey(order, hour, minute) > clockKey(now, now.hour, now.minute)
 }
 
@@ -91,9 +93,9 @@ export function compareMeals(a: Pick<Order, 'jy' | 'jm' | 'jd' | 'meal'>, b: Pic
   return a.meal === b.meal ? 0 : a.meal === 'lunch' ? -1 : 1
 }
 
-export function upcomingChosenMeals(orders: Order[], employeeId: string, now: JalaliDateTime, limit = 3) {
+export function upcomingChosenMeals(orders: Order[], employeeId: string, now: JalaliDateTime, servings: MealServings, limit = 3) {
   return orders
-    .filter((order) => order.employeeId === employeeId && Boolean(order.choice) && isUpcomingMeal(order, now))
+    .filter((order) => order.employeeId === employeeId && Boolean(order.choice) && isUpcomingMeal(order, now, servings))
     .sort(compareMeals)
     .slice(0, limit)
 }

@@ -19,13 +19,14 @@ export type Capability =
   | 'employee.edit'
   | 'building.edit'
   | 'group.edit'
+  | 'settings.meals'
 
 const ROLE_CAPABILITIES: Record<Role, readonly Capability[]> = {
   employee: ['order.self', 'order.rate'],
   hr: ['order.self', 'order.rate', 'employee.edit', 'building.edit', 'group.edit'],
-  support: ['order.self', 'order.ops', 'order.rate', 'menu.edit', 'guest.edit'],
+  support: ['order.self', 'order.ops', 'order.rate', 'menu.edit', 'guest.edit', 'settings.meals'],
   management: [],
-  admin: ['order.ops', 'menu.edit', 'guest.edit', 'employee.edit', 'building.edit', 'group.edit'],
+  admin: ['order.ops', 'menu.edit', 'guest.edit', 'employee.edit', 'building.edit', 'group.edit', 'settings.meals'],
 }
 
 export function canAccess(role: Role, page: Page) {

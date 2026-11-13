@@ -195,7 +195,9 @@ All routes below require an authenticated HR or ADMIN session cookie. EMPLOYEE, 
 | Buildings and groups | No | Yes | Yes |
 | Monthly menus / Excel import | No (SUPPORT: Yes) | No | Yes |
 | Own meal orders | Yes | Yes | Yes |
-| Manage others' orders / guest orders / write deadlines | SUPPORT and ADMIN only | No | Yes |
+| Rate own order after serving time | Yes | Yes | If they have an employee order |
+| List all ratings | SUPPORT, MANAGEMENT, ADMIN | No | Yes |
+| Manage others' orders / guest orders / write deadlines / meal serving hours | SUPPORT and ADMIN only | No | Yes |
 
 Non-ADMIN users must have a `buildingId`. ADMIN may omit it. Group membership does not change role or building. Historical membership rows are never overwritten; re-adding a user after `endedAt` creates a new row. Overlapping intervals are rejected by the database exclusion constraint.
 
@@ -264,6 +266,12 @@ Guest orders are a separate table (no User row). SUPPORT/ADMIN only. Quantity �
 | CRUD | `/api/v1/guest-orders` | SUPPORT, ADMIN |
 | GET | `/api/v1/order-deadlines`, `/order-deadlines/:year/:month` | Any session |
 | PUT | `/api/v1/order-deadlines/:year/:month` | SUPPORT, ADMIN |
+| GET | `/api/v1/meal-settings` | Any session |
+| PUT | `/api/v1/meal-settings` | SUPPORT, ADMIN. Body `{ items: [{ mealType, servingTime: "HH:mm" }] }` (Tehran wall clock). |
+| PUT/GET | `/api/v1/orders/me/:id/rating` | Owner only. Score 1–5; comment optional. Upserts one row per order. Allowed only after that meal’s serving time and only for an ACTIVE cycle. |
+| GET | `/api/v1/ratings` | SUPPORT, MANAGEMENT, ADMIN |
+
+Ratings attach to the employee `Order` (unique `orderId`) and the current ACTIVE `OrderCycle`. Guest orders are not rated. Changing serving hours does not rewrite stored ratings. Changing group/building/menu later does not rewrite rating snapshots on the cycle.
 
 ## Tests
 

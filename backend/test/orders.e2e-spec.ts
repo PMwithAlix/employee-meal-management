@@ -43,6 +43,9 @@ async function cleanup() {
     'ALTER TABLE order_cycles DISABLE TRIGGER ALL',
   );
   try {
+    await prisma.rating.deleteMany({
+      where: { order: { user: { username: { startsWith: 'e2e.order.' } } } },
+    });
     await prisma.orderGroupSnapshot.deleteMany({
       where: {
         orderCycle: {

@@ -43,6 +43,13 @@ export function presentOrder(order: {
     mealTitleSnapshot: string;
     createdAt: Date;
   }[];
+  rating?: {
+    id: string;
+    score: number;
+    comment: string | null;
+    createdAt: Date;
+    updatedAt: Date;
+  } | null;
 }) {
   const jalali = jalaliFromUtcDate(order.mealDate);
   const cycle = order.currentCycle;
@@ -77,7 +84,68 @@ export function presentOrder(order: {
           statusHistory: cycle.statusHistory,
         }
       : null,
+    rating: order.rating ? presentRatingSummary(order.rating) : null,
     cycles: order.cycles,
+  };
+}
+
+export function presentRatingSummary(rating: {
+  id: string;
+  score: number;
+  comment: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+}) {
+  return {
+    id: rating.id,
+    score: rating.score,
+    comment: rating.comment,
+    createdAt: rating.createdAt,
+    updatedAt: rating.updatedAt,
+  };
+}
+
+export function presentRating(rating: {
+  id: string;
+  orderId: string;
+  orderCycleId: string;
+  score: number;
+  comment: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+  order?: {
+    id: string;
+    userId: string;
+    mealDate: Date;
+    mealType: MealType;
+  };
+  orderCycle?: {
+    id: string;
+    usernameSnapshot: string;
+    mealTitleSnapshot: string;
+    buildingNameSnapshot: string | null;
+    mealTypeSnapshot: MealType;
+    status: string;
+  };
+}) {
+  const jalali = rating.order ? jalaliFromUtcDate(rating.order.mealDate) : null;
+  return {
+    id: rating.id,
+    orderId: rating.orderId,
+    orderCycleId: rating.orderCycleId,
+    score: rating.score,
+    comment: rating.comment,
+    createdAt: rating.createdAt,
+    updatedAt: rating.updatedAt,
+    userId: rating.order?.userId ?? null,
+    mealDate: rating.order ? formatDateOnly(rating.order.mealDate) : null,
+    jalaliDate: jalali ? formatJalali(jalali) : null,
+    mealType:
+      rating.order?.mealType ?? rating.orderCycle?.mealTypeSnapshot ?? null,
+    usernameSnapshot: rating.orderCycle?.usernameSnapshot ?? null,
+    mealTitleSnapshot: rating.orderCycle?.mealTitleSnapshot ?? null,
+    buildingNameSnapshot: rating.orderCycle?.buildingNameSnapshot ?? null,
+    cycleStatus: rating.orderCycle?.status ?? null,
   };
 }
 

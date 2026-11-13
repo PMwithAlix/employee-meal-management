@@ -13,6 +13,11 @@ export type Page =
   | 'settings'
 
 export type MealKind = 'lunch' | 'dinner'
+
+export interface MealServings {
+  lunch: string
+  dinner: string
+}
 export type MenuView = 'list' | 'calendar'
 export type MealFilter = 'all' | MealKind
 export type StatusFilter = 'all' | 'selected' | 'unselected' | 'open'

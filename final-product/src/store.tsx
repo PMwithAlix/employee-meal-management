@@ -1,7 +1,8 @@
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react'
 import { buildMonthMenu, createSnapshot, fullName, PERSONA_ID, ROLE_LABEL, SEED_MONTH } from './data'
 import { defaultMonthDeadlines, formatDeadline, isOrderingOpen, type MealDeadline, type MonthDeadlines } from './lib/deadlines'
-import { addMonths, currentDateTime, isPastDate, JALALI_MONTHS, monthKey, type JalaliDate, type JalaliDateTime } from './lib/jalali'
+import { addMonths, currentDateTime, JALALI_MONTHS, monthKey, type JalaliDate, type JalaliDateTime } from './lib/jalali'
+import { canGiveFeedback } from './lib/orders'
 import { ADMIN_ACCOUNT_ID, normalizeUsername, passwordIssue, setSessionSecret, usernameIssue, verifySessionSecret } from './lib/credentials'
 import { fa } from './lib/text'
 import { can, canAccess, LANDING_PAGE } from './permissions'
@@ -14,6 +15,7 @@ import type {
   ImportedFile,
   ImportedMenu,
   MealKind,
+  MealServings,
   MenuQuery,
   MenuView,
   Note,
@@ -38,6 +40,7 @@ interface StoreValue {
   selectedMonth: Pick<JalaliDate, 'jy' | 'jm'>
   monthTitle: string
   now: JalaliDateTime
+  mealServings: MealServings
   deadlines: MonthDeadlines
   buildings: ReturnType<typeof createSnapshot>['buildings']
   groups: ReturnType<typeof createSnapshot>['groups']
@@ -66,6 +69,7 @@ interface StoreValue {
   clearMenuQuery: () => void
   shiftMonth: (delta: number) => void
   setMealDeadline: (meal: MealKind, patch: Partial<Pick<MealDeadline, 'relation' | 'hour' | 'minute'>>) => void
+  setMealServing: (meal: MealKind, clock: string) => void
   selectMeal: (employeeId: string, jd: number, meal: MealKind, choice: string | null, scope: 'self' | 'ops') => boolean
   rateMeal: (orderId: string, score: number, comment: string) => boolean
   saveEmployee: (input: {
@@ -125,6 +129,7 @@ export function StoreProvider({ children, onLogout }: { children: ReactNode; onL
   const [menus, setMenus] = useState<Record<string, DayMenu[]>>(() => ({ [monthKey(SEED_MONTH)]: initial.days }))
   const [deadlinesByMonth, setDeadlinesByMonth] = useState<Record<string, MonthDeadlines>>({})
   const [now, setNow] = useState(() => currentDateTime())
+  const [mealServings, setMealServings] = useState<MealServings>({ lunch: '12:00', dinner: '19:00' })
   const [buildings, setBuildings] = useState(initial.buildings)
   const [groups, setGroups] = useState(initial.groups)
   const [employees, setEmployees] = useState(initial.employees)
@@ -245,7 +250,7 @@ export function StoreProvider({ children, onLogout }: { children: ReactNode; onL
 
   function rateMeal(orderId: string, score: number, comment: string) {
     const order = orders.find((item) => item.id === orderId)
-    if (!can(role, 'order.rate') || !order || order.employeeId !== personaId || !isPastDate(order, now) || !order.choice) return false
+    if (!can(role, 'order.rate') || !order || order.employeeId !== personaId || !canGiveFeedback(order, now, mealServings)) return false
     setOrders((list) => list.map((item) => (item.id === orderId ? { ...item, rating: { score, comment: comment.trim() } } : item)))
     pushActivity({
       actor: personaName,
@@ -597,6 +602,7 @@ export function StoreProvider({ children, onLogout }: { children: ReactNode; onL
     selectedMonth,
     monthTitle: `${monthName} ${fa(selectedMonth.jy)}`,
     now,
+    mealServings,
     deadlines,
     buildings,
     groups,
@@ -624,6 +630,11 @@ export function StoreProvider({ children, onLogout }: { children: ReactNode; onL
     setMenuQuery: (query) => setMenuQueryState((current) => ({ ...current, ...query })),
     clearMenuQuery: () => setMenuQueryState(emptyQuery),
     shiftMonth: (delta) => setSelectedMonth((month) => addMonths(month, delta)),
+    setMealServing: (meal, clock) => {
+      if (!can(role, 'settings.meals')) return
+      if (!/^([01]\d|2[0-3]):([0-5]\d)$/.test(clock)) return
+      setMealServings((current) => ({ ...current, [meal]: clock }))
+    },
     setMealDeadline: (meal, patch) => {
       if (!can(role, 'menu.edit')) return
       const current = deadlines[meal]

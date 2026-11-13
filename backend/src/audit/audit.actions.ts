@@ -30,6 +30,9 @@ export const AuditAction = {
   GuestOrderUpdated: 'GUEST_ORDER_UPDATED',
   GuestOrderCancelled: 'GUEST_ORDER_CANCELLED',
   OrderDeadlinesUpdated: 'ORDER_DEADLINES_UPDATED',
+  MealSettingsUpdated: 'MEAL_SETTINGS_UPDATED',
+  RatingCreated: 'RATING_CREATED',
+  RatingUpdated: 'RATING_UPDATED',
 } as const;
 
 export const AuditEntity = {
@@ -44,4 +47,6 @@ export const AuditEntity = {
   Order: 'Order',
   GuestOrder: 'GuestOrder',
   OrderDeadline: 'OrderDeadline',
+  MealSetting: 'MealSetting',
+  Rating: 'Rating',
 } as const;

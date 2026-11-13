@@ -46,7 +46,7 @@ export function MyOrdersPage() {
                   order={lunch}
                   status={day.lunch ? (isMealOpen(day, 'lunch', app.deadlines, app.now) ? 'مهلت باز' : 'مهلت تمام') : undefined}
                   canEdit={canChange(app.role, day, 'lunch', app.deadlines, app.now)}
-                  canRate={canGiveFeedback(lunch, app.now)}
+                  canRate={canGiveFeedback(lunch, app.now, app.mealServings)}
                   onEdit={() => setPicking({ day, meal: 'lunch' })}
                   onRate={() => lunch && setEditing(lunch)}
                 />
@@ -57,7 +57,7 @@ export function MyOrdersPage() {
                   order={dinner}
                   status={day.dinner ? (isMealOpen(day, 'dinner', app.deadlines, app.now) ? 'مهلت باز' : 'مهلت تمام') : undefined}
                   canEdit={canChange(app.role, day, 'dinner', app.deadlines, app.now)}
-                  canRate={canGiveFeedback(dinner, app.now)}
+                  canRate={canGiveFeedback(dinner, app.now, app.mealServings)}
                   onEdit={() => setPicking({ day, meal: 'dinner' })}
                   onRate={() => dinner && setEditing(dinner)}
                 />

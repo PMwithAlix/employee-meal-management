@@ -197,6 +197,7 @@ export class OrdersService {
         include: {
           currentCycle: { include: orderCycleInclude },
           cycles: { orderBy: { cycleNumber: 'asc' } },
+          rating: true,
         },
         orderBy: { createdAt: query.sortOrder },
         skip,
@@ -407,6 +408,7 @@ export class OrdersService {
       include: {
         currentCycle: { include: orderCycleInclude },
         cycles: { orderBy: { cycleNumber: 'asc' } },
+        rating: true,
       },
     });
     if (!order || (ownerId && order.userId !== ownerId)) {
@@ -421,6 +423,7 @@ export class OrdersService {
       include: {
         currentCycle: { include: orderCycleInclude },
         cycles: { orderBy: { cycleNumber: 'asc' } },
+        rating: true,
       },
     });
     return presentOrder(order);
