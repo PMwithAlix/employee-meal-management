@@ -183,6 +183,7 @@ model MenuItem {
 
   menuVersion MenuVersion  @relation(fields: [menuVersionId], references: [id], onDelete: Restrict, onUpdate: Restrict)
   orderCycles OrderCycle[]
+  guestOrders GuestOrder[]
 
   @@unique([menuVersionId, mealDate, mealType, displayOrder])
   @@index([menuVersionId])
@@ -271,24 +272,29 @@ model OrderGroupSnapshot {
 }
 
 model GuestOrder {
-  id         String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  buildingId String           @db.Uuid
-  mealDate   DateTime         @db.Date
-  mealType   MealType
-  quantity   Int
-  note       String?
-  status     GuestOrderStatus
-  createdBy  String           @db.Uuid
-  createdAt  DateTime         @default(now()) @db.Timestamptz(6)
-  updatedAt  DateTime         @updatedAt @db.Timestamptz(6)
+  id                   String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  buildingId           String           @db.Uuid
+  menuItemId           String           @db.Uuid
+  mealDate             DateTime         @db.Date
+  mealType             MealType
+  quantity             Int
+  note                 String?
+  status               GuestOrderStatus
+  buildingNameSnapshot String
+  mealTitleSnapshot    String
+  createdBy            String           @db.Uuid
+  createdAt            DateTime         @default(now()) @db.Timestamptz(6)
+  updatedAt            DateTime         @updatedAt @db.Timestamptz(6)
 
   building Building            @relation(fields: [buildingId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  menuItem MenuItem            @relation(fields: [menuItemId], references: [id], onDelete: Restrict, onUpdate: Restrict)
   creator  User                @relation(fields: [createdBy], references: [id], onDelete: Restrict, onUpdate: Restrict)
   history  GuestOrderHistory[]
 
   @@index([buildingId])
   @@index([mealDate, mealType])
   @@index([createdBy])
+  @@index([menuItemId])
   @@map("guest_orders")
 }
 

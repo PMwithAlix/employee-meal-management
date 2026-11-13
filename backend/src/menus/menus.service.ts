@@ -446,6 +446,28 @@ export class MenusService {
     return version;
   }
 
+  async getPublished(year: number, month: number) {
+    const menu = await this.prisma.menu.findUnique({
+      where: { year_month: { year, month } },
+      include: {
+        publishedVersion: {
+          include: {
+            items: {
+              orderBy: [{ mealDate: 'asc' }, { displayOrder: 'asc' }],
+            },
+          },
+        },
+      },
+    });
+    if (!menu?.publishedVersion) {
+      throw new NotFoundException('منوی منتشرشده‌ای برای این ماه وجود ندارد.');
+    }
+    return {
+      ...presentMenu(menu),
+      version: presentVersion(menu.publishedVersion),
+    };
+  }
+
   parseMenuDate(value: string, jalaliYear: number, jalaliMonth: number) {
     const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
     if (!match) {

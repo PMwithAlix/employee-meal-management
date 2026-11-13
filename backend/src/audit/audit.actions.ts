@@ -23,6 +23,13 @@ export const AuditAction = {
   ExcelImportPreviewCreated: 'EXCEL_IMPORT_PREVIEW_CREATED',
   ExcelImportConfirmed: 'EXCEL_IMPORT_CONFIRMED',
   ExcelImportRejected: 'EXCEL_IMPORT_REJECTED',
+  OrderCreated: 'ORDER_CREATED',
+  OrderUpdated: 'ORDER_UPDATED',
+  OrderCancelled: 'ORDER_CANCELLED',
+  GuestOrderCreated: 'GUEST_ORDER_CREATED',
+  GuestOrderUpdated: 'GUEST_ORDER_UPDATED',
+  GuestOrderCancelled: 'GUEST_ORDER_CANCELLED',
+  OrderDeadlinesUpdated: 'ORDER_DEADLINES_UPDATED',
 } as const;
 
 export const AuditEntity = {
@@ -34,4 +41,7 @@ export const AuditEntity = {
   MenuVersion: 'MenuVersion',
   MenuItem: 'MenuItem',
   MenuImport: 'MenuImport',
+  Order: 'Order',
+  GuestOrder: 'GuestOrder',
+  OrderDeadline: 'OrderDeadline',
 } as const;

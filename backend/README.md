@@ -194,6 +194,8 @@ All routes below require an authenticated HR or ADMIN session cookie. EMPLOYEE, 
 | Deactivate / reset password | No | Same as create (not ADMIN or HR) | Yes |
 | Buildings and groups | No | Yes | Yes |
 | Monthly menus / Excel import | No (SUPPORT: Yes) | No | Yes |
+| Own meal orders | Yes | Yes | Yes |
+| Manage others' orders / guest orders / write deadlines | SUPPORT and ADMIN only | No | Yes |
 
 Non-ADMIN users must have a `buildingId`. ADMIN may omit it. Group membership does not change role or building. Historical membership rows are never overwritten; re-adding a user after `endedAt` creates a new row. Overlapping intervals are rejected by the database exclusion constraint.
 
@@ -240,7 +242,28 @@ Import is two steps. Preview is stored in memory for 15 minutes and is bound to 
 - `EXACT_MATCH_ONLY` — rejected unless every published/imported option has an exact unique title+date+mealType match. No fuzzy or position matching.
 - `RESET` — rejected when active orders reference published options that the workbook does not keep.
 
-Only `ADMIN` and `SUPPORT` may call menu APIs.
+Only `ADMIN` and `SUPPORT` may call management menu APIs. Any authenticated user can `GET /api/v1/published-menus/:year/:month`.
+
+## Orders
+
+One `orders` row exists per employee + meal date + meal type and is never deleted. Each change creates an `order_cycles` row. Snapshots (username, building id/name, option title, meal date/type) live on the cycle. Active group memberships at cycle time are copied to `order_group_snapshots`. Historical cycle fields cannot be updated.
+
+Employee quantity is always `1` (the field is not accepted on employee DTOs). Employees may create/edit/cancel only while `now < deadlineAt`. SUPPORT and ADMIN may manage after the deadline. A cancelled cycle does not block a new ACTIVE cycle on the same order row. Concurrent duplicates are rejected by `order_cycles_one_active` as HTTP 409.
+
+Deadlines are stored per Gregorian `mealDate` + `mealType` (UTC `timestamptz`) and configured by Jalali month. Lunch and dinner are independent. Missing or elapsed deadlines close employee ordering. Weekends/holidays are not special-cased.
+
+Guest orders are a separate table (no User row). SUPPORT/ADMIN only. Quantity ≥ 1. Building name and option title are snapshotted.
+
+| Method | Path | Access |
+|---|---|---|
+| GET | `/api/v1/published-menus/:year/:month` | Any session |
+| POST | `/api/v1/orders` | Session; `userId` only SUPPORT/ADMIN |
+| GET/PATCH | `/api/v1/orders/me`, `/orders/me/:id` | Session (own orders) |
+| POST | `/api/v1/orders/me/:id/cancel` | Session (own, before deadline) |
+| GET/PATCH/cancel | `/api/v1/orders`, `/orders/:id` | SUPPORT, ADMIN |
+| CRUD | `/api/v1/guest-orders` | SUPPORT, ADMIN |
+| GET | `/api/v1/order-deadlines`, `/order-deadlines/:year/:month` | Any session |
+| PUT | `/api/v1/order-deadlines/:year/:month` | SUPPORT, ADMIN |
 
 ## Tests
 
@@ -249,7 +272,7 @@ npm test
 npm run test:e2e
 ```
 
-Unit tests cover health, auth, user-access, audit sanitization, Jalali conversion, menu validation, and Excel parsing. E2E tests need PostgreSQL and write temporary `e2e.auth.*` / `e2e.org.*` / `e2e.menu.*` users, then delete them.
+Unit tests cover health, auth, user-access, audit sanitization, Jalali conversion, menu validation, Excel parsing, and deadline boundary rules. E2E tests need PostgreSQL and write temporary `e2e.auth.*` / `e2e.org.*` / `e2e.menu.*` / `e2e.order.*` users, then delete them.
 
 ## Production build
 
@@ -288,6 +311,7 @@ backend/
     buildings/        # building CRUD (no delete)
     groups/           # groups and membership history
     menus/            # monthly menus, versions, Excel import
+    orders/           # employee orders, guest orders, deadlines
     dates/            # Jalali/Gregorian conversion
     audit/            # shared audit writer
     cli/              # one-time bootstrap:admin
