@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Moon, Sun } from 'lucide-react'
+import { Eye, EyeOff, Moon, Sun } from 'lucide-react'
 import { BrandWordmark } from '../components/Brand'
 import { Button, Field, controlClass } from '../components/ui'
 
@@ -8,6 +8,7 @@ export function Login({ onSuccess }: { onSuccess: () => void }) {
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
+  const [showPassword, setShowPassword] = useState(false)
   const [dark, setDark] = useState(() => document.documentElement.classList.contains('dark'))
 
   function toggleTheme() {
@@ -49,7 +50,25 @@ export function Login({ onSuccess }: { onSuccess: () => void }) {
             <input className={controlClass} autoComplete="username" placeholder="نام کاربری انگلیسی" value={username} onChange={(event) => setUsername(event.target.value)} />
           </Field>
           <Field label="رمز عبور">
-            <input className={controlClass} type="password" autoComplete="current-password" placeholder="رمز عبور خود را وارد کنید" value={password} onChange={(event) => setPassword(event.target.value)} />
+            <div className="relative">
+              <input
+                className={`${controlClass} pe-11`}
+                type={showPassword ? 'text' : 'password'}
+                autoComplete="current-password"
+                placeholder="رمز عبور خود را وارد کنید"
+                value={password}
+                onChange={(event) => setPassword(event.target.value)}
+              />
+              <button
+                type="button"
+                className="absolute end-0 top-0 grid h-11 w-11 place-items-center text-muted hover:text-ink"
+                aria-label={showPassword ? 'پنهان کردن رمز عبور' : 'نمایش رمز عبور'}
+                title={showPassword ? 'پنهان کردن رمز عبور' : 'نمایش رمز عبور'}
+                onClick={() => setShowPassword((value) => !value)}
+              >
+                {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+              </button>
+            </div>
           </Field>
         </div>
         {error && <p className="mt-3 text-sm text-danger">{error}</p>}
