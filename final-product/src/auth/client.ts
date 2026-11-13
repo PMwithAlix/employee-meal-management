@@ -10,10 +10,14 @@ export function apiBaseUrl() {
 }
 
 type RequestOptions = {
-  method?: 'GET' | 'POST'
+  method?: 'GET' | 'POST' | 'PATCH'
   body?: unknown
   signal?: AbortSignal
   treatUnauthorizedAsSessionEnd?: boolean
+}
+
+function isFormData(value: unknown): value is FormData {
+  return typeof FormData !== 'undefined' && value instanceof FormData
 }
 
 let unauthorizedHandler: (() => void) | null = null
@@ -26,13 +30,19 @@ export async function authRequest<T>(path: string, options: RequestOptions = {})
   const url = `${apiBaseUrl()}/api/v1${path}`
   let response: Response
   try {
+    const headers: Record<string, string> = { Accept: 'application/json' }
+    let payload: BodyInit | undefined
+    if (isFormData(options.body)) {
+      payload = options.body
+    } else if (options.body !== undefined) {
+      headers['Content-Type'] = 'application/json'
+      payload = JSON.stringify(options.body)
+    }
     response = await fetch(url, {
       method: options.method ?? 'GET',
       credentials: 'include',
-      headers: options.body
-        ? { Accept: 'application/json', 'Content-Type': 'application/json' }
-        : { Accept: 'application/json' },
-      body: options.body === undefined ? undefined : JSON.stringify(options.body),
+      headers,
+      body: payload,
       signal: options.signal,
     })
   } catch (error) {

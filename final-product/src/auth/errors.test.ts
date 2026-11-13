@@ -24,6 +24,14 @@ describe('errorFromResponse', () => {
     expect(error.status).toBe(429)
   })
 
+  it('keeps 404, 409 and 422 distinct from network logout', () => {
+    expect(errorFromResponse(404, { message: 'منوی منتشرشده‌ای برای این ماه وجود ندارد.' }).kind).toBe('not_found')
+    expect(errorFromResponse(409, { message: 'منوی این ماه قبلاً ایجاد شده است.' }).kind).toBe('conflict')
+    expect(errorFromResponse(422, { message: 'پیکربندی وعده نامعتبر است.', errors: [{ message: 'حداکثر سه گزینه' }] }).issues).toEqual([
+      'حداکثر سه گزینه',
+    ])
+  })
+
   it('does not treat a network failure as a logout', () => {
     const error = networkError()
     expect(error.kind).toBe('network')

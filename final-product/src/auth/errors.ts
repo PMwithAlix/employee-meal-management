@@ -1,13 +1,24 @@
-export type AuthFailureKind = 'credentials' | 'inactive' | 'rate' | 'network' | 'http'
+export type AuthFailureKind =
+  | 'credentials'
+  | 'inactive'
+  | 'forbidden'
+  | 'not_found'
+  | 'conflict'
+  | 'validation'
+  | 'rate'
+  | 'network'
+  | 'http'
 
 export class AuthRequestError extends Error {
   readonly kind: AuthFailureKind
   readonly status: number | null
+  readonly issues: string[]
 
-  constructor(kind: AuthFailureKind, message: string, status: number | null = null) {
+  constructor(kind: AuthFailureKind, message: string, status: number | null = null, issues: string[] = []) {
     super(message)
     this.kind = kind
     this.status = status
+    this.issues = issues
   }
 }
 
@@ -31,10 +42,21 @@ export function errorFromResponse(status: number, body: unknown): AuthRequestErr
     )
   }
   if (status === 403) {
+    const message = messageFromBody(body, 'حساب کاربری شما غیرفعال است. برای پیگیری با واحد منابع انسانی تماس بگیرید.')
+    return new AuthRequestError(message.includes('غیرفعال') ? 'inactive' : 'forbidden', message, status)
+  }
+  if (status === 404) {
+    return new AuthRequestError('not_found', messageFromBody(body, 'مورد درخواستی پیدا نشد.'), status)
+  }
+  if (status === 409) {
+    return new AuthRequestError('conflict', messageFromBody(body, 'این مورد از قبل وجود دارد.'), status)
+  }
+  if (status === 422) {
     return new AuthRequestError(
-      'inactive',
-      messageFromBody(body, 'حساب کاربری شما غیرفعال است. برای پیگیری با واحد منابع انسانی تماس بگیرید.'),
+      'validation',
+      messageFromBody(body, 'اطلاعات ارسال‌شده معتبر نیست.'),
       status,
+      issuesFromBody(body),
     )
   }
   if (status === 429) {
@@ -44,7 +66,22 @@ export function errorFromResponse(status: number, body: unknown): AuthRequestErr
       status,
     )
   }
-  return new AuthRequestError('http', messageFromBody(body, 'ورود انجام نشد. دوباره تلاش کنید.'), status)
+  return new AuthRequestError('http', messageFromBody(body, 'درخواست انجام نشد. دوباره تلاش کنید.'), status, issuesFromBody(body))
+}
+
+function issuesFromBody(body: unknown) {
+  if (!body || typeof body !== 'object') return []
+  const raw = (body as { errors?: unknown }).errors
+  if (!Array.isArray(raw)) return []
+  return raw
+    .map((item) => {
+      if (typeof item === 'string' && item.trim()) return item
+      if (item && typeof item === 'object' && typeof (item as { message?: unknown }).message === 'string') {
+        return (item as { message: string }).message
+      }
+      return ''
+    })
+    .filter(Boolean)
 }
 
 export function networkError() {

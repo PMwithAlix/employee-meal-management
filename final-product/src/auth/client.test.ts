@@ -19,7 +19,7 @@ describe('authRequest', () => {
     vi.stubGlobal('fetch', fetchMock)
     await authRequest('/auth/me')
     expect(fetchMock).toHaveBeenCalledTimes(1)
-    const init = fetchMock.mock.calls[0][1] as RequestInit
+    const init = (fetchMock.mock.calls as unknown as Array<[string, RequestInit]>)[0][1]
     expect(init.credentials).toBe('include')
     expect(JSON.stringify(init)).not.toMatch(/khaan\.sid|accessToken|sessionToken/i)
   })
@@ -28,8 +28,8 @@ describe('authRequest', () => {
     const fetchMock = vi.fn(async () => new Response(JSON.stringify({ id: '1' }), { status: 200 }))
     vi.stubGlobal('fetch', fetchMock)
     await authApi.login('e2e.order.employee', 'secret')
-    expect(fetchMock.mock.calls[0][0]).toBe('/api/v1/auth/login')
-    const init = fetchMock.mock.calls[0][1] as RequestInit
+    const [url, init] = (fetchMock.mock.calls as unknown as Array<[string, RequestInit]>)[0]
+    expect(url).toBe('/api/v1/auth/login')
     expect(init.method).toBe('POST')
     expect(init.body).toBe(JSON.stringify({ username: 'e2e.order.employee', password: 'secret' }))
   })

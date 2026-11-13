@@ -4,6 +4,7 @@ import { MealBlock } from '../components/MealBlock'
 import { MealPicker } from '../components/MealPicker'
 import { Button, Empty, MonthBar, Segmented } from '../components/ui'
 import { WEEKDAYS } from '../data'
+import { usePublishedMenu } from '../menus/usePublishedMenu'
 import { useApp } from '../store'
 import { addDays, isSameDate, JALALI_MONTHS } from '../lib/jalali'
 import { findOrder, isMealOpen, rowMatches } from '../lib/orders'
@@ -14,6 +15,7 @@ import type { DayMenu, MealKind } from '../types'
 
 export function MonthlyMenuPage() {
   const app = useApp()
+  const published = usePublishedMenu(app.selectedMonth.jy, app.selectedMonth.jm)
   const [filtersOpen, setFiltersOpen] = useState(false)
   const id = app.personaId
 
@@ -29,7 +31,8 @@ export function MonthlyMenuPage() {
     )
   }
 
-  const visible = app.days.filter((day) => rowMatches(day, app.orders, id, app.menuQuery, app.deadlines, app.now))
+  const days = published.pickerDays
+  const visible = days.filter((day) => rowMatches(day, app.orders, id, app.menuQuery, app.deadlines, app.now))
   const active = app.menuQuery.meal !== 'all' || app.menuQuery.status !== 'all' || app.menuQuery.q.trim()
 
   return (
@@ -99,12 +102,25 @@ export function MonthlyMenuPage() {
         )}
       </div>
 
-      {visible.length === 0 ? (
+      {published.status === 'loading' ? (
+        <Empty title="در حال بارگذاری منو" body="منوی منتشرشده این ماه از سامانه خوانده می‌شود." />
+      ) : published.status === 'unavailable' ? (
+        <Empty title="سامانه در دسترس نیست" body={published.message || 'ارتباط با سرور برقرار نشد. منوی نمایشی جایگزین نمی‌شود.'} />
+      ) : published.status === 'forbidden' ? (
+        <Empty title="دسترسی ندارید" body={published.message} />
+      ) : published.status === 'error' ? (
+        <Empty title="بارگذاری منو انجام نشد" body={published.message} />
+      ) : published.status === 'empty' ? (
+        <Empty title="منوی منتشرشده‌ای برای این ماه نیست" body="تا وقتی نسخه‌ای منتشر نشود، گزینه‌ای نمایش داده نمی‌شود." />
+      ) : visible.length === 0 ? (
         <Empty title="روزی با این فیلتر پیدا نشد" body="فیلترها را پاک کنید یا ترکیب دیگری انتخاب کنید." />
       ) : app.menuView === 'list' ? (
         <DayList days={visible} />
       ) : (
-        <Calendar days={app.days} visible={new Set(visible.map((item) => item.jd))} />
+        <Calendar days={days} visible={new Set(visible.map((item) => item.jd))} />
+      )}
+      {(published.status === 'unavailable' || published.status === 'error' || published.status === 'forbidden') && (
+        <Button variant="secondary" onClick={published.retry}>تلاش دوباره</Button>
       )}
     </div>
   )

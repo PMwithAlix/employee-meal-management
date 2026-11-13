@@ -3,11 +3,15 @@ import { MealBlock } from '../components/MealBlock'
 import { SelectMealDialog } from '../components/SelectMealDialog'
 import { Badge, Button, Dialog, Empty, Field, controlClass } from '../components/ui'
 import { fullName } from '../data'
+import { AuthRequestError } from '../auth/errors'
+import { menuApi } from '../menus/client'
+import { localOption } from '../menus/map'
+import type { ImportPreview, MenuOption } from '../menus/types'
+import { useManagedMenu } from '../menus/useManagedMenu'
 import { useApp } from '../store'
 import { findOrder, isMealOpen } from '../lib/orders'
 import { formatDeadline, type DeadlineRelation } from '../lib/deadlines'
 import { isPastDate, JALALI_MONTHS } from '../lib/jalali'
-import { readMenuFile } from '../lib/menuFile'
 import { fa, faBytes } from '../lib/text'
 import type { MealKind, ReplacePolicy } from '../types'
 
@@ -19,6 +23,7 @@ const POLICIES: Array<{ id: ReplacePolicy; title: string; body: string }> = [
 
 export function MenuManagementPage() {
   const app = useApp()
+  const managed = useManagedMenu(app.selectedMonth.jy, app.selectedMonth.jm)
   const [tab, setTab] = useState<'daily' | 'import' | 'guests' | 'staff'>('daily')
   return (
     <div className="space-y-4">
@@ -37,8 +42,8 @@ export function MenuManagementPage() {
           <button key={id} className={`min-h-11 rounded-md px-3 text-sm ${tab === id ? 'bg-primary text-onprimary' : 'border border-line bg-surface'}`} onClick={() => setTab(id)}>{label}</button>
         ))}
       </div>
-      {tab === 'daily' && <DailyMenu />}
-      {tab === 'import' && <ImportPanel />}
+      {tab === 'daily' && <DailyMenu managed={managed} />}
+      {tab === 'import' && <ImportPanel managed={managed} />}
       {tab === 'guests' && <Guests />}
       {tab === 'staff' && <StaffOrders />}
     </div>
@@ -75,11 +80,44 @@ function DeadlineFields({ meal }: { meal: MealKind }) {
   )
 }
 
-function DailyMenu() {
+function DailyMenu({ managed }: { managed: ReturnType<typeof useManagedMenu> }) {
   const app = useApp()
+  if (managed.status === 'loading') {
+    return <Empty title="در حال آماده‌سازی پیش‌نویس" body="منوی این ماه از سامانه خوانده می‌شود. در صورت نبود منو، پیش‌نویس خالی ساخته می‌شود." />
+  }
+  if (managed.status === 'unavailable') {
+    return (
+      <div className="space-y-2">
+        <Empty title="سامانه در دسترس نیست" body={managed.message || 'ارتباط برقرار نشد. منوی نمایشی جایگزین نمی‌شود.'} />
+        <Button variant="secondary" onClick={managed.retry}>تلاش دوباره</Button>
+      </div>
+    )
+  }
+  if (managed.status === 'forbidden') {
+    return <Empty title="دسترسی ندارید" body={managed.message} />
+  }
+  if (managed.status === 'error') {
+    return (
+      <div className="space-y-2">
+        <Empty title="بارگذاری پیش‌نویس انجام نشد" body={managed.message} />
+        <Button variant="secondary" onClick={managed.retry}>تلاش دوباره</Button>
+      </div>
+    )
+  }
   return (
     <div className="space-y-2">
-      {app.days.map((day) => (
+      <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-line bg-surface p-3">
+        <p className="text-sm">
+          پیش‌نویس نسخه {managed.draft ? fa(managed.draft.versionNumber) : '—'}
+          {managed.menu?.publishedVersionId ? ' · نسخه منتشرشده فعلی حفظ می‌شود تا انتشار جدید' : ' · هنوز نسخه‌ای منتشر نشده'}
+        </p>
+        <Button disabled={managed.busy || !managed.draft} onClick={() => void managed.publish()}>انتشار پیش‌نویس</Button>
+      </div>
+      {managed.message && <p className="rounded-md bg-dangerbg px-3 py-2 text-sm text-danger" role="alert">{managed.message}</p>}
+      {managed.issues.length > 0 && (
+        <ul className="list-disc pe-5 text-sm text-danger">{managed.issues.map((item) => <li key={item}>{item}</li>)}</ul>
+      )}
+      {managed.days.map((day) => (
         <article key={day.jd} className="rounded-md border border-line bg-surface p-3">
           <div className="mb-2 flex items-center justify-between text-sm">
             <strong>{fa(day.jd)} {JALALI_MONTHS[day.jm - 1]} · {day.weekday}</strong>
@@ -87,8 +125,8 @@ function DailyMenu() {
           </div>
           {!day.lunch && !day.dinner && <p className="mb-2 text-sm text-muted">برای این روز هنوز گزینه‌ای نیست. جمعه و تعطیل مانع تعریف منو نیست.</p>}
           <div className="grid gap-3 md:grid-cols-2">
-            <OptionEditor jd={day.jd} meal="lunch" options={day.lunch ?? []} />
-            <OptionEditor jd={day.jd} meal="dinner" options={day.dinner ?? []} />
+            <OptionEditor meal="lunch" options={day.lunch ?? []} disabled={managed.busy} onSave={(next) => managed.saveMeal(day, 'lunch', next)} />
+            <OptionEditor meal="dinner" options={day.dinner ?? []} disabled={managed.busy} onSave={(next) => managed.saveMeal(day, 'dinner', next)} />
           </div>
         </article>
       ))}
@@ -96,10 +134,19 @@ function DailyMenu() {
   )
 }
 
-function OptionEditor({ jd, meal, options }: { jd: number; meal: MealKind; options: string[] }) {
-  const app = useApp()
+function OptionEditor({
+  meal,
+  options,
+  disabled,
+  onSave,
+}: {
+  meal: MealKind
+  options: MenuOption[]
+  disabled: boolean
+  onSave: (options: MenuOption[]) => Promise<void>
+}) {
   const [value, setValue] = useState('')
-  const [removing, setRemoving] = useState<string | null>(null)
+  const [removing, setRemoving] = useState<MenuOption | null>(null)
   const label = meal === 'lunch' ? 'ناهار' : 'شام'
   return (
     <div>
@@ -107,8 +154,8 @@ function OptionEditor({ jd, meal, options }: { jd: number; meal: MealKind; optio
       {options.length === 0 && <p className="text-xs text-muted">گزینه‌ای ثبت نشده</p>}
       <div className="flex flex-wrap gap-1">
         {options.map((option) => (
-          <button key={option} className="min-h-11 rounded border border-line px-3 text-sm" onClick={() => setRemoving(option)}>
-            {option} ×
+          <button key={option.id} className="min-h-11 rounded border border-line px-3 text-sm" disabled={disabled} onClick={() => setRemoving(option)}>
+            {option.title} ×
           </button>
         ))}
       </div>
@@ -117,23 +164,23 @@ function OptionEditor({ jd, meal, options }: { jd: number; meal: MealKind; optio
         onSubmit={(event) => {
           event.preventDefault()
           const name = value.trim()
-          if (!name || options.includes(name)) return
-          app.updateDayOptions(jd, meal, [...options, name])
-          setValue('')
+          if (!name || disabled || options.some((item) => item.title === name) || options.length >= 3) return
+          void onSave([...options, localOption(name, options.length + 1)]).then(() => setValue('')).catch(() => undefined)
         }}
       >
-        <input value={value} onChange={(event) => setValue(event.target.value)} placeholder="غذای جدید" aria-label={`غذای جدید ${label}`} className="h-11 min-w-0 flex-1 rounded-md border border-line bg-bg px-2 text-base" />
-        <Button type="submit" variant="secondary">افزودن</Button>
+        <input value={value} onChange={(event) => setValue(event.target.value)} placeholder="غذای جدید" aria-label={`غذای جدید ${label}`} disabled={disabled} className="h-11 min-w-0 flex-1 rounded-md border border-line bg-bg px-2 text-base" />
+        <Button type="submit" variant="secondary" disabled={disabled}>افزودن</Button>
       </form>
       <Dialog open={Boolean(removing)} title={`حذف از ${label}`} onClose={() => setRemoving(null)}>
-        <p className="text-sm">«{removing}» از {label} این روز حذف شود؟ سفارش‌هایی که قبلاً این نام را ثبت کرده‌اند عوض نمی‌شوند.</p>
+        <p className="text-sm">«{removing?.title}» از {label} این روز حذف شود؟ سفارش‌هایی که قبلاً این نام را ثبت کرده‌اند عوض نمی‌شوند.</p>
         <div className="mt-3 flex justify-end gap-2">
           <Button variant="secondary" onClick={() => setRemoving(null)}>انصراف</Button>
           <Button
             variant="danger"
+            disabled={disabled}
             onClick={() => {
-              if (removing) app.updateDayOptions(jd, meal, options.filter((item) => item !== removing))
-              setRemoving(null)
+              if (!removing) return
+              void onSave(options.filter((item) => item.id !== removing.id)).then(() => setRemoving(null)).catch(() => undefined)
             }}
           >
             حذف
@@ -144,20 +191,21 @@ function OptionEditor({ jd, meal, options }: { jd: number; meal: MealKind; optio
   )
 }
 
-function ImportPanel() {
+function ImportPanel({ managed }: { managed: ReturnType<typeof useManagedMenu> }) {
   const app = useApp()
   const [wizard, setWizard] = useState(false)
   const [error, setError] = useState('')
   const [reading, setReading] = useState(false)
+  const [fileMeta, setFileMeta] = useState<{ name: string; size: number } | null>(null)
+  const [preview, setPreview] = useState<ImportPreview | null>(null)
   const selection = useRef(0)
-  const menu = app.importedMenu
-  const sameMonth = Boolean(menu && menu.jy === app.selectedMonth.jy && menu.jm === app.selectedMonth.jm)
-  const fileMonth = menu ? `${JALALI_MONTHS[menu.jm - 1]} ${fa(menu.jy)}` : ''
+  const sameMonth = Boolean(preview && preview.jalaliYear === app.selectedMonth.jy && preview.jalaliMonth === app.selectedMonth.jm)
+  const fileMonth = preview ? `${JALALI_MONTHS[preview.jalaliMonth - 1]} ${fa(preview.jalaliYear)}` : ''
   return (
     <div className="space-y-3">
       <label className="block rounded-md border border-dashed border-line bg-surface px-4 py-8 text-center text-sm">
         <span className="block">فایل اکسل منو را انتخاب کنید</span>
-        <span className="mt-1 block text-xs text-muted">xlsx با شیت‌های ناهار و شام</span>
+        <span className="mt-1 block text-xs text-muted">xlsx با شیت‌های ناهار و شام · اعتبارسنجی در سرور انجام می‌شود</span>
         <input
           type="file"
           accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
@@ -165,59 +213,53 @@ function ImportPanel() {
           onChange={(event) => {
             const request = ++selection.current
             const file = event.target.files?.[0]
-            const month = app.selectedMonth
             setWizard(false)
             setError('')
+            setPreview(null)
             if (!file) {
-              app.setImportedFile(null)
+              setFileMeta(null)
               setReading(false)
               return
             }
-            app.setImportedFile({ name: file.name, size: file.size }, null)
+            setFileMeta({ name: file.name, size: file.size })
             setReading(true)
             if (!file.name.toLowerCase().endsWith('.xlsx')) {
               setError('فقط فایل xlsx پذیرفته می‌شود.')
               setReading(false)
               return
             }
-            const current = () => request === selection.current
-            file.arrayBuffer().then(async (buffer) => {
-              const result = await readMenuFile(buffer, month)
-              if (!current()) return
-              if (!result.ok) {
-                app.setImportedFile({ name: file.name, size: file.size }, null)
-                setError(result.error)
-                return
+            void menuApi.previewImport(file).then((result) => {
+              if (request !== selection.current) return
+              setPreview(result)
+              if (!result.valid) {
+                setError(result.errors.map((item) => item.message).filter(Boolean).join(' ') || 'فایل معتبر نیست.')
               }
-              setError('')
-              app.setImportedFile({ name: file.name, size: file.size }, result.menu)
-            }).catch(() => {
-              if (!current()) return
-              app.setImportedFile({ name: file.name, size: file.size }, null)
-              setError('خواندن فایل ممکن نشد. ساختار آن با نمونه منو سازگار نیست.')
+            }).catch((failure: unknown) => {
+              if (request !== selection.current) return
+              setPreview(null)
+              setError(failure instanceof AuthRequestError ? failure.message : 'ارسال فایل به سامانه ممکن نشد.')
             }).finally(() => {
-              if (current()) setReading(false)
+              if (request === selection.current) setReading(false)
             })
           }}
         />
       </label>
-      {reading && <p className="text-sm text-muted">در حال بررسی ساختار فایل…</p>}
-      {app.importedFile && (
+      {reading && <p className="text-sm text-muted">در حال بررسی فایل در سامانه…</p>}
+      {fileMeta && (
         <div className="rounded-md border border-line bg-surface p-3 text-sm">
-          <p className="font-medium break-all">{app.importedFile.name}</p>
-          <p className="text-xs text-muted">{faBytes(app.importedFile.size)}{menu ? ` · ${fileMonth} · ${fa(menu.days.length)} روز` : ''}</p>
+          <p className="font-medium break-all">{fileMeta.name}</p>
+          <p className="text-xs text-muted">{faBytes(fileMeta.size)}{preview ? ` · ${fileMonth} · ${fa(preview.dateCount)} روز · ${fa(preview.optionCount)} گزینه` : ''}</p>
+          {preview?.warnings.length ? (
+            <ul className="mt-2 list-disc pe-5 text-xs text-muted">
+              {preview.warnings.map((item, index) => <li key={`${item.message}-${index}`}>{item.message}</li>)}
+            </ul>
+          ) : null}
           {error && <p className="mt-3 rounded-md bg-dangerbg px-3 py-2 text-sm text-danger" role="alert">{error} منو و سفارش‌های موجود تغییر نکرده‌اند.</p>}
-          {menu && (
+          {preview?.valid && preview.importId && (
             <>
-              <div className="mt-3 max-h-80 space-y-2 overflow-auto">
-                {menu.days.map((day) => (
-                  <div key={day.jd} className="grid gap-2 rounded-md border border-line p-2 sm:grid-cols-2">
-                    <p className="text-sm font-medium sm:col-span-2">{fa(day.jd)} {JALALI_MONTHS[menu.jm - 1]}</p>
-                    <Preview title="ناهار" items={day.lunch} />
-                    <Preview title="شام" items={day.dinner} />
-                  </div>
-                ))}
-              </div>
+              <p className="mt-3 text-xs text-muted">
+                سفارش فعال در معرض تغییر: {fa(preview.impact?.atRiskOrderCount ?? 0)} از {fa(preview.impact?.activeOrderCount ?? 0)}
+              </p>
               {sameMonth ? (
                 <Button className="mt-3" onClick={() => setWizard(true)}>بررسی جایگزینی منو</Button>
               ) : (
@@ -227,33 +269,54 @@ function ImportPanel() {
           )}
         </div>
       )}
-      {wizard && sameMonth && <ReplaceWizard onClose={() => setWizard(false)} />}
+      {wizard && sameMonth && preview?.importId && (
+        <ReplaceWizard
+          preview={preview}
+          onClose={() => setWizard(false)}
+          onConfirmed={async () => {
+            await managed.reload()
+          }}
+        />
+      )}
     </div>
   )
 }
 
-function Preview({ title, items }: { title: string; items: string[] }) {
-  return (
-    <div className="rounded-md border border-line p-2">
-      <p className="text-xs text-muted">{title}</p>
-      {items.length === 0 ? <p className="mt-1 text-sm text-muted">بدون گزینه</p> : <ul className="mt-1 text-sm">{items.map((item) => <li key={item}>{item}</li>)}</ul>}
-    </div>
-  )
-}
-
-function ReplaceWizard({ onClose }: { onClose: () => void }) {
-  const app = useApp()
+function ReplaceWizard({
+  preview,
+  onClose,
+  onConfirmed,
+}: {
+  preview: ImportPreview
+  onClose: () => void
+  onConfirmed: () => Promise<void>
+}) {
   const [policy, setPolicy] = useState<ReplacePolicy | null>(null)
   const [step, setStep] = useState<'pick' | 'summary' | 'typed' | 'done'>('pick')
   const [phrase, setPhrase] = useState('')
   const [ack, setAck] = useState(false)
-  const impact = policy ? app.previewImpact(policy) : { affected: 0, keptOutside: 0, lunch: 0, dinner: 0 }
-  const selectedOrders = app.orders.filter((order) => order.jy === app.selectedMonth.jy && order.jm === app.selectedMonth.jm && order.choice).length
+  const [busy, setBusy] = useState(false)
+  const [applyError, setApplyError] = useState('')
+  const atRisk = preview.impact?.atRiskOrderCount ?? 0
+  const active = preview.impact?.activeOrderCount ?? 0
 
   function apply() {
-    if (!policy) return
-    app.applyImport(policy)
-    setStep('done')
+    if (!policy || !preview.importId || busy) return
+    setBusy(true)
+    setApplyError('')
+    void menuApi.confirmImport(preview.importId, policy)
+      .then(async () => {
+        await onConfirmed()
+        setStep('done')
+      })
+      .catch((failure: unknown) => {
+        if (failure instanceof AuthRequestError && (failure.status === 404 || failure.status === 422)) {
+          setApplyError(`${failure.message} پیش‌نمایش منقضی یا کهنه است؛ فایل را دوباره بارگذاری و بررسی کنید.`)
+          return
+        }
+        setApplyError(failure instanceof AuthRequestError ? failure.message : 'تأیید واردسازی انجام نشد.')
+      })
+      .finally(() => setBusy(false))
   }
 
   return (
@@ -270,15 +333,16 @@ function ReplaceWizard({ onClose }: { onClose: () => void }) {
           <div className="flex justify-end"><Button disabled={!policy} onClick={() => setStep('summary')}>ادامه</Button></div>
         </div>
       )}
+      {applyError && <p className="mt-3 rounded-md bg-dangerbg px-3 py-2 text-sm text-danger" role="alert">{applyError}</p>}
       {step === 'summary' && policy && (
         <div className="mt-3 space-y-3 text-sm">
           <p>سیاست: {POLICIES.find((item) => item.id === policy)?.title}</p>
-          <p>سفارش دارای انتخاب در {app.monthTitle}: {fa(selectedOrders)}</p>
-          <p>ناهار: {fa(impact.lunch)} · شام: {fa(impact.dinner)}</p>
+          <p>سفارش فعال این ماه در سامانه: {fa(active)}</p>
+          <p>سفارش در معرض ناسازگاری با منوی جدید: {fa(atRisk)}</p>
           <p>
-            {policy === 'keep' && `${fa(impact.keptOutside)} سفارش به غذایی اشاره دارد که در منوی جدید همان روز نیست و عمداً حفظ می‌شود.`}
-            {policy === 'match' && `${fa(impact.affected)} سفارش غذایش در منوی جدید همان روز نیست و خالی می‌شود. جایگزینی حدسی انجام نمی‌شود.`}
-            {policy === 'reset' && `${fa(impact.affected)} انتخاب ناهار و شام این ماه پاک می‌شود.`}
+            {policy === 'keep' && 'سفارش‌های قبلی حفظ می‌شوند، حتی اگر گزینه در منوی جدید نباشد.'}
+            {policy === 'match' && 'فقط سفارش‌هایی که دقیقاً با گزینه جدید منطبق‌اند می‌مانند؛ بقیه طبق سیاست سرور خالی می‌شوند.'}
+            {policy === 'reset' && 'با سیاست بازنشانی، سفارش‌های ناسازگار طبق قوانین سرور رد یا پاک می‌شوند.'}
           </p>
           {policy === 'match' && (
             <label className="flex items-start gap-2 text-sm">
@@ -287,11 +351,11 @@ function ReplaceWizard({ onClose }: { onClose: () => void }) {
             </label>
           )}
           <div className="flex justify-end gap-2">
-            <Button variant="secondary" onClick={() => setStep('pick')}>بازگشت</Button>
+            <Button variant="secondary" onClick={() => setStep('pick')} disabled={busy}>بازگشت</Button>
             {policy === 'reset' ? (
-              <Button variant="danger" onClick={() => setStep('typed')}>ادامه به تأیید نهایی</Button>
+              <Button variant="danger" disabled={busy} onClick={() => setStep('typed')}>ادامه به تأیید نهایی</Button>
             ) : (
-              <Button disabled={policy === 'match' && !ack} onClick={apply}>اعمال منوی جدید</Button>
+              <Button disabled={busy || (policy === 'match' && !ack)} onClick={apply}>اعمال منوی جدید</Button>
             )}
           </div>
         </div>
@@ -299,17 +363,17 @@ function ReplaceWizard({ onClose }: { onClose: () => void }) {
       {step === 'typed' && (
         <div className="mt-3 space-y-3 text-sm">
           <p className="rounded-md bg-dangerbg px-3 py-2 text-danger">بازنشانی، انتخاب ناهار و شام این ماه را پاک می‌کند. برای ادامه، کلمه «بازنشانی» را بنویسید.</p>
-          <input value={phrase} onChange={(event) => setPhrase(event.target.value)} className={controlClass} placeholder="بازنشانی" />
+          <input value={phrase} onChange={(event) => setPhrase(event.target.value)} className={controlClass} placeholder="بازنشانی" disabled={busy} />
           <div className="flex justify-end gap-2">
-            <Button variant="secondary" onClick={() => setStep('summary')}>بازگشت</Button>
-            <Button variant="danger" disabled={phrase.trim() !== 'بازنشانی'} onClick={apply}>بازنشانی و اعمال</Button>
+            <Button variant="secondary" onClick={() => setStep('summary')} disabled={busy}>بازگشت</Button>
+            <Button variant="danger" disabled={busy || phrase.trim() !== 'بازنشانی'} onClick={apply}>بازنشانی و اعمال</Button>
           </div>
         </div>
       )}
       {step === 'done' && (
         <div className="mt-3 space-y-3">
-          <Badge tone="ok">منوی جدید اعمال شد</Badge>
-          <p className="text-sm">وضعیت ذخیره: انجام شد. سفارش‌ها فقط طبق سیاست انتخاب‌شده تغییر کردند.</p>
+          <Badge tone="ok">منوی جدید در سامانه اعمال شد</Badge>
+          <p className="text-sm">پیش‌نویس از سرور تازه‌سازی شد. سفارش‌ها فقط طبق سیاست انتخاب‌شده در بک‌اند تغییر کردند.</p>
           <div className="flex justify-end"><Button onClick={onClose}>بستن</Button></div>
         </div>
       )}
