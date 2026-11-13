@@ -11,6 +11,18 @@ export const AuditAction = {
   GroupDeactivated: 'GROUP_DEACTIVATED',
   UserAddedToGroup: 'USER_ADDED_TO_GROUP',
   UserRemovedFromGroup: 'USER_REMOVED_FROM_GROUP',
+  MenuCreated: 'MENU_CREATED',
+  DraftVersionCreated: 'DRAFT_VERSION_CREATED',
+  DraftVersionEdited: 'DRAFT_VERSION_EDITED',
+  MealConfigured: 'MEAL_CONFIGURED',
+  MealOptionAdded: 'MEAL_OPTION_ADDED',
+  MealOptionUpdated: 'MEAL_OPTION_UPDATED',
+  MealOptionRemoved: 'MEAL_OPTION_REMOVED',
+  MealOptionsReordered: 'MEAL_OPTIONS_REORDERED',
+  MenuVersionPublished: 'MENU_VERSION_PUBLISHED',
+  ExcelImportPreviewCreated: 'EXCEL_IMPORT_PREVIEW_CREATED',
+  ExcelImportConfirmed: 'EXCEL_IMPORT_CONFIRMED',
+  ExcelImportRejected: 'EXCEL_IMPORT_REJECTED',
 } as const;
 
 export const AuditEntity = {
@@ -18,4 +30,8 @@ export const AuditEntity = {
   Building: 'Building',
   Group: 'Group',
   GroupMembership: 'GroupMembership',
+  Menu: 'Menu',
+  MenuVersion: 'MenuVersion',
+  MenuItem: 'MenuItem',
+  MenuImport: 'MenuImport',
 } as const;

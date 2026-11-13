@@ -7,6 +7,7 @@ import { BuildingsModule } from './buildings/buildings.module';
 import { DatabaseModule } from './database/database.module';
 import { GroupsModule } from './groups/groups.module';
 import { HealthModule } from './health/health.module';
+import { MenusModule } from './menus/menus.module';
 import { UsersModule } from './users/users.module';
 
 @Module({
@@ -24,6 +25,7 @@ import { UsersModule } from './users/users.module';
     BuildingsModule,
     GroupsModule,
     UsersModule,
+    MenusModule,
   ],
 })
 export class AppModule {}

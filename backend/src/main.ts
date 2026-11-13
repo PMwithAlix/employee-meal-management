@@ -16,7 +16,7 @@ async function bootstrap() {
       new DocumentBuilder()
         .setTitle('Khaan API')
         .setDescription('خوان — employee meal ordering platform')
-        .setVersion('0.2.0')
+        .setVersion('0.4.0')
         .addCookieAuth('khaan.sid')
         .build(),
     );

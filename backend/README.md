@@ -193,10 +193,54 @@ All routes below require an authenticated HR or ADMIN session cookie. EMPLOYEE, 
 | Create ADMIN / manage ADMIN or HR accounts | No | No | Yes |
 | Deactivate / reset password | No | Same as create (not ADMIN or HR) | Yes |
 | Buildings and groups | No | Yes | Yes |
+| Monthly menus / Excel import | No (SUPPORT: Yes) | No | Yes |
 
 Non-ADMIN users must have a `buildingId`. ADMIN may omit it. Group membership does not change role or building. Historical membership rows are never overwritten; re-adding a user after `endedAt` creates a new row. Overlapping intervals are rejected by the database exclusion constraint.
 
 Mutating operations write `audit_logs` in the same transaction when possible. Actor ID comes from the session, never from the request body. Passwords, hashes, and session tokens are stripped from before/after JSON.
+
+## Menus
+
+The organization has one shared menu (not per building). `menus.year` / `menus.month` store the **Jalali** year and month. Each `menu_items.mealDate` is a Gregorian `DATE`. Conversion uses `jalaali-js` with `Asia/Tehran` civil dates.
+
+Lifecycle:
+
+1. Create a monthly menu.
+2. Create a Draft version (empty or copied from a source / current published version). New item IDs are always generated.
+3. Configure lunch and dinner independently with 1–3 options (`PATCH /menus/:id/versions/:versionId`).
+4. Publish atomically. The previous published version stays immutable; `publishedVersionId` points at the current one.
+5. Editing a published version is rejected. Create a new Draft instead.
+
+Published versions, historical orders, and audit rows are never mutated by later drafts or Excel imports. Publishing does **not** send notifications.
+
+| Method | Path | Notes |
+|---|---|---|
+| GET | `/api/v1/menus` | Filter Jalali `year`, `month`; paginated. |
+| POST | `/api/v1/menus` | Body `{ year, month }` (Jalali). |
+| GET | `/api/v1/menus/:id` | |
+| GET | `/api/v1/menus/:id/versions` | |
+| POST | `/api/v1/menus/:id/versions` | Optional `{ sourceVersionId }`. |
+| GET | `/api/v1/menus/:id/versions/:versionId` | Includes meals and Jalali dates. |
+| PATCH | `/api/v1/menus/:id/versions/:versionId` | Draft only. Body: `mealDate` (Gregorian `YYYY-MM-DD`), `mealType`, `options`. Empty `options` removes that meal. |
+| POST | `/api/v1/menus/:id/versions/:versionId/publish` | Validates the whole version in a transaction. |
+| POST | `/api/v1/menus/imports/preview` | Multipart field `file`. Workbook sheets `ناهار` and `شام`. |
+| POST | `/api/v1/menus/imports/:importId/confirm` | Body `{ "policy": "KEEP_EXISTING_ORDERS" \| "EXACT_MATCH_ONLY" \| "RESET" }`. |
+
+Excel format (see `backend/test/fixtures/shahrivar-1405.xlsx`):
+
+- Title rows, then headers: `ردیف`, `روز`, `تاریخ`, `نوع اول`, `نوع دوم`, `نوع سوم` (dinner may omit the third column).
+- Dates are Jalali `YYYY/MM/DD`. The file must cover every day of the month on both sheets.
+- Lunch worksheets include the `نوع سوم` column. The sample workbook sometimes has Thursday lunches with two options; those import as 2-option meals with a warning. Dinner option 3 is optional.
+- Empty Friday rows are allowed. Empty non-Friday rows are skipped with a warning.
+- Any validation error blocks the preview `importId`; nothing is written.
+
+Import is two steps. Preview is stored in memory for 15 minutes and is bound to the actor plus the current published-version fingerprint. Confirm creates a **new Draft** only. Policies:
+
+- `KEEP_EXISTING_ORDERS` — always allowed; unmatched options are reported.
+- `EXACT_MATCH_ONLY` — rejected unless every published/imported option has an exact unique title+date+mealType match. No fuzzy or position matching.
+- `RESET` — rejected when active orders reference published options that the workbook does not keep.
+
+Only `ADMIN` and `SUPPORT` may call menu APIs.
 
 ## Tests
 
@@ -205,7 +249,7 @@ npm test
 npm run test:e2e
 ```
 
-Unit tests cover health, auth, user-access rules, and audit sanitization. Auth and organization e2e tests need PostgreSQL and write temporary `e2e.auth.*` / `e2e.org.*` users, then delete them.
+Unit tests cover health, auth, user-access, audit sanitization, Jalali conversion, menu validation, and Excel parsing. E2E tests need PostgreSQL and write temporary `e2e.auth.*` / `e2e.org.*` / `e2e.menu.*` users, then delete them.
 
 ## Production build
 
@@ -243,6 +287,8 @@ backend/
     users/            # HR/Admin user administration
     buildings/        # building CRUD (no delete)
     groups/           # groups and membership history
+    menus/            # monthly menus, versions, Excel import
+    dates/            # Jalali/Gregorian conversion
     audit/            # shared audit writer
     cli/              # one-time bootstrap:admin
     config/           # environment validation
