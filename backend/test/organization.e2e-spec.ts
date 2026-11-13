@@ -447,7 +447,7 @@ describe('Organization (e2e)', () => {
       .set('Cookie', adminCookie)
       .send({ userId: hrUser.id });
     expect(added.status).toBe(201);
-    expect(addedHr.status).toBe(201);
+    expect(addedHr.status).toBe(422);
     expect(
       (
         await request(app.getHttpServer())
@@ -468,7 +468,7 @@ describe('Organization (e2e)', () => {
     const history = await request(app.getHttpServer())
       .get(`/api/v1/groups/${groupId}/memberships/history`)
       .set('Cookie', adminCookie);
-    expect(history.body.length).toBeGreaterThanOrEqual(3);
+    expect(history.body.length).toBeGreaterThanOrEqual(2);
 
     await prisma.user.update({
       where: { id: employeeId },

@@ -4,7 +4,7 @@ import {
   NotFoundException,
   UnprocessableEntityException,
 } from '@nestjs/common';
-import { Prisma, Role } from '@prisma/client';
+import { Prisma } from '@prisma/client';
 import { AuditAction, AuditEntity } from '../audit/audit.actions';
 import { AuditService } from '../audit/audit.service';
 import type { AuthUser } from '../common/types/auth-user';

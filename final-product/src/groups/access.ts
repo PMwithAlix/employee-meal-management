@@ -4,6 +4,6 @@ export function usesLiveGroupsPage(role: Role) {
   return role === 'admin' || role === 'hr'
 }
 
-export function isEligibleGroupCandidate(user: { role: Role; isActive: boolean }) {
-  return user.role === 'employee' && user.isActive
+export function isEligibleGroupCandidate(user: { role: string; isActive: boolean }) {
+  return user.role === 'EMPLOYEE' && user.isActive
 }

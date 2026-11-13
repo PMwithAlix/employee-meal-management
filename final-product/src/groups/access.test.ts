@@ -16,11 +16,11 @@ describe('usesLiveGroupsPage', () => {
 
 describe('isEligibleGroupCandidate', () => {
   it('allows active employees only', () => {
-    expect(isEligibleGroupCandidate({ role: 'employee', isActive: true })).toBe(true)
-    expect(isEligibleGroupCandidate({ role: 'employee', isActive: false })).toBe(false)
-    expect(isEligibleGroupCandidate({ role: 'admin', isActive: true })).toBe(false)
-    expect(isEligibleGroupCandidate({ role: 'hr', isActive: true })).toBe(false)
-    expect(isEligibleGroupCandidate({ role: 'support', isActive: true })).toBe(false)
-    expect(isEligibleGroupCandidate({ role: 'management', isActive: true })).toBe(false)
+    expect(isEligibleGroupCandidate({ role: 'EMPLOYEE', isActive: true })).toBe(true)
+    expect(isEligibleGroupCandidate({ role: 'EMPLOYEE', isActive: false })).toBe(false)
+    expect(isEligibleGroupCandidate({ role: 'ADMIN', isActive: true })).toBe(false)
+    expect(isEligibleGroupCandidate({ role: 'HR', isActive: true })).toBe(false)
+    expect(isEligibleGroupCandidate({ role: 'SUPPORT', isActive: true })).toBe(false)
+    expect(isEligibleGroupCandidate({ role: 'MANAGEMENT', isActive: true })).toBe(false)
   })
 })
