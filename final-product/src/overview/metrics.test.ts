@@ -1,5 +1,5 @@
-import { describe, expect, it } from 'vitest'
-import { combinedActiveCount, managementOpenDaysMetric, metricValue, openDaysMetric } from './metrics'
+import { describe, expect, it, vi } from 'vitest'
+import { combinedActiveCount, managementOpenDaysMetric, metricValue, openDaysMetric, retryManagementOverview } from './metrics'
 
 describe('overview live metrics', () => {
   it('shows live lunch and dinner totals only after both counts are ready', () => {
@@ -20,5 +20,19 @@ describe('overview live metrics', () => {
   it('treats an empty published menu as zero open days for management, not a seed number', () => {
     expect(managementOpenDaysMetric('empty', 'ready', 6)).toBe('۰')
     expect(openDaysMetric('empty', 'ready', 6)).toBe('—')
+  })
+
+  it('retries management overview deadlines together with the other live sources', () => {
+    const counts = vi.fn()
+    const published = vi.fn()
+    const recent = vi.fn()
+    const deadlines = vi.fn()
+    retryManagementOverview({ counts, published, recent, deadlines })
+    expect(counts).toHaveBeenCalledOnce()
+    expect(published).toHaveBeenCalledOnce()
+    expect(recent).toHaveBeenCalledOnce()
+    expect(deadlines).toHaveBeenCalledOnce()
+    expect(managementOpenDaysMetric('ready', 'loading', 4)).toBe('…')
+    expect(managementOpenDaysMetric('ready', 'error', 4)).toBe('—')
   })
 })

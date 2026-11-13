@@ -9,7 +9,7 @@ import { fa, cn } from '../lib/text'
 import { useRecentAudit } from '../audit/useRecentAudit'
 import { useGuestMonthCount } from '../guests/useGuestMonthCount'
 import { usePublishedMenu } from '../menus/usePublishedMenu'
-import { combinedActiveCount, managementOpenDaysMetric, metricValue, openDaysMetric } from '../overview/metrics'
+import { combinedActiveCount, managementOpenDaysMetric, metricValue, openDaysMetric, retryManagementOverview } from '../overview/metrics'
 import { useSupportOrderCounts } from '../orders/useSupportOrderCounts'
 import type { MealFilter, StatusFilter } from '../types'
 
@@ -237,9 +237,13 @@ function LiveOpsOverview({ variant }: { variant: 'support' | 'management' }) {
     ? { label: 'سفارش مهمان', value: metricValue(guests.status, guests.count), hint: 'مورد فعال', icon: Utensils }
     : { label: 'سفارش‌های فعال', value: metricValue(counts.status, combinedActiveCount(counts.status, counts.lunch, counts.dinner)), hint: 'مجموع ناهار و شام', icon: Utensils }
   const retry = () => {
-    counts.retry()
-    published.retry()
-    recent.retry()
+    if (variant !== 'management') return
+    retryManagementOverview({
+      counts: counts.retry,
+      published: published.retry,
+      recent: recent.retry,
+      deadlines: app.retryDeadlines,
+    })
   }
 
   return (

@@ -24,3 +24,15 @@ export function managementOpenDaysMetric(publishedStatus: string, deadlineStatus
   if (publishedStatus === 'ready') return fa(openCount)
   return '—'
 }
+
+export function retryManagementOverview(actions: {
+  counts: () => void
+  published: () => void
+  recent: () => void
+  deadlines: () => void
+}) {
+  actions.counts()
+  actions.published()
+  actions.recent()
+  actions.deadlines()
+}
