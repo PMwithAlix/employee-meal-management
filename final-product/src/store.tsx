@@ -2,6 +2,7 @@ import { createContext, useContext, useEffect, useMemo, useState, type ReactNode
 import { buildMonthMenu, createSnapshot, fullName, PERSONA_ID, ROLE_LABEL, SEED_MONTH } from './data'
 import { defaultMonthDeadlines, formatDeadline, isOrderingOpen, type MealDeadline, type MonthDeadlines } from './lib/deadlines'
 import { addMonths, currentDateTime, isPastDate, JALALI_MONTHS, monthKey, type JalaliDate, type JalaliDateTime } from './lib/jalali'
+import { ADMIN_ACCOUNT_ID, normalizeUsername, passwordIssue, setSessionSecret, verifySessionSecret } from './lib/credentials'
 import { fa } from './lib/text'
 import { can, canAccess, LANDING_PAGE } from './permissions'
 import type {
@@ -53,6 +54,7 @@ interface StoreValue {
   toasts: Toast[]
   personaId: string | null
   personaName: string
+  personaUsername: string
   buildingName: string
   setRole: (role: Role) => void
   setTheme: (theme: 'light' | 'dark') => void
@@ -66,7 +68,9 @@ interface StoreValue {
   setMealDeadline: (meal: MealKind, patch: Partial<Pick<MealDeadline, 'relation' | 'hour' | 'minute'>>) => void
   selectMeal: (employeeId: string, jd: number, meal: MealKind, choice: string | null, scope: 'self' | 'ops') => boolean
   rateMeal: (orderId: string, score: number, comment: string) => boolean
-  saveEmployee: (input: Omit<Employee, 'id' | 'created' | 'active'> & { id?: string }) => string | null
+  saveEmployee: (input: Omit<Employee, 'id' | 'created' | 'active'> & { id?: string; initialPassword?: string }) => string | null
+  changePassword: (current: string, next: string) => string | null
+  resetEmployeePassword: (employeeId: string, password: string) => string | null
   setEmployeeActive: (id: string, active: boolean) => void
   saveBuilding: (name: string, id?: string) => string | undefined
   assignBuilding: (employeeId: string, buildingId: string) => void
@@ -143,7 +147,14 @@ export function StoreProvider({ children, onLogout }: { children: ReactNode; onL
   const personaId = PERSONA_ID[role]
   const persona = employees.find((item) => item.id === personaId) ?? null
   const personaName = persona ? fullName(persona) : 'مدیر سامانه'
+  const personaUsername = persona?.username ?? 'admin'
   const buildingName = persona ? buildings.find((item) => item.id === persona.buildingId)?.name ?? '—' : 'بدون ساختمان'
+
+  function clockStamp() {
+    const hour = String(now.hour).padStart(2, '0')
+    const minute = String(now.minute).padStart(2, '0')
+    return `${fa(now.jd)} ${JALALI_MONTHS[now.jm - 1]} ${fa(now.jy)}، ساعت ${fa(hour)}:${fa(minute)}`
+  }
 
   function toast(text: string) {
     const id = uid('t')
@@ -240,14 +251,21 @@ export function StoreProvider({ children, onLogout }: { children: ReactNode; onL
     return true
   }
 
-  function saveEmployee(input: Omit<Employee, 'id' | 'created' | 'active'> & { id?: string }) {
+  function saveEmployee(input: Omit<Employee, 'id' | 'created' | 'active'> & { id?: string; initialPassword?: string }) {
     if (!can(role, 'employee.edit')) return 'اجازه این کار را ندارید.'
-    const username = input.username.trim()
-    const duplicate = employees.some((item) => item.username === username && item.id !== input.id)
+    const username = normalizeUsername(input.username)
+    const duplicate = employees.some((item) => normalizeUsername(item.username) === username && item.id !== input.id)
     if (!input.firstName.trim() || !input.lastName.trim() || !username || !input.buildingId || duplicate) return 'نام، نام خانوادگی، نام کاربری یکتا و ساختمان لازم است.'
     if (input.id) {
       const previous = employees.find((item) => item.id === input.id)
-      setEmployees((list) => list.map((item) => (item.id === input.id ? { ...item, ...input, username, id: item.id } : item)))
+      setEmployees((list) => list.map((item) => (item.id === input.id ? {
+        ...item,
+        firstName: input.firstName.trim(),
+        lastName: input.lastName.trim(),
+        username,
+        buildingId: input.buildingId,
+        groupIds: input.groupIds,
+      } : item)))
       pushActivity({
         actor: personaName,
         action: 'ویرایش کارمند',
@@ -257,6 +275,8 @@ export function StoreProvider({ children, onLogout }: { children: ReactNode; onL
         after: `${input.firstName.trim()} ${input.lastName.trim()}`,
       })
     } else {
+      const passwordError = passwordIssue(input.initialPassword ?? '')
+      if (passwordError) return passwordError
       const id = uid('e')
       setEmployees((list) => [
         {
@@ -271,16 +291,68 @@ export function StoreProvider({ children, onLogout }: { children: ReactNode; onL
         },
         ...list,
       ])
+      setSessionSecret(id, input.initialPassword ?? '')
       pushActivity({
         actor: personaName,
         action: 'ایجاد حساب کارمند',
         target: `${input.firstName.trim()} ${input.lastName.trim()}`,
         at: 'همین حالا',
         before: '—',
-        after: 'فعال',
+        after: username,
       })
     }
     toast('ذخیره شد')
+    return null
+  }
+
+  function changePassword(current: string, next: string) {
+    const accountId = personaId ?? ADMIN_ACCOUNT_ID
+    if (!verifySessionSecret(accountId, current)) return 'رمز فعلی درست نیست.'
+    const issue = passwordIssue(next)
+    if (issue) return issue
+    if (next === current) return 'رمز جدید باید با رمز فعلی متفاوت باشد.'
+    setSessionSecret(accountId, next)
+    pushActivity({
+      actor: personaName,
+      action: 'تغییر رمز عبور',
+      target: personaUsername,
+      at: clockStamp(),
+      before: 'رمز قبلی',
+      after: 'رمز جدید در نشست نمایشی',
+    })
+    toast('رمز عبور به‌روز شد')
+    return null
+  }
+
+  function resetEmployeePassword(employeeId: string, password: string) {
+    if (!can(role, 'employee.edit')) return 'اجازه بازنشانی رمز را ندارید.'
+    const employee = employees.find((item) => item.id === employeeId)
+    if (!employee) return 'کارمند پیدا نشد.'
+    const issue = passwordIssue(password)
+    if (issue) return issue
+    setSessionSecret(employeeId, password)
+    const at = clockStamp()
+    pushActivity({
+      actor: personaName,
+      action: 'بازنشانی رمز عبور',
+      target: fullName(employee),
+      at,
+      before: 'رمز قبلی',
+      after: 'رمز جدید در نشست نمایشی',
+    })
+    setNotes((list) => [
+      {
+        id: uid('n'),
+        title: 'رمز عبور حساب شما بازنشانی شد',
+        body: `رمز عبور حساب شما توسط منابع انسانی بازنشانی شد. زمان عملیات: ${at}. رمز جدید از همین اعلان ارسال نشده است.`,
+        at,
+        read: false,
+        page: 'settings',
+        employeeId,
+      },
+      ...list,
+    ])
+    toast('رمز عبور بازنشانی شد')
     return null
   }
 
@@ -519,6 +591,7 @@ export function StoreProvider({ children, onLogout }: { children: ReactNode; onL
     toasts,
     personaId,
     personaName,
+    personaUsername,
     buildingName,
     setRole,
     setTheme: setThemeState,
@@ -550,6 +623,8 @@ export function StoreProvider({ children, onLogout }: { children: ReactNode; onL
     selectMeal,
     rateMeal,
     saveEmployee,
+    changePassword,
+    resetEmployeePassword,
     setEmployeeActive,
     saveBuilding,
     assignBuilding,

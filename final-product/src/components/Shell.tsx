@@ -197,7 +197,7 @@ export function Shell() {
               )}
             </div>
             <div className="relative">
-              <button className="flex h-11 shrink-0 items-center gap-2 rounded-md px-1.5 hover:bg-surface" aria-label="حساب" onClick={() => { setProfileOpen((value) => !value); setNotesOpen(false) }}>
+              <button className="flex h-11 shrink-0 items-center gap-2 rounded-md px-1.5 hover:bg-surface" aria-label="حساب" aria-expanded={profileOpen} onClick={() => { setProfileOpen((value) => !value); setNotesOpen(false) }}>
                 <span className="grid h-7 w-7 place-items-center rounded-full bg-surface2 text-xs">{app.personaName.slice(0, 1)}</span>
                 <span className="hidden text-start sm:block">
                   <span className="block text-xs font-medium leading-4">{app.personaName}</span>
@@ -205,10 +205,26 @@ export function Shell() {
                 </span>
               </button>
               {profileOpen && (
-                <div className="absolute end-0 z-30 mt-1 w-56 rounded-md border border-line bg-surface p-2 text-sm shadow-card">
-                  <p className="px-2 py-1 font-medium">{app.personaName}</p>
-                  <p className="px-2 text-xs text-muted">{ROLE_LABEL[app.role]} · {app.buildingName}</p>
-                  <button className="mt-2 flex min-h-11 w-full items-center gap-2 rounded-md px-2 py-2 hover:bg-surface2" onClick={app.logout}>
+                <div className="absolute end-0 z-30 mt-1 w-[min(18rem,calc(100vw-1.5rem))] rounded-md border border-line bg-surface p-2 text-sm shadow-card">
+                  <div className="flex items-center gap-2 px-2 py-2">
+                    <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-surface2 text-sm">{app.personaName.slice(0, 1)}</span>
+                    <span className="min-w-0">
+                      <span className="block truncate font-medium">{app.personaName}</span>
+                      <span className="block truncate text-xs text-muted" dir="ltr">{app.personaUsername}</span>
+                    </span>
+                  </div>
+                  <p className="px-2 text-xs text-muted">{ROLE_LABEL[app.role]}</p>
+                  <p className="px-2 pb-1 text-xs text-muted">{app.buildingName}</p>
+                  <button
+                    className="mt-1 flex min-h-11 w-full items-center rounded-md px-2 py-2 hover:bg-surface2"
+                    onClick={() => {
+                      app.setPage('settings')
+                      setProfileOpen(false)
+                    }}
+                  >
+                    حساب کاربری
+                  </button>
+                  <button className="flex min-h-11 w-full items-center gap-2 rounded-md px-2 py-2 hover:bg-surface2" onClick={app.logout}>
                     <LogOut size={14} /> خروج
                   </button>
                 </div>

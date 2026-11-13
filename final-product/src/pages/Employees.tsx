@@ -1,6 +1,11 @@
 import { useMemo, useState } from 'react'
+import { Copy, RefreshCw } from 'lucide-react'
+import { CredentialHandoff } from '../components/CredentialHandoff'
+import { SecretField } from '../components/SecretField'
 import { Badge, Button, Dialog, Empty, Field, controlClass } from '../components/ui'
 import { fullName } from '../data'
+import { generatePassword, normalizeUsername, passwordIssue } from '../lib/credentials'
+import { can } from '../permissions'
 import { cn } from '../lib/text'
 import { useApp } from '../store'
 
@@ -11,6 +16,7 @@ export function EmployeesPage() {
   const [groupId, setGroupId] = useState('all')
   const [status, setStatus] = useState<'all' | 'active' | 'inactive'>('all')
   const [editing, setEditing] = useState<string | 'new' | null>(null)
+  const [resetting, setResetting] = useState(false)
   const [selected, setSelected] = useState<string | null>(app.employees[0]?.id ?? null)
   const rows = useMemo(() => app.employees.filter((employee) => {
     const blob = `${fullName(employee)} ${employee.username}`
@@ -94,6 +100,9 @@ export function EmployeesPage() {
           </dl>
           <div className="mt-4 flex flex-col gap-2">
             <Button variant="secondary" onClick={() => setEditing(current.id)}>ویرایش</Button>
+            {can(app.role, 'employee.edit') && (
+              <Button variant="secondary" onClick={() => setResetting(true)}>بازنشانی رمز عبور</Button>
+            )}
             <Button variant={current.active ? 'danger' : 'primary'} onClick={() => app.setEmployeeActive(current.id, !current.active)}>
               {current.active ? 'غیرفعال‌سازی' : 'فعال‌سازی'}
             </Button>
@@ -102,6 +111,7 @@ export function EmployeesPage() {
         </aside>
       )}
       {editing && <EmployeeForm id={editing === 'new' ? undefined : editing} onClose={() => setEditing(null)} />}
+      {resetting && current && <ResetPasswordDialog employeeId={current.id} onClose={() => setResetting(false)} />}
     </div>
   )
 }
@@ -126,17 +136,22 @@ function EmployeeForm({ id, onClose }: { id?: string; onClose: () => void }) {
   const [groupIds, setGroupIds] = useState<string[]>(current?.groupIds ?? [])
   const [error, setError] = useState('')
   const [tried, setTried] = useState(false)
-  const duplicate = app.employees.some((employee) => employee.username === username.trim() && employee.id !== id)
+  const [handoff, setHandoff] = useState<{ username: string; password: string } | null>(null)
+  const normalized = normalizeUsername(username)
+  const duplicate = app.employees.some((employee) => normalizeUsername(employee.username) === normalized && employee.id !== id)
   const fields = {
     firstName: firstName.trim() ? '' : 'نام را وارد کنید.',
     lastName: lastName.trim() ? '' : 'نام خانوادگی را وارد کنید.',
-    username: !username.trim() ? 'نام کاربری را وارد کنید.' : duplicate ? 'این نام کاربری قبلاً ثبت شده است.' : '',
-    password: !id && password.trim().length < 4 ? 'رمز عبور اولیه را وارد کنید.' : '',
+    username: !normalized ? 'نام کاربری را وارد کنید.' : duplicate ? 'این نام کاربری قبلاً ثبت شده است.' : '',
+    password: !id ? passwordIssue(password) : '',
     building: buildingId ? '' : 'ساختمان را انتخاب کنید.',
   }
 
   return (
-    <Dialog open title={id ? 'ویرایش کارمند' : 'کارمند جدید'} onClose={onClose} wide>
+    <Dialog open title={handoff ? 'اطلاعات ورود آزمایشی' : id ? 'ویرایش کارمند' : 'کارمند جدید'} onClose={onClose} wide>
+      {handoff ? (
+        <CredentialHandoff username={handoff.username} password={handoff.password} title="حساب در نمونه ساخته شد. این رمز را از کانال دیگری به کارمند بدهید." onDone={onClose} />
+      ) : (
       <form
         className="grid gap-3 sm:grid-cols-2"
         onSubmit={(event) => {
@@ -145,20 +160,46 @@ function EmployeeForm({ id, onClose }: { id?: string; onClose: () => void }) {
             setTried(true)
             return
           }
-          const message = app.saveEmployee({ id, firstName, lastName, username, buildingId, groupIds })
+          const message = app.saveEmployee({ id, firstName, lastName, username: normalized, buildingId, groupIds, initialPassword: id ? undefined : password })
           if (message) setError(message)
+          else if (!id) setHandoff({ username: normalized, password })
           else onClose()
         }}
       >
         <Field label="نام"><input className={controlClass} value={firstName} onChange={(event) => setFirstName(event.target.value)} />{tried && fields.firstName && <p className="mt-1 text-sm text-danger">{fields.firstName}</p>}</Field>
         <Field label="نام خانوادگی"><input className={controlClass} value={lastName} onChange={(event) => setLastName(event.target.value)} />{tried && fields.lastName && <p className="mt-1 text-sm text-danger">{fields.lastName}</p>}</Field>
-        <Field label="نام کاربری"><input className={controlClass} dir="ltr" value={username} onChange={(event) => setUsername(event.target.value)} />{(tried || duplicate) && fields.username && <p className="mt-1 text-sm text-danger">{fields.username}</p>}</Field>
+        <Field label="نام کاربری">
+          <input
+            className={controlClass}
+            dir="ltr"
+            value={username}
+            onChange={(event) => setUsername(event.target.value.replace(/[A-Z]/g, (letter) => letter.toLowerCase()))}
+            onBlur={() => setUsername(normalized)}
+          />
+          <p className="mt-1 text-xs text-muted">حروف انگلیسی کوچک ذخیره می‌شود{normalized ? `، مثل ${normalized}` : ''}.</p>
+          {(tried || duplicate) && fields.username && <p className="mt-1 text-sm text-danger">{fields.username}</p>}
+        </Field>
         {!id && (
-          <Field label="رمز عبور اولیه">
-            <input className={controlClass} type="password" value={password} onChange={(event) => setPassword(event.target.value)} autoComplete="new-password" />
-            {tried && fields.password && <p className="mt-1 text-sm text-danger">{fields.password}</p>}
-            <p className="mt-1 text-xs text-muted">این رمز در نمونه ذخیره نمی‌شود و در ورود واقعی ثبت نمی‌گردد. ورود آزمایشی همچنان با هر نام کاربری غیرخالی انجام می‌شود.</p>
-          </Field>
+          <div className="sm:col-span-2">
+            <SecretField
+              label="رمز عبور اولیه"
+              value={password}
+              onChange={setPassword}
+              autoComplete="new-password"
+              error={tried ? fields.password : ''}
+              actions={(
+                <>
+                  <button type="button" className="grid h-11 w-11 shrink-0 place-items-center rounded-md border border-line bg-surface text-muted hover:bg-surface2" aria-label="تولید رمز تصادفی" onClick={() => setPassword(generatePassword())}>
+                    <RefreshCw size={16} />
+                  </button>
+                  <button type="button" className="grid h-11 w-11 shrink-0 place-items-center rounded-md border border-line bg-surface text-muted hover:bg-surface2" aria-label="کپی رمز" onClick={() => { if (password) void navigator.clipboard.writeText(password) }}>
+                    <Copy size={16} />
+                  </button>
+                </>
+              )}
+            />
+            <p className="mt-1 text-xs text-muted">رمز در پروفایل کارمند یا حافظه پایدار ذخیره نمی‌شود. پس از ذخیره، صفحه تحویل اطلاعات نمایش داده می‌شود.</p>
+          </div>
         )}
         <Field label="ساختمان">
           <select className={controlClass} value={buildingId} onChange={(event) => setBuildingId(event.target.value)}>
@@ -189,6 +230,65 @@ function EmployeeForm({ id, onClose }: { id?: string; onClose: () => void }) {
           <Button type="submit">ذخیره</Button>
         </div>
       </form>
+      )}
+    </Dialog>
+  )
+}
+
+function ResetPasswordDialog({ employeeId, onClose }: { employeeId: string; onClose: () => void }) {
+  const app = useApp()
+  const employee = app.employees.find((item) => item.id === employeeId)
+  const [password, setPassword] = useState('')
+  const [error, setError] = useState('')
+  const [tried, setTried] = useState(false)
+  const [saving, setSaving] = useState(false)
+  const [handoff, setHandoff] = useState<string | null>(null)
+  const issue = passwordIssue(password)
+
+  if (!employee) return null
+  return (
+    <Dialog open title={handoff ? 'رمز جدید برای تحویل' : 'بازنشانی رمز عبور'} onClose={onClose}>
+      {handoff ? (
+        <CredentialHandoff username={employee.username} password={handoff} title={`رمز ${fullName(employee)} در این نشست بازنشانی شد.`} onDone={onClose} />
+      ) : (
+        <form
+          className="space-y-3"
+          onSubmit={(event) => {
+            event.preventDefault()
+            setTried(true)
+            if (issue || saving) return
+            setSaving(true)
+            const message = app.resetEmployeePassword(employeeId, password)
+            setSaving(false)
+            if (message) setError(message)
+            else setHandoff(password)
+          }}
+        >
+          <p className="text-sm text-muted">رمز فعلی کارمند لازم نیست. پس از تأیید، اعلان برای همان کارمند ساخته می‌شود و رمز در اعلان نمی‌آید.</p>
+          <SecretField
+            label="رمز عبور جدید"
+            value={password}
+            onChange={setPassword}
+            autoComplete="new-password"
+            error={tried ? issue : ''}
+            actions={(
+              <>
+                <button type="button" className="grid h-11 w-11 shrink-0 place-items-center rounded-md border border-line bg-surface text-muted hover:bg-surface2" aria-label="تولید رمز تصادفی" onClick={() => setPassword(generatePassword())}>
+                  <RefreshCw size={16} />
+                </button>
+                <button type="button" className="grid h-11 w-11 shrink-0 place-items-center rounded-md border border-line bg-surface text-muted hover:bg-surface2" aria-label="کپی رمز" onClick={() => { if (password) void navigator.clipboard.writeText(password) }}>
+                  <Copy size={16} />
+                </button>
+              </>
+            )}
+          />
+          {error ? <p className="text-sm text-danger">{error}</p> : null}
+          <div className="flex justify-end gap-2">
+            <Button variant="secondary" onClick={onClose}>انصراف</Button>
+            <Button type="submit" disabled={saving}>{saving ? 'در حال ذخیره' : 'تأیید بازنشانی'}</Button>
+          </div>
+        </form>
+      )}
     </Dialog>
   )
 }
