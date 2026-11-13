@@ -7,10 +7,393 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-// Phase 0 foundation only. Business models are intentionally omitted.
+// Time conventions:
+// - TIMESTAMPTZ stores events in UTC.
+// - DATE stores Gregorian date-only business values.
+// - TIME stores meal serving clock time.
+// - Business timezone is Asia/Tehran; Jalali conversion stays in the application layer.
 //
-// Time and date conventions for later schema work:
-// - Persist timestamps as timestamptz; treat stored values as UTC.
-// - Persist date-only business values as PostgreSQL DATE (Gregorian).
-// - Business timezone is Asia/Tehran; keep conversion explicit in application code.
-// - Do not store Jalali dates as strings.
+// Constraints Prisma cannot express (partial unique indexes, exclusion,
+// immutability triggers, role/building CHECK, menu-item count) live in
+// prisma/migrations/*_init_domain_schema/migration.sql.
+
+enum Role {
+  EMPLOYEE
+  HR
+  SUPPORT
+  MANAGEMENT
+  ADMIN
+}
+
+enum MealType {
+  LUNCH
+  DINNER
+}
+
+enum MenuVersionStatus {
+  DRAFT
+  PUBLISHED
+}
+
+enum OrderCycleStatus {
+  ACTIVE
+  CANCELLED
+}
+
+enum GuestOrderStatus {
+  ACTIVE
+  CANCELLED
+}
+
+enum GuestOrderAction {
+  CREATED
+  UPDATED
+  CANCELLED
+}
+
+model User {
+  id           String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  username     String   @unique
+  passwordHash String
+  role         Role
+  buildingId   String?  @db.Uuid
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt    DateTime @updatedAt @db.Timestamptz(6)
+
+  building            Building?            @relation(fields: [buildingId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  sessions            Session[]
+  groupMemberships    GroupMembership[]
+  menuVersionsCreated MenuVersion[]
+  orders              Order[]
+  orderStatusChanges  OrderStatusHistory[]
+  guestOrdersCreated  GuestOrder[]
+  guestOrderHistory   GuestOrderHistory[]
+  settingsUpdated     SystemSetting[]
+  deadlinesCreated    OrderDeadline[]
+  mealSettingsUpdated MealSetting[]
+  notifications       Notification[]
+  auditLogs           AuditLog[]
+
+  @@index([buildingId])
+  @@index([role])
+  @@index([isActive])
+  @@map("users")
+}
+
+model Session {
+  id             String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId         String   @db.Uuid
+  tokenHash      String   @unique
+  expiresAt      DateTime @db.Timestamptz(6)
+  createdAt      DateTime @default(now()) @db.Timestamptz(6)
+  lastActivityAt DateTime @default(now()) @db.Timestamptz(6)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@index([userId])
+  @@index([expiresAt])
+  @@map("sessions")
+}
+
+model Building {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name      String
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+
+  users       User[]
+  guestOrders GuestOrder[]
+
+  @@map("buildings")
+}
+
+model Group {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name      String   @unique
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+
+  memberships    GroupMembership[]
+  orderSnapshots OrderGroupSnapshot[]
+
+  @@map("groups")
+}
+
+model GroupMembership {
+  id        String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  groupId   String    @db.Uuid
+  userId    String    @db.Uuid
+  startedAt DateTime  @db.Timestamptz(6)
+  endedAt   DateTime? @db.Timestamptz(6)
+  createdAt DateTime  @default(now()) @db.Timestamptz(6)
+
+  group Group @relation(fields: [groupId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  user  User  @relation(fields: [userId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@index([groupId])
+  @@index([userId])
+  @@map("group_memberships")
+}
+
+model Menu {
+  id                 String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  year               Int
+  month              Int
+  publishedVersionId String?  @unique @db.Uuid
+  createdAt          DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt          DateTime @updatedAt @db.Timestamptz(6)
+
+  publishedVersion MenuVersion?  @relation("MenuPublishedVersion", fields: [publishedVersionId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  versions         MenuVersion[] @relation("MenuVersions")
+
+  @@unique([year, month])
+  @@map("menus")
+}
+
+model MenuVersion {
+  id            String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  menuId        String            @db.Uuid
+  versionNumber Int
+  status        MenuVersionStatus
+  publishedAt   DateTime?         @db.Timestamptz(6)
+  createdBy     String            @db.Uuid
+  createdAt     DateTime          @default(now()) @db.Timestamptz(6)
+
+  menu          Menu       @relation("MenuVersions", fields: [menuId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  publishedFor  Menu?      @relation("MenuPublishedVersion")
+  createdByUser User       @relation(fields: [createdBy], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  items         MenuItem[]
+
+  @@unique([menuId, versionNumber])
+  @@index([menuId])
+  @@index([createdBy])
+  @@map("menu_versions")
+}
+
+model MenuItem {
+  id            String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  menuVersionId String   @db.Uuid
+  mealDate      DateTime @db.Date
+  mealType      MealType
+  title         String
+  displayOrder  Int
+  createdAt     DateTime @default(now()) @db.Timestamptz(6)
+
+  menuVersion MenuVersion  @relation(fields: [menuVersionId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  orderCycles OrderCycle[]
+
+  @@unique([menuVersionId, mealDate, mealType, displayOrder])
+  @@index([menuVersionId])
+  @@index([mealDate, mealType])
+  @@map("menu_items")
+}
+
+model Order {
+  id             String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId         String   @db.Uuid
+  mealDate       DateTime @db.Date
+  mealType       MealType
+  currentCycleId String?  @unique @db.Uuid
+  createdAt      DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt      DateTime @updatedAt @db.Timestamptz(6)
+
+  user         User         @relation(fields: [userId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  currentCycle OrderCycle?  @relation("OrderCurrentCycle", fields: [currentCycleId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  cycles       OrderCycle[] @relation("OrderCycles")
+
+  @@unique([userId, mealDate, mealType])
+  @@index([userId])
+  @@index([mealDate, mealType])
+  @@map("orders")
+}
+
+model OrderCycle {
+  id                   String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  orderId              String           @db.Uuid
+  menuItemId           String           @db.Uuid
+  cycleNumber          Int
+  usernameSnapshot     String
+  buildingIdSnapshot   String?          @db.Uuid
+  buildingNameSnapshot String?
+  mealTitleSnapshot    String
+  mealDateSnapshot     DateTime         @db.Date
+  mealTypeSnapshot     MealType
+  status               OrderCycleStatus
+  createdAt            DateTime         @default(now()) @db.Timestamptz(6)
+  updatedAt            DateTime         @updatedAt @db.Timestamptz(6)
+
+  order          Order                @relation("OrderCycles", fields: [orderId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  currentFor     Order?               @relation("OrderCurrentCycle")
+  menuItem       MenuItem             @relation(fields: [menuItemId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  statusHistory  OrderStatusHistory[]
+  groupSnapshots OrderGroupSnapshot[]
+  rating         Rating?
+
+  @@unique([orderId, cycleNumber])
+  @@index([orderId])
+  @@index([menuItemId])
+  @@index([status])
+  @@map("order_cycles")
+}
+
+model OrderStatusHistory {
+  id           String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  orderCycleId String            @db.Uuid
+  oldStatus    OrderCycleStatus?
+  newStatus    OrderCycleStatus
+  actorId      String?           @db.Uuid
+  reason       String?
+  createdAt    DateTime          @default(now()) @db.Timestamptz(6)
+
+  orderCycle OrderCycle @relation(fields: [orderCycleId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  actor      User?      @relation(fields: [actorId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@index([orderCycleId])
+  @@index([actorId])
+  @@index([createdAt])
+  @@map("order_status_history")
+}
+
+model OrderGroupSnapshot {
+  id                String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  orderCycleId      String @db.Uuid
+  groupId           String @db.Uuid
+  groupNameSnapshot String
+
+  orderCycle OrderCycle @relation(fields: [orderCycleId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  group      Group      @relation(fields: [groupId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@unique([orderCycleId, groupId])
+  @@index([orderCycleId])
+  @@map("order_group_snapshots")
+}
+
+model GuestOrder {
+  id         String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  buildingId String           @db.Uuid
+  mealDate   DateTime         @db.Date
+  mealType   MealType
+  quantity   Int
+  note       String?
+  status     GuestOrderStatus
+  createdBy  String           @db.Uuid
+  createdAt  DateTime         @default(now()) @db.Timestamptz(6)
+  updatedAt  DateTime         @updatedAt @db.Timestamptz(6)
+
+  building Building            @relation(fields: [buildingId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  creator  User                @relation(fields: [createdBy], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  history  GuestOrderHistory[]
+
+  @@index([buildingId])
+  @@index([mealDate, mealType])
+  @@index([createdBy])
+  @@map("guest_orders")
+}
+
+model GuestOrderHistory {
+  id           String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  guestOrderId String           @db.Uuid
+  actorId      String           @db.Uuid
+  action       GuestOrderAction
+  beforeData   Json
+  afterData    Json
+  createdAt    DateTime         @default(now()) @db.Timestamptz(6)
+
+  guestOrder GuestOrder @relation(fields: [guestOrderId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  actor      User       @relation(fields: [actorId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@index([guestOrderId])
+  @@index([actorId])
+  @@map("guest_order_history")
+}
+
+model SystemSetting {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  key       String   @unique
+  value     String
+  updatedBy String   @db.Uuid
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+
+  updatedByUser User @relation(fields: [updatedBy], references: [id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@map("system_settings")
+}
+
+model OrderDeadline {
+  id         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  mealDate   DateTime @db.Date
+  mealType   MealType
+  deadlineAt DateTime @db.Timestamptz(6)
+  createdBy  String   @db.Uuid
+  createdAt  DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt  DateTime @updatedAt @db.Timestamptz(6)
+
+  createdByUser User @relation(fields: [createdBy], references: [id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@unique([mealDate, mealType])
+  @@index([createdBy])
+  @@map("order_deadlines")
+}
+
+model MealSetting {
+  id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  mealType    MealType @unique
+  servingTime DateTime @db.Time(0)
+  updatedBy   String   @db.Uuid
+  updatedAt   DateTime @updatedAt @db.Timestamptz(6)
+
+  updatedByUser User @relation(fields: [updatedBy], references: [id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@map("meal_settings")
+}
+
+model Rating {
+  id           String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  orderCycleId String   @unique @db.Uuid
+  score        Int
+  comment      String?
+  createdAt    DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt    DateTime @updatedAt @db.Timestamptz(6)
+
+  orderCycle OrderCycle @relation(fields: [orderCycleId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@map("ratings")
+}
+
+model Notification {
+  id        String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId    String    @db.Uuid
+  type      String
+  title     String
+  body      String
+  data      Json?
+  readAt    DateTime? @db.Timestamptz(6)
+  createdAt DateTime  @default(now()) @db.Timestamptz(6)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@index([userId, createdAt])
+  @@index([userId, readAt])
+  @@map("notifications")
+}
+
+model AuditLog {
+  id         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  actorId    String?  @db.Uuid
+  action     String
+  entityType String
+  entityId   String   @db.Uuid
+  beforeData Json?
+  afterData  Json?
+  metadata   Json?
+  createdAt  DateTime @default(now()) @db.Timestamptz(6)
+
+  actor User? @relation(fields: [actorId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@index([actorId])
+  @@index([entityType, entityId])
+  @@index([createdAt])
+  @@map("audit_logs")
+}
