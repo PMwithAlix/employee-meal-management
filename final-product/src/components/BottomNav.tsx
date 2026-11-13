@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { Ellipsis } from 'lucide-react'
 import { ROLE_LABEL } from '../data'
-import { moreNavPages, navIcon, PAGE_TITLES, primaryNavPages } from '../navigation'
+import { moreNavPages, navIcon, pageTitle, primaryNavPages } from '../navigation'
 import { ROLES } from '../permissions'
 import { useApp } from '../store'
 import { cn } from '../lib/text'
@@ -134,7 +134,7 @@ export function BottomNav() {
                     )}
                   >
                     <Icon size={16} aria-hidden />
-                    {PAGE_TITLES[page]}
+                    {pageTitle(page, app.role)}
                   </button>
                 </li>
               )
@@ -179,7 +179,7 @@ export function BottomNav() {
                   )}
                 >
                   <Icon size={18} aria-hidden />
-                  <span className="line-clamp-2 text-center">{PAGE_TITLES[page]}</span>
+                  <span className="line-clamp-2 text-center">{pageTitle(page, app.role)}</span>
                 </button>
               </li>
             )

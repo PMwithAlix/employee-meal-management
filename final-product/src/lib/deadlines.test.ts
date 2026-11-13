@@ -1,8 +1,16 @@
 import { describe, expect, it } from 'vitest'
-import { formatDeadlineFromInstant, summarizeBackendDeadlines } from './deadlines'
+import { deadlineAtFromPattern, formatDeadlineFromInstant, summarizeBackendDeadlines, tehranWallToUtc } from './deadlines'
 
 const noon = '2026-08-22T06:30:00.000Z'
 const later = '2026-08-22T07:00:00.000Z'
+
+describe('tehranWallToUtc', () => {
+  it('converts a Tehran wall clock on the meal date to UTC', () => {
+    expect(tehranWallToUtc('2026-08-23', 12, 0).toISOString()).toBe('2026-08-23T08:30:00.000Z')
+    expect(deadlineAtFromPattern('2026-08-23', { meal: 'lunch', relation: 'same_day', hour: 10, minute: 0 })).toBe('2026-08-23T06:30:00.000Z')
+    expect(deadlineAtFromPattern('2026-08-23', { meal: 'lunch', relation: 'previous_day', hour: 10, minute: 0 })).toBe('2026-08-22T06:30:00.000Z')
+  })
+})
 
 describe('formatDeadlineFromInstant', () => {
   it('formats a backend ISO deadline in Asia/Tehran without using the local default clock', () => {

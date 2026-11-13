@@ -1,7 +1,7 @@
 import { authRequest } from '../auth/client'
 import { AuthRequestError } from '../auth/errors'
 import { parseBackendOrder, parseDeadline, parseMealSetting, parseStaffRating, toUiOrder } from './map'
-import { ORDER_ENDPOINTS, type CreateOrderBody, type UpsertRatingBody } from './types'
+import { ORDER_ENDPOINTS, type BackendOrder, type CreateOrderBody, type ManagedOrderQuery, type UpsertRatingBody } from './types'
 import type { Order } from '../types'
 
 const session = { treatUnauthorizedAsSessionEnd: true as const }
@@ -62,6 +62,123 @@ export const orderApi = {
     }
     if (total === null || received !== total) throw incomplete()
     return { orders, total }
+  },
+
+  listManaged(query: ManagedOrderQuery = {}, signal?: AbortSignal) {
+    const params = new URLSearchParams()
+    params.set('page', String(query.page ?? 1))
+    params.set('pageSize', String(query.pageSize ?? 20))
+    if (query.mealDate) params.set('mealDate', query.mealDate)
+    if (query.from) params.set('from', query.from)
+    if (query.to) params.set('to', query.to)
+    if (query.mealType) params.set('mealType', query.mealType)
+    if (query.userId) params.set('userId', query.userId)
+    if (query.buildingId) params.set('buildingId', query.buildingId)
+    if (query.groupId) params.set('groupId', query.groupId)
+    if (query.username) params.set('username', query.username)
+    if (query.status) params.set('status', query.status)
+    return authRequest<unknown>(`${ORDER_ENDPOINTS.list}?${params.toString()}`, { ...session, signal }).then((body) => {
+      const record = asRecord(body)
+      if (!record || !Array.isArray(record.items)) {
+        throw new AuthRequestError('http', 'بارگذاری سفارش‌های سازمان کامل نشد.')
+      }
+      const items: BackendOrder[] = []
+      for (const item of record.items) {
+        const parsed = parseBackendOrder(item)
+        if (!parsed) throw new AuthRequestError('http', 'بارگذاری سفارش‌های سازمان کامل نشد.')
+        items.push(parsed)
+      }
+      return {
+        items,
+        total: typeof record.total === 'number' ? record.total : Number.NaN,
+        page: typeof record.page === 'number' ? record.page : Number.NaN,
+        pageSize: typeof record.pageSize === 'number' ? record.pageSize : Number.NaN,
+      }
+    })
+  },
+
+  async listAllManaged(query: Omit<ManagedOrderQuery, 'page' | 'pageSize'> = {}, signal?: AbortSignal) {
+    const pageSize = 100
+    const maxPages = 50
+    const incomplete = () => new AuthRequestError('http', 'بارگذاری سفارش‌های سازمان کامل نشد.')
+    const collected: BackendOrder[] = []
+    let received = 0
+    let page = 1
+    let total: number | null = null
+    for (;;) {
+      if (page > maxPages) throw incomplete()
+      const listed = await this.listManaged({ ...query, page, pageSize }, signal)
+      if (!Number.isInteger(listed.total) || listed.total < 0) throw incomplete()
+      if (listed.page !== page || listed.pageSize !== pageSize) throw incomplete()
+      if (listed.items.length > pageSize) throw incomplete()
+      if (total === null) total = listed.total
+      else if (listed.total !== total) throw incomplete()
+      if (listed.items.length === 0) {
+        if (received !== total) throw incomplete()
+        break
+      }
+      received += listed.items.length
+      if (received > total) throw incomplete()
+      collected.push(...listed.items)
+      const lastPage = total === 0 ? 1 : Math.ceil(total / pageSize)
+      if (page >= lastPage) break
+      page += 1
+    }
+    if (total === null || received !== total) throw incomplete()
+    return { items: collected, total }
+  },
+
+  async countManaged(query: Omit<ManagedOrderQuery, 'page' | 'pageSize'> = {}, signal?: AbortSignal) {
+    const listed = await this.listManaged({ ...query, page: 1, pageSize: 1 }, signal)
+    if (!Number.isInteger(listed.total) || listed.total < 0 || listed.page !== 1 || listed.pageSize !== 1) {
+      throw new AuthRequestError('http', 'بارگذاری سفارش‌های سازمان کامل نشد.')
+    }
+    return listed.total
+  },
+
+  getManaged(id: string, signal?: AbortSignal) {
+    return authRequest<unknown>(ORDER_ENDPOINTS.managed(id), { ...session, signal }).then((value) => {
+      const parsed = parseBackendOrder(value)
+      if (!parsed) throw new AuthRequestError('http', 'پاسخ سفارش نامعتبر است.')
+      return parsed
+    })
+  },
+
+  updateManaged(id: string, menuItemId: string) {
+    return authRequest<unknown>(ORDER_ENDPOINTS.managed(id), {
+      ...session,
+      method: 'PATCH',
+      body: { menuItemId },
+    }).then((value) => {
+      const parsed = parseBackendOrder(value)
+      if (!parsed) throw new AuthRequestError('http', 'پاسخ تغییر سفارش نامعتبر است.')
+      return parsed
+    })
+  },
+
+  cancelManaged(id: string) {
+    return authRequest<unknown>(ORDER_ENDPOINTS.managedCancel(id), { ...session, method: 'POST' }).then((value) => {
+      const parsed = parseBackendOrder(value)
+      if (!parsed) throw new AuthRequestError('http', 'پاسخ لغو سفارش نامعتبر است.')
+      return parsed
+    })
+  },
+
+  replaceDeadlines(year: number, month: number, items: Array<{ mealDate: string; mealType: 'LUNCH' | 'DINNER'; deadlineAt: string }>) {
+    return authRequest<unknown>(ORDER_ENDPOINTS.deadlines(year, month), {
+      ...session,
+      method: 'PUT',
+      body: { items },
+    }).then((body) => {
+      if (!Array.isArray(body)) throw new AuthRequestError('http', 'پاسخ ذخیره مهلت نامعتبر است.')
+      const rows = []
+      for (const item of body) {
+        const parsed = parseDeadline(item)
+        if (!parsed || !parsed.deadlineAt) throw new AuthRequestError('http', 'پاسخ ذخیره مهلت نامعتبر است.')
+        rows.push(parsed)
+      }
+      return rows
+    })
   },
 
   create(body: CreateOrderBody) {

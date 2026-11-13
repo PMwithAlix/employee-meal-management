@@ -27,29 +27,32 @@ import { GroupsService } from './groups.service';
 @ApiCookieAuth()
 @Controller('groups')
 @UseGuards(AuthGuard, RolesGuard)
-@Roles(Role.ADMIN, Role.HR)
 export class GroupsController {
   constructor(private readonly groups: GroupsService) {}
 
   @Post()
+  @Roles(Role.ADMIN, Role.HR)
   @ApiOperation({ summary: 'ایجاد گروه' })
   create(@CurrentUser() actor: AuthUser, @Body() dto: CreateGroupDto) {
     return this.groups.create(actor, dto);
   }
 
   @Get()
+  @Roles(Role.ADMIN, Role.HR, Role.SUPPORT)
   @ApiOperation({ summary: 'فهرست گروه‌ها' })
   list() {
     return this.groups.list();
   }
 
   @Get(':id')
+  @Roles(Role.ADMIN, Role.HR, Role.SUPPORT)
   @ApiOperation({ summary: 'جزئیات گروه' })
   get(@Param('id', ParseUUIDPipe) id: string) {
     return this.groups.get(id);
   }
 
   @Patch(':id')
+  @Roles(Role.ADMIN, Role.HR)
   @ApiOperation({ summary: 'ویرایش نام گروه' })
   update(
     @CurrentUser() actor: AuthUser,
@@ -60,6 +63,7 @@ export class GroupsController {
   }
 
   @Post(':id/deactivate')
+  @Roles(Role.ADMIN, Role.HR)
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'غیرفعال‌سازی گروه و بستن عضویت‌های فعال' })
   deactivate(
@@ -70,12 +74,14 @@ export class GroupsController {
   }
 
   @Get(':id/members')
+  @Roles(Role.ADMIN, Role.HR, Role.SUPPORT)
   @ApiOperation({ summary: 'اعضای فعال گروه' })
   members(@Param('id', ParseUUIDPipe) id: string) {
     return this.groups.members(id);
   }
 
   @Post(':id/members')
+  @Roles(Role.ADMIN, Role.HR)
   @ApiOperation({ summary: 'افزودن کاربر به گروه' })
   addMember(
     @CurrentUser() actor: AuthUser,
@@ -86,6 +92,7 @@ export class GroupsController {
   }
 
   @Delete(':id/members/:userId')
+  @Roles(Role.ADMIN, Role.HR)
   @ApiOperation({ summary: 'پایان عضویت فعال کاربر' })
   removeMember(
     @CurrentUser() actor: AuthUser,
@@ -96,6 +103,7 @@ export class GroupsController {
   }
 
   @Get(':id/memberships/history')
+  @Roles(Role.ADMIN, Role.HR, Role.SUPPORT)
   @ApiOperation({ summary: 'تاریخچه عضویت‌های گروه' })
   history(@Param('id', ParseUUIDPipe) id: string) {
     return this.groups.history(id);

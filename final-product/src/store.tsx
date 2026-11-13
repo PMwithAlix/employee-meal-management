@@ -89,6 +89,7 @@ interface StoreValue {
   mealDeadlineAt: (day: Pick<DayMenu, 'jy' | 'jm' | 'jd' | 'gregorianDate'>, meal: MealKind) => MealDeadlineState
   mealDeadlineSummary: (meal: MealKind, mealDates: string[]) => string
   retryMyOrders: () => void
+  retryDeadlines: () => void
   retryMealServings: () => void
   syncOrderRating: (orderId: string, rating: { score: number; comment: string } | null) => void
   rateMeal: (orderId: string, score: number, comment: string) => Promise<{ ok: boolean; message?: string }>
@@ -178,6 +179,7 @@ export function StoreProvider({
   const [deadlineMap, setDeadlineMap] = useState<Record<string, string | null>>({})
   const [deadlineStatus, setDeadlineStatus] = useState<'loading' | 'ready' | 'unavailable' | 'error'>('loading')
   const [deadlineMessage, setDeadlineMessage] = useState('')
+  const [deadlineBoot, setDeadlineBoot] = useState(0)
   const [guests, setGuests] = useState(initial.guests)
   const [activity, setActivity] = useState(initial.activity)
   const [notes, setNotes] = useState(initial.notes)
@@ -200,40 +202,41 @@ export function StoreProvider({
     const controller = new AbortController()
     setMyOrdersStatus('loading')
     setMyOrdersMessage('')
-    setDeadlineStatus('loading')
-    setDeadlineMessage('')
-    void Promise.allSettled([
-      orderApi.listAllMine(controller.signal),
-      orderApi.deadlines(selectedMonth.jy, selectedMonth.jm, controller.signal),
-    ]).then(([ordersResult, deadlinesResult]) => {
+    void orderApi.listAllMine(controller.signal).then((listed) => {
       if (controller.signal.aborted) return
-      if (ordersResult.status === 'fulfilled') {
-        setMyOrders(ordersResult.value.orders)
-        setMyOrdersStatus('ready')
-        setMyOrdersMessage('')
+      setMyOrders(listed.orders)
+      setMyOrdersStatus('ready')
+      setMyOrdersMessage('')
+    }).catch((error: unknown) => {
+      if (controller.signal.aborted) return
+      if (error instanceof AuthRequestError && error.kind === 'network') {
+        setMyOrdersStatus('unavailable')
+        setMyOrdersMessage(error.message)
       } else {
-        const error = ordersResult.reason
-        if (error instanceof AuthRequestError && error.kind === 'network') {
-          setMyOrdersStatus('unavailable')
-          setMyOrdersMessage(error.message)
-        } else {
-          setMyOrdersStatus('error')
-          setMyOrdersMessage(error instanceof AuthRequestError ? error.message : 'بارگذاری سفارش‌ها انجام نشد.')
-        }
-      }
-      if (deadlinesResult.status === 'fulfilled') {
-        setDeadlineMap(toDeadlineMap(deadlinesResult.value))
-        setDeadlineStatus('ready')
-        setDeadlineMessage('')
-      } else {
-        const error = deadlinesResult.reason
-        setDeadlineMap({})
-        setDeadlineStatus(error instanceof AuthRequestError && error.kind === 'network' ? 'unavailable' : 'error')
-        setDeadlineMessage(error instanceof AuthRequestError ? error.message : 'بارگذاری مهلت سفارش انجام نشد.')
+        setMyOrdersStatus('error')
+        setMyOrdersMessage(error instanceof AuthRequestError ? error.message : 'بارگذاری سفارش‌ها انجام نشد.')
       }
     })
     return () => controller.abort()
   }, [myOrdersBoot, selectedMonth.jy, selectedMonth.jm, session.id])
+
+  useEffect(() => {
+    const controller = new AbortController()
+    setDeadlineStatus('loading')
+    setDeadlineMessage('')
+    void orderApi.deadlines(selectedMonth.jy, selectedMonth.jm, controller.signal).then((rows) => {
+      if (controller.signal.aborted) return
+      setDeadlineMap(toDeadlineMap(rows))
+      setDeadlineStatus('ready')
+      setDeadlineMessage('')
+    }).catch((error: unknown) => {
+      if (controller.signal.aborted) return
+      setDeadlineMap({})
+      setDeadlineStatus(error instanceof AuthRequestError && error.kind === 'network' ? 'unavailable' : 'error')
+      setDeadlineMessage(error instanceof AuthRequestError ? error.message : 'بارگذاری مهلت سفارش انجام نشد.')
+    })
+    return () => controller.abort()
+  }, [deadlineBoot, selectedMonth.jy, selectedMonth.jm, session.id])
 
   useEffect(() => {
     const controller = new AbortController()
@@ -852,6 +855,7 @@ export function StoreProvider({
     mealDeadlineAt,
     mealDeadlineSummary,
     retryMyOrders: () => setMyOrdersBoot((value) => value + 1),
+    retryDeadlines: () => setDeadlineBoot((value) => value + 1),
     retryMealServings: () => setMealServingsBoot((value) => value + 1),
     syncOrderRating: (orderId, rating) => {
       setMyOrders((list) => list.map((item) => (item.id === orderId ? { ...item, rating } : item)))

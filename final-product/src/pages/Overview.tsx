@@ -2,10 +2,13 @@ import type { ReactNode } from 'react'
 import { CalendarClock, Moon, Sun, Utensils } from 'lucide-react'
 import { useApp } from '../store'
 import { formatDeadlineFromInstant } from '../lib/deadlines'
-import { classifyEmployeeDeadline, deadlineLabel, findOrder, isElapsedDeadlineDay, isMealOpen, isOpenDeadlineDay, upcomingChosenMeals } from '../lib/orders'
+import { classifyEmployeeDeadline, findOrder, isElapsedDeadlineDay, isOpenDeadlineDay, upcomingChosenMeals } from '../lib/orders'
 import { addDays, isSameDate, JALALI_MONTHS, weekdayName, type JalaliDate, type JalaliDateTime } from '../lib/jalali'
 import { fa, cn } from '../lib/text'
+import { useRecentAudit } from '../audit/useRecentAudit'
 import { useGuestMonthCount } from '../guests/useGuestMonthCount'
+import { usePublishedMenu } from '../menus/usePublishedMenu'
+import { useSupportOrderCounts } from '../orders/useSupportOrderCounts'
 import type { MealFilter, StatusFilter } from '../types'
 
 function Stats({ items }: { items: Array<{ label: string; value: string; hint: string; icon: typeof Sun }> }) {
@@ -208,37 +211,66 @@ function Bucket({ title, count, sample, onClick }: { title: string; count: numbe
   return <button type="button" className={cn(className, 'hover:bg-elevated')} onClick={onClick}>{body}</button>
 }
 
+function metricValue(status: string, count: number | null) {
+  if (status === 'loading') return '…'
+  if (status === 'ready' && count !== null) return fa(count)
+  return '—'
+}
+
 function SupportOverview() {
   const app = useApp()
   const guests = useGuestMonthCount()
-  const inMonth = (order: { jy: number; jm: number }) => order.jy === app.selectedMonth.jy && order.jm === app.selectedMonth.jm
-  const lunch = app.orders.filter((order) => inMonth(order) && order.meal === 'lunch' && order.choice).length
-  const dinner = app.orders.filter((order) => inMonth(order) && order.meal === 'dinner' && order.choice).length
-  const openDays = app.days.filter((day) => (day.lunch && isMealOpen(day, 'lunch', app.deadlines, app.now)) || (day.dinner && isMealOpen(day, 'dinner', app.deadlines, app.now)))
-  const guestValue = guests.status === 'loading' ? '…' : guests.status === 'ready' && guests.count !== null ? fa(guests.count) : '—'
+  const counts = useSupportOrderCounts()
+  const published = usePublishedMenu(app.selectedMonth.jy, app.selectedMonth.jm)
+  const recent = useRecentAudit(5)
+  const openDays = published.status === 'ready' && app.deadlineStatus === 'ready'
+    ? published.pickerDays.filter((day) => isOpenDeadlineDay(day, app.mealDeadlineAt))
+    : []
+  const openValue = published.status === 'loading' || app.deadlineStatus === 'loading' ? '…' : published.status === 'ready' && app.deadlineStatus === 'ready' ? fa(openDays.length) : '—'
   return (
     <div className="space-y-4">
       <Stats
         items={[
-          { label: 'ناهارهای ثبت‌شده', value: fa(lunch), hint: 'همه ساختمان‌ها', icon: Sun },
-          { label: 'شام‌های ثبت‌شده', value: fa(dinner), hint: 'جدا از ناهار', icon: Moon },
-          { label: 'روزهای باز', value: fa(openDays.length), hint: 'هنوز مهلت دارند', icon: CalendarClock },
-          { label: 'سفارش مهمان', value: guestValue, hint: 'مورد فعال', icon: Utensils },
+          { label: 'ناهارهای ثبت‌شده', value: metricValue(counts.status, counts.lunch), hint: 'همه ساختمان‌ها', icon: Sun },
+          { label: 'شام‌های ثبت‌شده', value: metricValue(counts.status, counts.dinner), hint: 'جدا از ناهار', icon: Moon },
+          { label: 'روزهای باز', value: openValue, hint: 'هنوز مهلت دارند', icon: CalendarClock },
+          { label: 'سفارش مهمان', value: metricValue(guests.status, guests.count), hint: 'مورد فعال', icon: Utensils },
         ]}
       />
       <div className="grid gap-4 lg:grid-cols-2">
         <Panel title="مهلت‌های پیش رو" action={<button className="min-h-11 px-2 text-xs text-link" onClick={() => app.setPage('menuMgmt')}>مدیریت منو</button>}>
-          <ul className="space-y-2 text-sm">
-            {openDays.slice(0, 4).map((day) => (
-              <li key={day.jd} className="flex flex-col gap-1 sm:flex-row sm:justify-between sm:gap-3">
-                <span className="min-w-0">{fa(day.jd)} {JALALI_MONTHS[day.jm - 1]}، {day.weekday}</span>
-                <span className="break-words text-muted">{day.lunch ? `ناهار ${deadlineLabel(day, 'lunch', app.deadlines)}` : ''}{day.lunch && day.dinner ? ' · ' : ''}{day.dinner ? `شام ${deadlineLabel(day, 'dinner', app.deadlines)}` : ''}</span>
-              </li>
-            ))}
-          </ul>
+          {published.status === 'loading' || app.deadlineStatus === 'loading' ? <p className="text-sm text-muted">در حال خواندن مهلت‌ها…</p> : published.status !== 'ready' || app.deadlineStatus !== 'ready' ? <p className="text-sm text-danger">مهلت‌ها از سامانه خوانده نشد.</p> : openDays.length === 0 ? <p className="text-sm text-muted">روز بازی با مهلت ذخیره‌شده نیست.</p> : (
+            <ul className="space-y-2 text-sm">
+              {openDays.slice(0, 4).map((day) => {
+                const lunch = classifyEmployeeDeadline(app.mealDeadlineAt(day, 'lunch'))
+                const dinner = classifyEmployeeDeadline(app.mealDeadlineAt(day, 'dinner'))
+                const lunchState = app.mealDeadlineAt(day, 'lunch')
+                const dinnerState = app.mealDeadlineAt(day, 'dinner')
+                return (
+                  <li key={day.jd} className="flex flex-col gap-1 sm:flex-row sm:justify-between sm:gap-3">
+                    <span className="min-w-0">{fa(day.jd)} {JALALI_MONTHS[day.jm - 1]}، {day.weekday}</span>
+                    <span className="break-words text-muted">
+                      {day.lunch && lunch === 'open' && typeof lunchState === 'object' ? `ناهار ${formatDeadlineFromInstant(lunchState.at, day.gregorianDate) ?? 'مهلت باز'}` : ''}
+                      {day.lunch && lunch === 'open' && day.dinner && dinner === 'open' ? ' · ' : ''}
+                      {day.dinner && dinner === 'open' && typeof dinnerState === 'object' ? `شام ${formatDeadlineFromInstant(dinnerState.at, day.gregorianDate) ?? 'مهلت باز'}` : ''}
+                    </span>
+                  </li>
+                )
+              })}
+            </ul>
+          )}
         </Panel>
         <Panel title="فعالیت عملیاتی اخیر" action={<button className="min-h-11 px-2 text-xs text-link" onClick={() => app.setPage('activity')}>تاریخچه</button>}>
-          <ActivityList />
+          {recent.status === 'loading' ? <p className="text-sm text-muted">در حال خواندن تاریخچه…</p> : recent.status !== 'ready' ? <p className="text-sm text-danger">{recent.message || 'تاریخچه خوانده نشد.'}</p> : recent.items.length === 0 ? <p className="text-sm text-muted">رویدادی ثبت نشده است.</p> : (
+            <ul className="divide-y divide-line text-sm">
+              {recent.items.map((item) => (
+                <li key={item.id} className="py-2">
+                  <p>{item.actorUsername || 'سامانه'} · {item.action}</p>
+                  <p className="text-xs text-muted">{item.entityType} · {item.createdAt}</p>
+                </li>
+              ))}
+            </ul>
+          )}
         </Panel>
       </div>
     </div>

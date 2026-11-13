@@ -52,6 +52,7 @@ describe('Organization (e2e)', () => {
   let adminCookie = '';
   let hrCookie = '';
   let employeeCookie = '';
+  let supportCookie = '';
   let buildingId = '';
   let otherBuildingId = '';
   let employeeId = '';
@@ -122,9 +123,9 @@ describe('Organization (e2e)', () => {
     adminCookie = cookieHeader(await login('e2e.org.admin'));
     hrCookie = cookieHeader(await login('e2e.org.hr'));
     employeeCookie = cookieHeader(await login('e2e.org.employee'));
-    const supportCookie = cookieHeader(await login('e2e.org.support'));
+    supportCookie = cookieHeader(await login('e2e.org.support'));
     const managementCookie = cookieHeader(await login('e2e.org.management'));
-    for (const cookie of [employeeCookie, supportCookie, managementCookie]) {
+    for (const cookie of [employeeCookie, managementCookie]) {
       expect(
         (
           await request(app.getHttpServer())
@@ -133,6 +134,41 @@ describe('Organization (e2e)', () => {
         ).status,
       ).toBe(403);
     }
+    expect(
+      (
+        await request(app.getHttpServer())
+          .get('/api/v1/users')
+          .set('Cookie', supportCookie)
+      ).status,
+    ).toBe(200);
+    expect(
+      (
+        await request(app.getHttpServer())
+          .post('/api/v1/users')
+          .set('Cookie', supportCookie)
+          .send({
+            username: 'e2e.org.blocked',
+            password,
+            role: Role.EMPLOYEE,
+            buildingId,
+          })
+      ).status,
+    ).toBe(403);
+    expect(
+      (
+        await request(app.getHttpServer())
+          .get('/api/v1/groups')
+          .set('Cookie', supportCookie)
+      ).status,
+    ).toBe(200);
+    expect(
+      (
+        await request(app.getHttpServer())
+          .post('/api/v1/groups')
+          .set('Cookie', supportCookie)
+          .send({ name: 'گروه آزمایشی مسدود' })
+      ).status,
+    ).toBe(403);
   });
 
   afterAll(async () => {
@@ -463,5 +499,33 @@ describe('Organization (e2e)', () => {
     expect(
       after.body.every((row: { endedAt: string | null }) => row.endedAt),
     ).toBe(true);
+  });
+
+  it('lets support and admin read audit logs without secrets or employee access', async () => {
+    const listed = await request(app.getHttpServer())
+      .get('/api/v1/audit-logs')
+      .query({ page: 1, pageSize: 20 })
+      .set('Cookie', supportCookie);
+    expect(listed.status).toBe(200);
+    expect(Array.isArray(listed.body.items)).toBe(true);
+    expect(Number.isInteger(listed.body.total)).toBe(true);
+    expect(listed.body.page).toBe(1);
+    const serialized = JSON.stringify(listed.body);
+    expect(serialized).not.toMatch(/passwordHash/i);
+    expect(serialized).not.toMatch(/"password"/i);
+    expect(
+      (
+        await request(app.getHttpServer())
+          .get('/api/v1/audit-logs')
+          .set('Cookie', employeeCookie)
+      ).status,
+    ).toBe(403);
+    expect(
+      (
+        await request(app.getHttpServer())
+          .get('/api/v1/audit-logs')
+          .set('Cookie', adminCookie)
+      ).status,
+    ).toBe(200);
   });
 });

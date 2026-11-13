@@ -472,4 +472,38 @@ describe('orderApi', () => {
     }))
     await expect(orderApi.listAllRatings()).rejects.toMatchObject({ kind: 'network' })
   })
+
+  it('lists managed org orders from GET /orders and uses total not page length', async () => {
+    const fetchMock = vi.fn(async () => new Response(JSON.stringify({
+      items: [backendOrder('o1')],
+      total: 42,
+      page: 1,
+      pageSize: 1,
+    }), { status: 200 }))
+    vi.stubGlobal('fetch', fetchMock)
+    const counted = await orderApi.countManaged({ from: '2026-10-23', to: '2026-11-21', mealType: 'LUNCH', status: 'ACTIVE' })
+    expect(String((fetchMock.mock.calls as unknown as Array<[string]>)[0][0])).toContain('/api/v1/orders')
+    expect(String((fetchMock.mock.calls as unknown as Array<[string]>)[0][0])).not.toContain('/orders/me')
+    expect(counted).toBe(42)
+  })
+
+  it('rejects a managed list without items instead of using seed', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ total: 2, page: 1, pageSize: 20 }), { status: 200 })))
+    await expect(orderApi.listManaged()).rejects.toMatchObject({ kind: 'http' })
+  })
+
+  it('updates and cancels managed orders on /orders/:id not /orders/me', async () => {
+    vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+      expect(String(url)).toContain('/api/v1/orders/o1')
+      expect(String(url)).not.toContain('/orders/me/')
+      return new Response(JSON.stringify(backendOrder('o1')), { status: 200 })
+    }))
+    await orderApi.updateManaged('o1', 'item-2')
+    vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+      expect(String(url)).toContain('/api/v1/orders/o1/cancel')
+      return new Response(JSON.stringify({ ...backendOrder('o1'), status: 'CANCELLED' }), { status: 200 })
+    }))
+    const cancelled = await orderApi.cancelManaged('o1')
+    expect(cancelled.status).toBe('CANCELLED')
+  })
 })

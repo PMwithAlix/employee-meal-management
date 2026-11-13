@@ -69,6 +69,48 @@ export function tehranDateTimeParts(iso: string) {
   return { year, month, day, hour, minute }
 }
 
+export function tehranWallToUtc(ymd: string, hours: number, minutes: number, seconds = 0) {
+  const [year, month, day] = ymd.split('-').map(Number)
+  let utc = Date.UTC(year, month - 1, day, hours, minutes, seconds) - 3.5 * 3600 * 1000
+  for (let i = 0; i < 6; i += 1) {
+    const parts = tehranDateTimeParts(new Date(utc).toISOString())
+    if (!parts) break
+    const target = Date.UTC(year, month - 1, day, hours, minutes, seconds)
+    const actual = Date.UTC(parts.year, parts.month - 1, parts.day, parts.hour, parts.minute, seconds)
+    const delta = target - actual
+    utc += delta
+    if (delta === 0) break
+  }
+  return new Date(utc)
+}
+
+export function deadlineAtFromPattern(mealDate: string, deadline: MealDeadline) {
+  const [gy, gm, gd] = mealDate.split('-').map(Number)
+  const wall = deadline.relation === 'previous_day'
+    ? new Date(Date.UTC(gy, gm - 1, gd - 1))
+    : new Date(Date.UTC(gy, gm - 1, gd))
+  const ymd = `${wall.getUTCFullYear()}-${String(wall.getUTCMonth() + 1).padStart(2, '0')}-${String(wall.getUTCDate()).padStart(2, '0')}`
+  return tehranWallToUtc(ymd, deadline.hour, deadline.minute).toISOString()
+}
+
+export function inferMealDeadline(map: Record<string, string | null>, meal: MealKind, mealDates: string[]): MealDeadline | null {
+  if (mealDates.length === 0) return null
+  const suffix = meal === 'lunch' ? ':LUNCH' : ':DINNER'
+  let inferred: MealDeadline | null = null
+  for (const mealDate of mealDates) {
+    const key = `${mealDate}${suffix}`
+    if (!Object.prototype.hasOwnProperty.call(map, key) || !map[key]) return null
+    const parts = tehranDateTimeParts(map[key]!)
+    if (!parts) return null
+    const [gy, gm, gd] = mealDate.split('-').map(Number)
+    const relation: DeadlineRelation = Date.UTC(parts.year, parts.month - 1, parts.day) < Date.UTC(gy, gm - 1, gd) ? 'previous_day' : 'same_day'
+    const next = { meal, relation, hour: parts.hour, minute: parts.minute }
+    if (!inferred) inferred = next
+    else if (inferred.relation !== next.relation || inferred.hour !== next.hour || inferred.minute !== next.minute) return null
+  }
+  return inferred
+}
+
 export function formatDeadlineFromInstant(deadlineAt: string, mealDate?: string) {
   const parts = tehranDateTimeParts(deadlineAt)
   if (!parts) return null

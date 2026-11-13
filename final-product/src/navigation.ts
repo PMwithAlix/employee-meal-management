@@ -48,6 +48,11 @@ export const PRIMARY_NAV: Record<Role, readonly Page[]> = {
   admin: ['overview', 'employees', 'menuMgmt', 'reports'],
 }
 
+export function pageTitle(page: Page, role: Role) {
+  if (page === 'orders' && role === 'support') return 'مدیریت سفارش‌ها'
+  return PAGE_TITLES[page]
+}
+
 export function navIcon(page: Page) {
   return NAV_ITEMS.find((item) => item.id === page)?.icon ?? LayoutDashboard
 }

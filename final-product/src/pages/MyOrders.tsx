@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Button, Dialog, Empty, MonthBar } from '../components/ui'
 import { SelectMealDialog } from '../components/SelectMealDialog'
+import { StaffOrdersPanel } from '../orders/StaffOrdersPanel'
 import { usePublishedMenu } from '../menus/usePublishedMenu'
 import { useApp } from '../store'
 import { canGiveFeedback, findCancelledOrder, findOrder, isMealOpen, mealChoices, type MealDeadlineState } from '../lib/orders'
@@ -13,6 +14,12 @@ import { orderApi } from '../orders/client'
 import type { DayMenu, MealKind, Order } from '../types'
 
 export function MyOrdersPage() {
+  const app = useApp()
+  if (can(app.role, 'order.ops')) return <StaffOrdersPanel />
+  return <EmployeeOrdersPage />
+}
+
+function EmployeeOrdersPage() {
   const app = useApp()
   const published = usePublishedMenu(app.selectedMonth.jy, app.selectedMonth.jm)
   const id = app.role === 'admin' ? null : app.selfId

@@ -5,9 +5,12 @@ export type OrderCycleStatus = 'ACTIVE' | 'CANCELLED'
 
 export const ORDER_ENDPOINTS = {
   create: '/orders',
+  list: '/orders',
   me: '/orders/me',
   one: (id: string) => `/orders/me/${id}`,
   cancel: (id: string) => `/orders/me/${id}/cancel`,
+  managed: (id: string) => `/orders/${id}`,
+  managedCancel: (id: string) => `/orders/${id}/cancel`,
   rating: (id: string) => `/orders/me/${id}/rating`,
   ratings: '/ratings',
   mealSettings: '/meal-settings',
@@ -28,6 +31,14 @@ export type BackendOrderCycle = {
   status: OrderCycleStatus
   createdAt: string
   groups: Array<{ groupId: string; groupNameSnapshot: string }>
+  statusHistory: Array<{
+    id: string
+    oldStatus: OrderCycleStatus | null
+    newStatus: OrderCycleStatus
+    actorId: string | null
+    reason: string | null
+    createdAt: string
+  }>
 }
 
 export type BackendOrderRating = {
@@ -69,9 +80,24 @@ export type BackendDeadline = {
 }
 
 export type CreateOrderBody = {
+  userId?: string
   mealDate: string
   mealType: BackendMealType
   menuItemId: string
+}
+
+export type ManagedOrderQuery = {
+  page?: number
+  pageSize?: number
+  mealDate?: string
+  from?: string
+  to?: string
+  mealType?: BackendMealType
+  userId?: string
+  buildingId?: string
+  groupId?: string
+  username?: string
+  status?: OrderCycleStatus
 }
 
 export type UpsertRatingBody = {

@@ -1,17 +1,14 @@
 import { useRef, useState } from 'react'
 import { GuestsPanel } from '../guests/GuestsPanel'
-import { MealBlock } from '../components/MealBlock'
-import { SelectMealDialog } from '../components/SelectMealDialog'
-import { Badge, Button, Dialog, Empty, Field, controlClass } from '../components/ui'
-import { fullName } from '../data'
+import { DeadlineEditor } from '../orders/DeadlineEditor'
+import { StaffOrdersPanel } from '../orders/StaffOrdersPanel'
+import { Badge, Button, Dialog, Empty, controlClass } from '../components/ui'
 import { AuthRequestError } from '../auth/errors'
 import { menuApi } from '../menus/client'
 import { localOption } from '../menus/map'
 import type { ImportPreview, MenuOption } from '../menus/types'
 import { useManagedMenu } from '../menus/useManagedMenu'
 import { useApp } from '../store'
-import { findOrder, isMealOpen } from '../lib/orders'
-import { formatDeadline, type DeadlineRelation } from '../lib/deadlines'
 import { isPastDate, JALALI_MONTHS } from '../lib/jalali'
 import { fa, faBytes } from '../lib/text'
 import type { MealKind, ReplacePolicy } from '../types'
@@ -33,10 +30,7 @@ export function MenuManagementPage() {
           <p className="text-sm font-medium">{app.monthTitle}</p>
           <p className="text-xs text-muted">ویرایش منو، سفارش‌های قبلی را خودبه‌خود عوض نمی‌کند.</p>
         </div>
-        <div className="flex flex-wrap gap-3">
-          <DeadlineFields meal="lunch" />
-          <DeadlineFields meal="dinner" />
-        </div>
+        <DeadlineEditor />
       </div>
       <div className="flex flex-wrap gap-1">
         {([['daily', 'منوی روزانه'], ['import', 'ورود از اکسل'], ['guests', 'سفارش مهمان'], ['staff', 'سفارش کارکنان']] as const).map(([id, label]) => (
@@ -46,37 +40,7 @@ export function MenuManagementPage() {
       {tab === 'daily' && <DailyMenu managed={managed} />}
       {tab === 'import' && <ImportPanel managed={managed} />}
       {tab === 'guests' && <GuestsPanel />}
-      {tab === 'staff' && <StaffOrders />}
-    </div>
-  )
-}
-
-function DeadlineFields({ meal }: { meal: MealKind }) {
-  const app = useApp()
-  const deadline = app.deadlines[meal]
-  const time = `${String(deadline.hour).padStart(2, '0')}:${String(deadline.minute).padStart(2, '0')}`
-  return (
-    <div className="flex flex-wrap items-end gap-2">
-      <Field label={meal === 'lunch' ? 'مهلت ناهار' : 'مهلت شام'}>
-        <select className={controlClass} value={deadline.relation} onChange={(event) => app.setMealDeadline(meal, { relation: event.target.value as DeadlineRelation })}>
-          <option value="same_day">همان روز</option>
-          <option value="previous_day">روز قبل</option>
-        </select>
-      </Field>
-      <Field label="ساعت">
-        <input
-          className={controlClass}
-          type="time"
-          aria-label={meal === 'lunch' ? 'ساعت مهلت ناهار' : 'ساعت مهلت شام'}
-          value={time}
-          onChange={(event) => {
-            const [hour, minute] = event.target.value.split(':').map(Number)
-            if (Number.isNaN(hour) || Number.isNaN(minute)) return
-            app.setMealDeadline(meal, { hour, minute })
-          }}
-        />
-      </Field>
-      <p className="pb-2 text-xs text-muted">{formatDeadline(deadline)}</p>
+      {tab === 'staff' && <StaffOrdersPanel />}
     </div>
   )
 }
@@ -379,49 +343,5 @@ function ReplaceWizard({
         </div>
       )}
     </Dialog>
-  )
-}
-
-function StaffOrders() {
-  const app = useApp()
-  const [employeeId, setEmployeeId] = useState(app.employees[0]?.id ?? '')
-  const [target, setTarget] = useState<{ jd: number; meal: MealKind } | null>(null)
-  const day = target ? app.days.find((item) => item.jd === target.jd) : undefined
-  const options = day && target ? day[target.meal] : null
-  const current = target ? findOrder(app.orders, employeeId, app.selectedMonth, target.jd, target.meal) : undefined
-  return (
-    <div className="space-y-3">
-      <Field label="کارمند">
-        <select className={controlClass} value={employeeId} onChange={(event) => setEmployeeId(event.target.value)}>
-          {app.employees.map((employee) => <option key={employee.id} value={employee.id}>{fullName(employee)}</option>)}
-        </select>
-      </Field>
-      <p className="text-xs text-muted">پشتیبان و ادمین می‌توانند سفارش را بعد از مهلت هم تغییر دهند. ناهار و شام جدا ذخیره می‌شوند.</p>
-      <div className="space-y-2">
-        {app.days.map((item) => (
-          <div key={item.jd} className="grid gap-2 rounded-md border border-line bg-surface p-3 md:grid-cols-[7rem_1fr_1fr]">
-            <p className="text-sm">{fa(item.jd)} {item.weekday}</p>
-            <MealBlock kind="lunch" defined={Boolean(item.lunch)} locked={!isMealOpen(item, 'lunch', app.deadlines, app.now)} choice={findOrder(app.orders, employeeId, item, item.jd, 'lunch')?.choice ?? null} onSelect={item.lunch ? () => setTarget({ jd: item.jd, meal: 'lunch' }) : undefined} />
-            <MealBlock kind="dinner" defined={Boolean(item.dinner)} locked={!isMealOpen(item, 'dinner', app.deadlines, app.now)} choice={findOrder(app.orders, employeeId, item, item.jd, 'dinner')?.choice ?? null} onSelect={item.dinner ? () => setTarget({ jd: item.jd, meal: 'dinner' }) : undefined} />
-          </div>
-        ))}
-      </div>
-      {target && day && options && (
-        <SelectMealDialog
-          key={`${employeeId}-${target.jd}-${target.meal}`}
-          kind={target.meal}
-          jd={target.jd}
-          weekday={day.weekday}
-          monthName={JALALI_MONTHS[day.jm - 1]}
-          options={options.map((title) => ({ id: title, title }))}
-          currentId={current?.choice ?? null}
-          locked={!isMealOpen(day, target.meal, app.deadlines, app.now)}
-          ops
-          who={fullName(app.employees.find((employee) => employee.id === employeeId) ?? { firstName: 'کارمند', lastName: '' })}
-          onClose={() => setTarget(null)}
-          onSave={(choice) => app.selectMeal(employeeId, target.jd, target.meal, choice, 'ops')}
-        />
-      )}
-    </div>
   )
 }

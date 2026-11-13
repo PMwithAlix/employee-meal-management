@@ -33,6 +33,11 @@ export class ListOrdersQueryDto extends PaginationQueryDto {
   @ApiPropertyOptional()
   @IsOptional()
   @IsUUID()
+  userId?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsUUID()
   buildingId?: string;
 
   @ApiPropertyOptional()

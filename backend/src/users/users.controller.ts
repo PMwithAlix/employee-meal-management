@@ -28,29 +28,32 @@ import { UsersService } from './users.service';
 @ApiCookieAuth()
 @Controller('users')
 @UseGuards(AuthGuard, RolesGuard)
-@Roles(Role.ADMIN, Role.HR)
 export class UsersController {
   constructor(private readonly users: UsersService) {}
 
   @Post()
+  @Roles(Role.ADMIN, Role.HR)
   @ApiOperation({ summary: 'ایجاد حساب کاربری' })
   create(@CurrentUser() actor: AuthUser, @Body() dto: CreateUserDto) {
     return this.users.create(actor, dto);
   }
 
   @Get()
+  @Roles(Role.ADMIN, Role.HR, Role.SUPPORT)
   @ApiOperation({ summary: 'فهرست و جست‌وجوی کاربران' })
   list(@Query() query: ListUsersQueryDto) {
     return this.users.list(query);
   }
 
   @Get(':id')
+  @Roles(Role.ADMIN, Role.HR, Role.SUPPORT)
   @ApiOperation({ summary: 'جزئیات کاربر' })
   get(@Param('id', ParseUUIDPipe) id: string) {
     return this.users.get(id);
   }
 
   @Patch(':id')
+  @Roles(Role.ADMIN, Role.HR)
   @ApiOperation({ summary: 'ویرایش نقش یا ساختمان' })
   update(
     @CurrentUser() actor: AuthUser,
@@ -61,6 +64,7 @@ export class UsersController {
   }
 
   @Post(':id/deactivate')
+  @Roles(Role.ADMIN, Role.HR)
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'غیرفعال‌سازی کاربر' })
   deactivate(
@@ -71,6 +75,7 @@ export class UsersController {
   }
 
   @Post(':id/reactivate')
+  @Roles(Role.ADMIN, Role.HR)
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'فعال‌سازی مجدد کاربر' })
   reactivate(
@@ -81,6 +86,7 @@ export class UsersController {
   }
 
   @Post(':id/reset-password')
+  @Roles(Role.ADMIN, Role.HR)
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'بازنشانی رمز عبور توسط HR یا Admin' })
   resetPassword(

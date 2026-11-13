@@ -50,6 +50,22 @@ export function parseBackendOrder(value: unknown): BackendOrder | null {
                 return [{ groupId: group.groupId, groupNameSnapshot: typeof group.groupNameSnapshot === 'string' ? group.groupNameSnapshot : '' }]
               })
             : [],
+          statusHistory: Array.isArray(cycle.statusHistory)
+            ? cycle.statusHistory.flatMap((item) => {
+                const row = asRecord(item)
+                if (!row || typeof row.id !== 'string') return []
+                const newStatus = parseCycleStatus(row.newStatus)
+                if (!newStatus) return []
+                return [{
+                  id: row.id,
+                  oldStatus: parseCycleStatus(row.oldStatus),
+                  newStatus,
+                  actorId: typeof row.actorId === 'string' ? row.actorId : null,
+                  reason: typeof row.reason === 'string' ? row.reason : null,
+                  createdAt: typeof row.createdAt === 'string' ? row.createdAt : '',
+                }]
+              })
+            : [],
         }
       : null,
     rating: rating && typeof rating.id === 'string' && typeof rating.score === 'number'

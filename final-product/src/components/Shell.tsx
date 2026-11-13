@@ -11,7 +11,7 @@ import {
 import { PERSONA_ID, ROLE_LABEL } from '../data'
 import { usernameInitials } from '../lib/credentials'
 import { canAccess, ROLES } from '../permissions'
-import { NAV_ITEMS, PAGE_TITLES } from '../navigation'
+import { NAV_ITEMS, pageTitle } from '../navigation'
 import { useApp } from '../store'
 import { fa, cn } from '../lib/text'
 import type { Role } from '../types'
@@ -67,8 +67,8 @@ export function Shell() {
   const iconOnly = app.collapsed && desktop
 
   useEffect(() => {
-    document.title = `${PAGE_TITLES[app.page]} · ${BRAND_NAME}`
-  }, [app.page])
+    document.title = `${pageTitle(app.page, app.role)} · ${BRAND_NAME}`
+  }, [app.page, app.role])
 
   useEffect(() => {
     if (desktop && app.mobileNav) app.setMobileNav(false)
@@ -105,7 +105,7 @@ export function Shell() {
                     <button
                       key={item.id}
                       type="button"
-                      title={item.label}
+                      title={pageTitle(item.id, app.role)}
                       aria-current={active ? 'page' : undefined}
                       onClick={() => app.setPage(item.id)}
                       className={cn(
@@ -115,7 +115,7 @@ export function Shell() {
                       )}
                     >
                       <Icon size={16} aria-hidden />
-                      <span className={cn('truncate', iconOnly && 'md:sr-only')}>{item.label}</span>
+                      <span className={cn('truncate', iconOnly && 'md:sr-only')}>{pageTitle(item.id, app.role)}</span>
                     </button>
                   )
                 })}
@@ -149,7 +149,7 @@ export function Shell() {
           </button>
           <BrandIcon className="h-8 w-8 shrink-0 rounded-md md:hidden" />
           <div className="min-w-0 flex-1">
-            <h1 className="truncate text-sm font-semibold">{PAGE_TITLES[app.page]}</h1>
+            <h1 className="truncate text-sm font-semibold">{pageTitle(app.page, app.role)}</h1>
             <div className="flex items-center gap-1">
               <button type="button" className="min-h-11 rounded-md px-2 text-xs text-link" onClick={() => app.shiftMonth(-1)}>ماه قبل</button>
               <p className="truncate text-[11px] text-muted">{app.monthTitle}</p>
