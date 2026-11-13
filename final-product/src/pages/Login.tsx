@@ -18,7 +18,7 @@ export function Login({ onSuccess }: { onSuccess: () => void }) {
 
   return (
     <div className="grid min-h-screen place-items-center bg-bg px-4 text-ink">
-      <button className="absolute left-4 top-4 rounded-md border border-line bg-surface p-2" aria-label={dark ? 'زمینه روشن' : 'زمینه تیره'} title={dark ? 'زمینه روشن' : 'زمینه تیره'} onClick={toggleTheme}>
+      <button className="absolute left-4 top-4 grid h-11 w-11 place-items-center rounded-md border border-line bg-surface" aria-label={dark ? 'زمینه روشن' : 'زمینه تیره'} title={dark ? 'زمینه روشن' : 'زمینه تیره'} onClick={toggleTheme}>
         {dark ? <Sun size={16} /> : <Moon size={16} />}
       </button>
       <form

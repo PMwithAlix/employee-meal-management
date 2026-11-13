@@ -94,7 +94,7 @@ function EmployeeOverview() {
         ]}
       />
       <div className="grid gap-4 lg:grid-cols-2">
-        <Panel title="وضعیت سفارش‌ها" action={<button className="text-xs text-link" onClick={() => jump('all')}>رفتن به منو</button>}>
+        <Panel title="وضعیت سفارش‌ها" action={<button className="min-h-11 px-2 text-xs text-link" onClick={() => jump('all')}>رفتن به منو</button>}>
           <div className="space-y-3">
             <Bucket title="روزهای پیش رو" count={upcoming.length} sample={upcoming.slice(0, 3).map((day) => fa(day.jd))} onClick={() => jump('open')} />
             <Bucket title="روزهای دارای انتخاب" count={selectedDays.length} sample={selectedDays.slice(-3).map((day) => fa(day.jd))} onClick={() => jump('selected')} />
@@ -105,8 +105,8 @@ function EmployeeOverview() {
         <Panel title="نزدیک‌ترین مهلت‌ها">
           <ul className="divide-y divide-line">
             {deadlines.map((item) => (
-              <li key={`${item.jd}-${item.meal}`} className="flex items-center justify-between gap-3 py-2.5 text-sm">
-                <span>
+              <li key={`${item.jd}-${item.meal}`} className="flex flex-wrap items-center justify-between gap-2 py-2.5 text-sm">
+                <span className="min-w-0">
                   <span className={cn('ms-2 text-xs', item.meal === 'lunch' ? 'text-lunch' : 'text-dinner')}>{item.meal === 'lunch' ? 'ناهار' : 'شام'}</span>
                   {fa(item.jd)} {JALALI_MONTHS[item.jm - 1]}
                 </span>
@@ -140,8 +140,8 @@ function Bucket({ title, count, sample, onClick }: { title: string; count: numbe
       <span className="text-lg font-semibold">{fa(count)}</span>
     </>
   )
-  if (!onClick) return <div className="flex items-center justify-between gap-3">{body}</div>
-  return <button type="button" className="flex w-full items-center justify-between gap-3 rounded-md text-start hover:bg-surface2" onClick={onClick}>{body}</button>
+  if (!onClick) return <div className="flex min-h-11 items-center justify-between gap-3">{body}</div>
+  return <button type="button" className="flex min-h-11 w-full items-center justify-between gap-3 rounded-md text-start hover:bg-surface2" onClick={onClick}>{body}</button>
 }
 
 function SupportOverview() {
@@ -161,17 +161,17 @@ function SupportOverview() {
         ]}
       />
       <div className="grid gap-4 lg:grid-cols-2">
-        <Panel title="مهلت‌های پیش رو" action={<button className="text-xs text-link" onClick={() => app.setPage('menuMgmt')}>مدیریت منو</button>}>
+        <Panel title="مهلت‌های پیش رو" action={<button className="min-h-11 px-2 text-xs text-link" onClick={() => app.setPage('menuMgmt')}>مدیریت منو</button>}>
           <ul className="space-y-2 text-sm">
             {openDays.slice(0, 4).map((day) => (
-              <li key={day.jd} className="flex justify-between gap-3">
-                <span>{fa(day.jd)} {JALALI_MONTHS[day.jm - 1]}، {day.weekday}</span>
-                <span className="text-muted">{day.lunch ? `ناهار ${deadlineLabel(day, 'lunch', app.deadlines)}` : ''}{day.lunch && day.dinner ? ' · ' : ''}{day.dinner ? `شام ${deadlineLabel(day, 'dinner', app.deadlines)}` : ''}</span>
+              <li key={day.jd} className="flex flex-col gap-1 sm:flex-row sm:justify-between sm:gap-3">
+                <span className="min-w-0">{fa(day.jd)} {JALALI_MONTHS[day.jm - 1]}، {day.weekday}</span>
+                <span className="break-words text-muted">{day.lunch ? `ناهار ${deadlineLabel(day, 'lunch', app.deadlines)}` : ''}{day.lunch && day.dinner ? ' · ' : ''}{day.dinner ? `شام ${deadlineLabel(day, 'dinner', app.deadlines)}` : ''}</span>
               </li>
             ))}
           </ul>
         </Panel>
-        <Panel title="فعالیت عملیاتی اخیر" action={<button className="text-xs text-link" onClick={() => app.setPage('activity')}>تاریخچه</button>}>
+        <Panel title="فعالیت عملیاتی اخیر" action={<button className="min-h-11 px-2 text-xs text-link" onClick={() => app.setPage('activity')}>تاریخچه</button>}>
           <ActivityList />
         </Panel>
       </div>
@@ -214,9 +214,9 @@ function HrOverview() {
         </Panel>
         <Panel title="میانبرها">
           <div className="grid gap-2">
-            <button className="rounded-md border border-line px-3 py-2 text-start text-sm hover:bg-surface2" onClick={() => app.setPage('employees')}>مدیریت کارکنان</button>
-            <button className="rounded-md border border-line px-3 py-2 text-start text-sm hover:bg-surface2" onClick={() => app.setPage('buildings')}>مدیریت ساختمان‌ها</button>
-            <button className="rounded-md border border-line px-3 py-2 text-start text-sm hover:bg-surface2" onClick={() => app.setPage('groups')}>گروه‌های کارکنان</button>
+            <button className="min-h-11 rounded-md border border-line px-3 py-2 text-start text-sm hover:bg-surface2" onClick={() => app.setPage('employees')}>مدیریت کارکنان</button>
+            <button className="min-h-11 rounded-md border border-line px-3 py-2 text-start text-sm hover:bg-surface2" onClick={() => app.setPage('buildings')}>مدیریت ساختمان‌ها</button>
+            <button className="min-h-11 rounded-md border border-line px-3 py-2 text-start text-sm hover:bg-surface2" onClick={() => app.setPage('groups')}>گروه‌های کارکنان</button>
           </div>
         </Panel>
       </div>
@@ -241,7 +241,7 @@ function ManagementOverview() {
         ]}
       />
       <div className="grid gap-4 lg:grid-cols-2">
-        <Panel title="خلاصه ساختمان‌ها" action={<button className="text-xs text-link" onClick={() => app.setPage('reports')}>گزارش‌ها</button>}>
+        <Panel title="خلاصه ساختمان‌ها" action={<button className="min-h-11 px-2 text-xs text-link" onClick={() => app.setPage('reports')}>گزارش‌ها</button>}>
           <ul className="divide-y divide-line text-sm">
             {app.buildings.map((building) => {
               const people = app.employees.filter((employee) => employee.buildingId === building.id)
@@ -255,7 +255,7 @@ function ManagementOverview() {
             })}
           </ul>
         </Panel>
-        <Panel title="فعالیت اخیر" action={<button className="text-xs text-link" onClick={() => app.setPage('activity')}>تاریخچه کامل</button>}>
+        <Panel title="فعالیت اخیر" action={<button className="min-h-11 px-2 text-xs text-link" onClick={() => app.setPage('activity')}>تاریخچه کامل</button>}>
           <ActivityList />
         </Panel>
       </div>
@@ -286,7 +286,7 @@ function AdminOverview() {
       <Panel title="بخش‌های سامانه">
         <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
           {links.map((link) => (
-            <button key={link.page} className="rounded-md border border-line px-3 py-3 text-start text-sm hover:bg-surface2" onClick={() => app.setPage(link.page)}>
+            <button key={link.page} className="min-h-11 rounded-md border border-line px-3 py-3 text-start text-sm hover:bg-surface2" onClick={() => app.setPage(link.page)}>
               {link.label}
             </button>
           ))}

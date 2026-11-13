@@ -47,7 +47,7 @@ export function EmployeesPage() {
           <>
           <div className="space-y-2 lg:hidden">
             {rows.map((employee) => (
-              <button key={employee.id} type="button" className={cn('w-full rounded-md border border-line bg-surface p-3 text-start', selected === employee.id && 'border-primary bg-brandsubtle')} onClick={() => setSelected(employee.id)}>
+              <button key={employee.id} type="button" className={cn('min-h-11 w-full rounded-md border border-line bg-surface p-3 text-start', selected === employee.id && 'border-primary bg-brandsubtle')} onClick={() => setSelected(employee.id)}>
                 <span className="flex items-center justify-between gap-2">
                   <span className="font-medium">{fullName(employee)}</span>
                   <Badge tone={employee.active ? 'ok' : 'neutral'}>{employee.active ? 'فعال' : 'غیرفعال'}</Badge>
