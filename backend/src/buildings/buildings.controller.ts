@@ -23,29 +23,32 @@ import { UpdateBuildingDto } from './dto/update-building.dto';
 @ApiCookieAuth()
 @Controller('buildings')
 @UseGuards(AuthGuard, RolesGuard)
-@Roles(Role.ADMIN, Role.HR)
 export class BuildingsController {
   constructor(private readonly buildings: BuildingsService) {}
 
   @Post()
+  @Roles(Role.ADMIN, Role.HR)
   @ApiOperation({ summary: 'ایجاد ساختمان' })
   create(@CurrentUser() actor: AuthUser, @Body() dto: CreateBuildingDto) {
     return this.buildings.create(actor, dto);
   }
 
   @Get()
+  @Roles(Role.ADMIN, Role.HR, Role.SUPPORT)
   @ApiOperation({ summary: 'فهرست ساختمان‌ها' })
   list() {
     return this.buildings.list();
   }
 
   @Get(':id')
+  @Roles(Role.ADMIN, Role.HR, Role.SUPPORT)
   @ApiOperation({ summary: 'جزئیات ساختمان' })
   get(@Param('id', ParseUUIDPipe) id: string) {
     return this.buildings.get(id);
   }
 
   @Patch(':id')
+  @Roles(Role.ADMIN, Role.HR)
   @ApiOperation({ summary: 'ویرایش نام ساختمان' })
   update(
     @CurrentUser() actor: AuthUser,

@@ -647,6 +647,149 @@ describe('Orders (e2e)', () => {
     ).toBe(404);
   });
 
+  it('rejects invalid guest-order payloads and preserves snapshots after a building rename', async () => {
+    expect(
+      (
+        await request(app.getHttpServer())
+          .post('/api/v1/guest-orders')
+          .set('Cookie', employeeCookie)
+          .send({
+            buildingId,
+            mealDate: mealDate(1),
+            mealType: MealType.LUNCH,
+            menuItemId: lunchA,
+            quantity: 1,
+          })
+      ).status,
+    ).toBe(403);
+    expect(
+      (
+        await request(app.getHttpServer())
+          .post('/api/v1/guest-orders')
+          .set('Cookie', managementCookie)
+          .send({
+            buildingId,
+            mealDate: mealDate(1),
+            mealType: MealType.LUNCH,
+            menuItemId: lunchA,
+            quantity: 1,
+          })
+      ).status,
+    ).toBe(403);
+    expect(
+      (
+        await request(app.getHttpServer())
+          .get('/api/v1/buildings')
+          .set('Cookie', supportCookie)
+      ).status,
+    ).toBe(200);
+    expect(
+      (
+        await request(app.getHttpServer())
+          .post('/api/v1/buildings')
+          .set('Cookie', supportCookie)
+          .send({ name: 'e2e-order-forbidden' })
+      ).status,
+    ).toBe(403);
+    expect(
+      (
+        await request(app.getHttpServer())
+          .post('/api/v1/guest-orders')
+          .set('Cookie', supportCookie)
+          .send({
+            buildingId,
+            mealDate: mealDate(1),
+            mealType: MealType.LUNCH,
+            menuItemId: lunchA,
+            quantity: 0,
+          })
+      ).status,
+    ).toBe(400);
+    expect(
+      (
+        await request(app.getHttpServer())
+          .post('/api/v1/guest-orders')
+          .set('Cookie', supportCookie)
+          .send({
+            buildingId: '00000000-0000-0000-0000-000000000000',
+            mealDate: mealDate(1),
+            mealType: MealType.LUNCH,
+            menuItemId: lunchA,
+            quantity: 1,
+          })
+      ).status,
+    ).toBe(404);
+    expect(
+      (
+        await request(app.getHttpServer())
+          .post('/api/v1/guest-orders')
+          .set('Cookie', supportCookie)
+          .send({
+            buildingId,
+            mealDate: mealDate(1),
+            mealType: MealType.LUNCH,
+            menuItemId: dinnerA,
+            quantity: 1,
+          })
+      ).status,
+    ).toBe(422);
+    expect(
+      (
+        await request(app.getHttpServer())
+          .post('/api/v1/guest-orders')
+          .set('Cookie', supportCookie)
+          .send({
+            buildingId,
+            mealDate: mealDate(1),
+            mealType: MealType.LUNCH,
+            menuItemId: draftItem,
+            quantity: 1,
+          })
+      ).status,
+    ).toBe(422);
+    const isolated = await request(app.getHttpServer())
+      .post('/api/v1/buildings')
+      .set('Cookie', adminCookie)
+      .send({ name: 'e2e-order-guest-snap' });
+    const created = await request(app.getHttpServer())
+      .post('/api/v1/guest-orders')
+      .set('Cookie', supportCookie)
+      .send({
+        buildingId: isolated.body.id,
+        mealDate: mealDate(1),
+        mealType: MealType.LUNCH,
+        menuItemId: lunchA,
+        quantity: 2,
+        note: 'بازدید',
+      });
+    expect(created.status).toBe(201);
+    expect(created.body.buildingNameSnapshot).toBe('e2e-order-guest-snap');
+    expect(created.body.mealTitleSnapshot).toBe('چلوکباب');
+    await request(app.getHttpServer())
+      .patch(`/api/v1/buildings/${isolated.body.id}`)
+      .set('Cookie', adminCookie)
+      .send({ name: 'e2e-order-guest-renamed' });
+    const listed = await request(app.getHttpServer())
+      .get('/api/v1/guest-orders')
+      .query({
+        buildingId: isolated.body.id,
+        mealDate: mealDate(1),
+        mealType: MealType.LUNCH,
+        status: 'ACTIVE',
+      })
+      .set('Cookie', supportCookie);
+    expect(listed.status).toBe(200);
+    const row = listed.body.items.find(
+      (item: { id: string }) => item.id === created.body.id,
+    );
+    expect(row.buildingNameSnapshot).toBe('e2e-order-guest-snap');
+    const detail = await request(app.getHttpServer())
+      .get(`/api/v1/guest-orders/${created.body.id}`)
+      .set('Cookie', supportCookie);
+    expect(detail.body.buildingNameSnapshot).toBe('e2e-order-guest-snap');
+    expect(detail.body.history.length).toBeGreaterThanOrEqual(1);
+  });
+
   it('writes order audit rows from the session actor', async () => {
     const logs = await prisma.auditLog.findMany({
       where: {

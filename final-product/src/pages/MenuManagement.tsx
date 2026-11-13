@@ -1,4 +1,5 @@
 import { useRef, useState } from 'react'
+import { GuestsPanel } from '../guests/GuestsPanel'
 import { MealBlock } from '../components/MealBlock'
 import { SelectMealDialog } from '../components/SelectMealDialog'
 import { Badge, Button, Dialog, Empty, Field, controlClass } from '../components/ui'
@@ -44,7 +45,7 @@ export function MenuManagementPage() {
       </div>
       {tab === 'daily' && <DailyMenu managed={managed} />}
       {tab === 'import' && <ImportPanel managed={managed} />}
-      {tab === 'guests' && <Guests />}
+      {tab === 'guests' && <GuestsPanel />}
       {tab === 'staff' && <StaffOrders />}
     </div>
   )
@@ -378,91 +379,6 @@ function ReplaceWizard({
         </div>
       )}
     </Dialog>
-  )
-}
-
-function Guests() {
-  const app = useApp()
-  const [buildingId, setBuildingId] = useState(app.buildings[0]?.id ?? '')
-  const [jd, setJd] = useState(23)
-  const [meal, setMeal] = useState<MealKind>('lunch')
-  const [count, setCount] = useState(1)
-  const [note, setNote] = useState('')
-  const [removing, setRemoving] = useState<string | null>(null)
-  const [countError, setCountError] = useState('')
-  const guests = app.guests.filter((guest) => guest.jy === app.selectedMonth.jy && guest.jm === app.selectedMonth.jm)
-  return (
-    <div className="grid gap-4 lg:grid-cols-[1fr_18rem]">
-      <div className="overflow-hidden rounded-md border border-line bg-surface">
-        {guests.length === 0 ? <div className="p-4"><Empty title="سفارش مهمانی نیست" body="از فرم کنار صفحه یک مورد اضافه کنید." /></div> : (
-          <>
-          <div className="space-y-2 p-3 lg:hidden">
-            {guests.map((guest) => (
-              <article key={guest.id} className="rounded-md border border-line p-3 text-sm">
-                <p className="font-medium">{fa(guest.jd)} {JALALI_MONTHS[guest.jm - 1]} · {guest.meal === 'lunch' ? 'ناهار' : 'شام'}</p>
-                <p className="mt-1">{app.buildings.find((item) => item.id === guest.buildingId)?.name} · {fa(guest.count)} پرس</p>
-                <p className="mt-1 text-muted">{guest.note || 'بدون توضیح'}</p>
-                <Button variant="danger" className="mt-2" onClick={() => setRemoving(guest.id)}>حذف</Button>
-              </article>
-            ))}
-          </div>
-          <table className="hidden w-full text-sm lg:table">
-            <thead className="bg-elevated text-xs text-muted">
-              <tr>
-                <th className="px-3 py-2 text-start font-medium">تاریخ</th>
-                <th className="px-3 py-2 text-start font-medium">ساختمان</th>
-                <th className="px-3 py-2 text-start font-medium">وعده</th>
-                <th className="px-3 py-2 text-start font-medium">تعداد</th>
-                <th className="px-3 py-2 text-start font-medium">توضیح</th>
-                <th />
-              </tr>
-            </thead>
-            <tbody>
-              {app.guests.filter((guest) => guest.jy === app.selectedMonth.jy && guest.jm === app.selectedMonth.jm).map((guest) => (
-                <tr key={guest.id} className="border-t border-line">
-                  <td className="px-3 py-2">{fa(guest.jd)} {JALALI_MONTHS[guest.jm - 1]}</td>
-                  <td className="px-3 py-2">{app.buildings.find((item) => item.id === guest.buildingId)?.name}</td>
-                  <td className="px-3 py-2">{guest.meal === 'lunch' ? 'ناهار' : 'شام'}</td>
-                  <td className="px-3 py-2">{fa(guest.count)}</td>
-                  <td className="px-3 py-2">{guest.note || '—'}</td>
-                  <td className="px-3 py-2"><Button variant="danger" onClick={() => setRemoving(guest.id)}>حذف</Button></td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-          </>
-        )}
-      </div>
-      <form
-        className="space-y-3 rounded-md border border-line bg-surface p-3"
-        onSubmit={(event) => {
-          event.preventDefault()
-          if (!buildingId) return
-          if (!Number.isFinite(count) || count < 1) {
-            setCountError('تعداد باید حداقل ۱ باشد.')
-            return
-          }
-          setCountError('')
-          app.addGuest({ buildingId, jd, meal, count, note: note.trim() })
-          setNote('')
-        }}
-      >
-        <Field label="ساختمان"><select className={controlClass} value={buildingId} onChange={(event) => setBuildingId(event.target.value)}>{app.buildings.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></Field>
-        <Field label="روز"><select className={controlClass} value={jd} onChange={(event) => setJd(Number(event.target.value))}>{app.days.map((day) => <option key={day.jd} value={day.jd}>{fa(day.jd)} {day.weekday}</option>)}</select></Field>
-        <Field label="وعده"><select className={controlClass} value={meal} onChange={(event) => setMeal(event.target.value as MealKind)}><option value="lunch">ناهار</option><option value="dinner">شام</option></select></Field>
-        <Field label="تعداد"><input className={controlClass} type="number" min={1} value={count} onChange={(event) => { setCount(Number(event.target.value)); setCountError('') }} /></Field>
-        {countError && <p className="text-sm text-danger">{countError}</p>}
-        <Field label="توضیح"><input className={controlClass} value={note} onChange={(event) => setNote(event.target.value)} /></Field>
-        <Button type="submit" className="w-full">ثبت سفارش مهمان</Button>
-      </form>
-      <Dialog open={Boolean(removing)} title="حذف سفارش مهمان" onClose={() => setRemoving(null)}>
-        <p className="text-sm">این مورد از فهرست مهمان‌ها حذف شود؟</p>
-        <div className="mt-3 flex justify-end gap-2">
-          <Button variant="secondary" onClick={() => setRemoving(null)}>انصراف</Button>
-          <Button variant="danger" onClick={() => { if (removing) app.removeGuest(removing); setRemoving(null) }}>حذف</Button>
-        </div>
-      </Dialog>
-    </div>
   )
 }
 
