@@ -3,7 +3,7 @@ import { Button, Dialog, Empty, MonthBar } from '../components/ui'
 import { SelectMealDialog } from '../components/SelectMealDialog'
 import { usePublishedMenu } from '../menus/usePublishedMenu'
 import { useApp } from '../store'
-import { canGiveFeedback, findOrder, isMealOpen, mealChoices } from '../lib/orders'
+import { canGiveFeedback, findOrder, isMealOpen, mealChoices, type MealDeadlineState } from '../lib/orders'
 import type { MonthDeadlines } from '../lib/deadlines'
 import { isSameDate, JALALI_MONTHS, type JalaliDateTime } from '../lib/jalali'
 import { can } from '../permissions'
@@ -19,7 +19,7 @@ export function MyOrdersPage() {
   if (!id) return <Empty title="سفارش شخصی ندارید" body="نقش ادمین به ساختمان و سفارش شخصی متصل نیست." />
 
   const days = [...published.pickerDays].reverse().filter((day) => day.lunch || day.dinner)
-  const past = app.myOrders.filter((item) => item.employeeId === id && (item.jy !== app.selectedMonth.jy || item.jm !== app.selectedMonth.jm) && item.choice)
+  const past = app.myOrders.filter((item) => item.employeeId === id && (item.jy !== app.selectedMonth.jy || item.jm !== app.selectedMonth.jm))
   const pickedDay = picking ? published.pickerDays.find((day) => day.jd === picking.day.jd && day.jm === picking.day.jm && day.jy === picking.day.jy) : undefined
   const pickedOptions = pickedDay && picking ? mealChoices(pickedDay, picking.meal) : null
   const pickedOrder = pickedDay && picking ? findOrder(app.myOrders, id, pickedDay, pickedDay.jd, picking.meal) : undefined
@@ -94,7 +94,7 @@ export function MyOrdersPage() {
             {past.map((item) => (
               <li key={item.id} className="flex flex-col gap-1 px-4 py-3 text-sm sm:flex-row sm:items-center sm:justify-between">
                 <span className="min-w-0 break-words">{fa(item.jd)} {JALALI_MONTHS[item.jm - 1]} {fa(item.jy)} · {item.meal === 'lunch' ? 'ناهار' : 'شام'}</span>
-                <span className="font-medium">{item.choice}</span>
+                <span className="font-medium">{item.snapshotTitle ?? item.choice ?? '—'}</span>
                 <span className="text-xs text-muted">{item.cycleStatus === 'CANCELLED' ? 'لغو شده' : 'ثبت‌شده'}</span>
               </li>
             ))}
@@ -120,7 +120,7 @@ export function MyOrdersPage() {
   )
 }
 
-function canChange(role: Parameters<typeof can>[0], day: DayMenu, meal: MealKind, deadlines: MonthDeadlines, now: JalaliDateTime, deadlineAt?: string | null) {
+function canChange(role: Parameters<typeof can>[0], day: DayMenu, meal: MealKind, deadlines: MonthDeadlines, now: JalaliDateTime, deadlineAt?: MealDeadlineState) {
   if (!day[meal]) return false
   return isMealOpen(day, meal, deadlines, now, deadlineAt) ? can(role, 'order.self') : can(role, 'order.ops')
 }

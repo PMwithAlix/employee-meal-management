@@ -7,6 +7,50 @@ describe('orderApi', () => {
     vi.unstubAllGlobals()
   })
 
+  it('follows backend pagination until every personal order is loaded', async () => {
+    const page1 = Array.from({ length: 100 }, (_, index) => ({
+      id: `order-${index}`,
+      userId: 'user-1',
+      mealDate: '2026-11-14',
+      mealType: 'LUNCH',
+      quantity: 1,
+      status: 'ACTIVE',
+      currentCycle: {
+        id: `c-${index}`,
+        cycleNumber: 1,
+        menuItemId: 'item-1',
+        menuVersionId: 'v1',
+        optionTitle: 'عدسی',
+        usernameSnapshot: 'emp',
+        buildingIdSnapshot: null,
+        buildingNameSnapshot: null,
+        mealDateSnapshot: '2026-11-14',
+        mealTypeSnapshot: 'LUNCH',
+        status: 'ACTIVE',
+        createdAt: '2026-11-14T00:00:00.000Z',
+        groups: [],
+      },
+      rating: null,
+    }))
+    const fetchMock = vi.fn(async (url: string) => {
+      const page = new URL(url, 'http://local.test').searchParams.get('page')
+      if (page === '1') {
+        return new Response(JSON.stringify({ items: page1, total: 101, page: 1, pageSize: 100 }), { status: 200 })
+      }
+      return new Response(JSON.stringify({
+        items: [{ ...page1[0], id: 'order-100' }],
+        total: 101,
+        page: 2,
+        pageSize: 100,
+      }), { status: 200 })
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    const listed = await orderApi.listAllMine()
+    expect(fetchMock).toHaveBeenCalledTimes(2)
+    expect(listed.orders).toHaveLength(101)
+    expect(listed.orders[100]?.id).toBe('order-100')
+  })
+
   it('lists personal orders with credentials and without seed fallback', async () => {
     const fetchMock = vi.fn(async () => new Response(JSON.stringify({ items: [], total: 0, page: 1, pageSize: 100 }), { status: 200 }))
     vi.stubGlobal('fetch', fetchMock)

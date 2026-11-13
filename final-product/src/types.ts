@@ -81,6 +81,7 @@ export interface Order {
   jd: number
   meal: MealKind
   choice: string | null
+  snapshotTitle?: string | null
   menuItemId?: string | null
   cycleStatus?: 'ACTIVE' | 'CANCELLED' | null
   rating: Rating | null

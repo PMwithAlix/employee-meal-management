@@ -118,9 +118,9 @@ export function MonthlyMenuPage() {
       ) : visible.length === 0 ? (
         <Empty title="روزی با این فیلتر پیدا نشد" body="فیلترها را پاک کنید یا ترکیب دیگری انتخاب کنید." />
       ) : app.menuView === 'list' ? (
-        <DayList days={visible} />
+        <DayList days={visible} employeeId={id} />
       ) : (
-        <Calendar days={days} visible={new Set(visible.map((item) => item.jd))} />
+        <Calendar days={days} visible={new Set(visible.map((item) => item.jd))} employeeId={id} />
       )}
       {(published.status === 'unavailable' || published.status === 'error' || published.status === 'forbidden') && (
         <Button variant="secondary" onClick={published.retry}>تلاش دوباره</Button>
@@ -129,9 +129,8 @@ export function MonthlyMenuPage() {
   )
 }
 
-function DayList({ days }: { days: DayMenu[] }) {
+function DayList({ days, employeeId: id }: { days: DayMenu[]; employeeId: string }) {
   const app = useApp()
-  const id = app.personaId!
   return (
     <>
       <div className="hidden overflow-hidden rounded-md border border-line md:block">
@@ -185,9 +184,8 @@ function DayList({ days }: { days: DayMenu[] }) {
   )
 }
 
-function Calendar({ days, visible }: { days: DayMenu[]; visible: Set<number> }) {
+function Calendar({ days, visible, employeeId: id }: { days: DayMenu[]; visible: Set<number>; employeeId: string }) {
   const app = useApp()
-  const id = app.personaId!
   const lead = WEEKDAYS.indexOf(days[0]?.weekday as (typeof WEEKDAYS)[number])
   return (
     <>
@@ -211,7 +209,7 @@ function Calendar({ days, visible }: { days: DayMenu[]; visible: Set<number> }) 
           ))}
         </div>
       </div>
-      <MobileCalendar days={days} visible={visible} />
+      <MobileCalendar days={days} visible={visible} employeeId={id} />
     </>
   )
 }
@@ -253,9 +251,8 @@ function MealMark({ kind, defined, selected, closed }: { kind: MealKind; defined
   )
 }
 
-function MobileCalendar({ days, visible }: { days: DayMenu[]; visible: Set<number> }) {
+function MobileCalendar({ days, visible, employeeId: id }: { days: DayMenu[]; visible: Set<number>; employeeId: string }) {
   const app = useApp()
-  const id = app.personaId!
   const lead = Math.max(0, WEEKDAYS.indexOf(days[0]?.weekday as (typeof WEEKDAYS)[number]))
   const trail = (7 - ((lead + days.length) % 7)) % 7
   const leading = days[0] ? Array.from({ length: lead }, (_, index) => addDays(days[0], index - lead)) : []

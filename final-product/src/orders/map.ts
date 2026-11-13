@@ -77,6 +77,7 @@ export function toUiOrder(payload: BackendOrder): Order | null {
     jd: date.jd,
     meal,
     choice: active ? payload.currentCycle!.optionTitle : null,
+    snapshotTitle: payload.currentCycle?.optionTitle ?? null,
     menuItemId: active ? payload.currentCycle!.menuItemId : null,
     cycleStatus: payload.status,
     rating: payload.rating

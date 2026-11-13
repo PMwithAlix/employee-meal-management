@@ -43,6 +43,7 @@ describe('parseBackendOrder', () => {
   it('does not treat a cancelled cycle as a current choice', () => {
     const ui = toUiOrder(parseBackendOrder({ ...payload, status: 'CANCELLED', currentCycle: { ...payload.currentCycle, status: 'CANCELLED' } })!)
     expect(ui?.choice).toBeNull()
+    expect(ui?.snapshotTitle).toBe('چلوکباب')
     expect(ui?.menuItemId).toBeNull()
     expect(ui?.cycleStatus).toBe('CANCELLED')
   })

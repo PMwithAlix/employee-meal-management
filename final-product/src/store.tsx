@@ -2,7 +2,7 @@ import { createContext, useContext, useEffect, useMemo, useState, type ReactNode
 import { buildMonthMenu, createSnapshot, fullName, PERSONA_ID, ROLE_LABEL, SEED_MONTH } from './data'
 import { defaultMonthDeadlines, formatDeadline, isOrderingOpen, type MealDeadline, type MonthDeadlines } from './lib/deadlines'
 import { addMonths, currentDateTime, JALALI_MONTHS, monthKey, type JalaliDate, type JalaliDateTime } from './lib/jalali'
-import { canGiveFeedback } from './lib/orders'
+import { canGiveFeedback, isEmployeeDeadlineOpen, type MealDeadlineState } from './lib/orders'
 import { ADMIN_ACCOUNT_ID, normalizeUsername, passwordIssue, setSessionSecret, usernameIssue, verifySessionSecret } from './lib/credentials'
 import { fa } from './lib/text'
 import type { SessionUser } from './auth/roles'
@@ -82,7 +82,7 @@ interface StoreValue {
   setMealDeadline: (meal: MealKind, patch: Partial<Pick<MealDeadline, 'relation' | 'hour' | 'minute'>>) => void
   setMealServing: (meal: MealKind, clock: string) => void
   selectMeal: (employeeId: string, jd: number, meal: MealKind, choice: string | null, scope: 'self' | 'ops', menuItemId?: string | null) => Promise<boolean>
-  mealDeadlineAt: (day: Pick<DayMenu, 'jy' | 'jm' | 'jd' | 'gregorianDate'>, meal: MealKind) => string | null
+  mealDeadlineAt: (day: Pick<DayMenu, 'jy' | 'jm' | 'jd' | 'gregorianDate'>, meal: MealKind) => MealDeadlineState
   retryMyOrders: () => void
   rateMeal: (orderId: string, score: number, comment: string) => boolean
   saveEmployee: (input: {
@@ -165,6 +165,7 @@ export function StoreProvider({
   const [myOrdersBoot, setMyOrdersBoot] = useState(0)
   const [orderingKey, setOrderingKey] = useState<string | null>(null)
   const [deadlineMap, setDeadlineMap] = useState<Record<string, string>>({})
+  const [deadlineStatus, setDeadlineStatus] = useState<'loading' | 'ready' | 'unavailable' | 'error'>('loading')
   const [guests, setGuests] = useState(initial.guests)
   const [activity, setActivity] = useState(initial.activity)
   const [notes, setNotes] = useState(initial.notes)
@@ -187,30 +188,38 @@ export function StoreProvider({
     const controller = new AbortController()
     setMyOrdersStatus('loading')
     setMyOrdersMessage('')
-    void Promise.all([
-      orderApi.listMine({ pageSize: 100 }, controller.signal),
+    setDeadlineStatus('loading')
+    void Promise.allSettled([
+      orderApi.listAllMine(controller.signal),
       orderApi.deadlines(selectedMonth.jy, selectedMonth.jm, controller.signal),
-    ])
-      .then(([listed, rows]) => {
-        if (controller.signal.aborted) return
-        setMyOrders(listed.orders)
-        const next: Record<string, string> = {}
-        for (const row of rows) next[deadlineKey(row.mealDate, row.mealType)] = row.deadlineAt
-        setDeadlineMap(next)
+    ]).then(([ordersResult, deadlinesResult]) => {
+      if (controller.signal.aborted) return
+      if (ordersResult.status === 'fulfilled') {
+        setMyOrders(ordersResult.value.orders)
         setMyOrdersStatus('ready')
-      })
-      .catch((error: unknown) => {
-        if (controller.signal.aborted) return
+        setMyOrdersMessage('')
+      } else {
         setMyOrders([])
-        setDeadlineMap({})
+        const error = ordersResult.reason
         if (error instanceof AuthRequestError && error.kind === 'network') {
           setMyOrdersStatus('unavailable')
           setMyOrdersMessage(error.message)
-          return
+        } else {
+          setMyOrdersStatus('error')
+          setMyOrdersMessage(error instanceof AuthRequestError ? error.message : 'بارگذاری سفارش‌ها انجام نشد.')
         }
-        setMyOrdersStatus('error')
-        setMyOrdersMessage(error instanceof AuthRequestError ? error.message : 'بارگذاری سفارش‌ها انجام نشد.')
-      })
+      }
+      if (deadlinesResult.status === 'fulfilled') {
+        const next: Record<string, string> = {}
+        for (const row of deadlinesResult.value) next[deadlineKey(row.mealDate, row.mealType)] = row.deadlineAt
+        setDeadlineMap(next)
+        setDeadlineStatus('ready')
+      } else {
+        const error = deadlinesResult.reason
+        setDeadlineMap({})
+        setDeadlineStatus(error instanceof AuthRequestError && error.kind === 'network' ? 'unavailable' : 'error')
+      }
+    })
     return () => controller.abort()
   }, [myOrdersBoot, selectedMonth.jy, selectedMonth.jm, session.id])
 
@@ -253,9 +262,11 @@ export function StoreProvider({
     setMobileNav(false)
   }
 
-  function mealDeadlineAt(day: Pick<DayMenu, 'jy' | 'jm' | 'jd' | 'gregorianDate'>, meal: MealKind) {
+  function mealDeadlineAt(day: Pick<DayMenu, 'jy' | 'jm' | 'jd' | 'gregorianDate'>, meal: MealKind): MealDeadlineState {
+    if (deadlineStatus !== 'ready') return 'unknown'
     const date = day.gregorianDate ?? formatGregorianDate(day.jy, day.jm, day.jd)
-    return deadlineMap[deadlineKey(date, meal)] ?? null
+    const at = deadlineMap[deadlineKey(date, meal)]
+    return at ? { at } : 'absent'
   }
 
   function upsertMyOrder(next: Order) {
@@ -268,8 +279,8 @@ export function StoreProvider({
   async function selectMeal(employeeId: string, jd: number, meal: MealKind, choice: string | null, scope: 'self' | 'ops', menuItemId?: string | null) {
     const mealDate = { ...selectedMonth, jd }
     const gregorian = formatGregorianDate(selectedMonth.jy, selectedMonth.jm, jd)
-    const locked = mealDeadlineAt({ ...selectedMonth, jd, gregorianDate: gregorian }, meal)
-      ? Date.now() >= Date.parse(mealDeadlineAt({ ...selectedMonth, jd, gregorianDate: gregorian }, meal)!)
+    const locked = scope === 'self'
+      ? !isEmployeeDeadlineOpen(mealDeadlineAt({ ...selectedMonth, jd, gregorianDate: gregorian }, meal))
       : !isOrderingOpen(mealDate, deadlines[meal], now)
     if (scope === 'self') {
       if (!can(role, 'order.self') || employeeId !== session.id) return false

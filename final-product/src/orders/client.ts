@@ -10,12 +10,13 @@ function asRecord(value: unknown) {
 }
 
 export const orderApi = {
-  listMine(query: { from?: string; to?: string; pageSize?: number } = {}, signal?: AbortSignal) {
+  listMine(query: { from?: string; to?: string; page?: number; pageSize?: number } = {}, signal?: AbortSignal) {
     const params = new URLSearchParams()
     if (query.from) params.set('from', query.from)
     if (query.to) params.set('to', query.to)
+    params.set('page', String(query.page ?? 1))
     params.set('pageSize', String(query.pageSize ?? 100))
-    const suffix = params.toString() ? `?${params.toString()}` : ''
+    const suffix = `?${params.toString()}`
     return authRequest<unknown>(`${ORDER_ENDPOINTS.me}${suffix}`, { ...session, signal }).then((body) => {
       const record = asRecord(body)
       const items = Array.isArray(record?.items)
@@ -25,10 +26,28 @@ export const orderApi = {
         items,
         orders: items.map(toUiOrder).filter((item): item is Order => item !== null),
         total: typeof record?.total === 'number' ? record.total : items.length,
-        page: typeof record?.page === 'number' ? record.page : 1,
-        pageSize: typeof record?.pageSize === 'number' ? record.pageSize : items.length,
+        page: typeof record?.page === 'number' ? record.page : query.page ?? 1,
+        pageSize: typeof record?.pageSize === 'number' ? record.pageSize : query.pageSize ?? items.length,
       }
     })
+  },
+
+  async listAllMine(signal?: AbortSignal) {
+    const pageSize = 100
+    const orders: Order[] = []
+    let page = 1
+    let total = Number.POSITIVE_INFINITY
+    let guard = 0
+    while ((page - 1) * pageSize < total && guard < 50) {
+      const listed = await this.listMine({ page, pageSize }, signal)
+      orders.push(...listed.orders)
+      total = listed.total
+      if (listed.items.length === 0) break
+      if (listed.pageSize > 0 && listed.page >= Math.ceil(total / listed.pageSize)) break
+      page += 1
+      guard += 1
+    }
+    return { orders, total }
   },
 
   create(body: CreateOrderBody) {

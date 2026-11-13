@@ -11,7 +11,7 @@ export function findOrder(
   meal: MealKind,
 ) {
   const matches = orders.filter((item) => item.employeeId === employeeId && item.jy === month.jy && item.jm === month.jm && item.jd === jd && item.meal === meal)
-  return matches.find((item) => item.cycleStatus !== 'CANCELLED') ?? matches[0]
+  return matches.find((item) => item.cycleStatus !== 'CANCELLED')
 }
 
 export function mealChoices(day: DayMenu, meal: MealKind) {
@@ -22,12 +22,18 @@ export function mealDate(day: Pick<DayMenu, 'jy' | 'jm' | 'jd'>): JalaliDate {
   return { jy: day.jy, jm: day.jm, jd: day.jd }
 }
 
-export function isMealOpen(day: DayMenu, meal: MealKind, deadlines: MonthDeadlines, now: JalaliDateTime, deadlineAt?: string | null) {
+export type MealDeadlineState = 'unknown' | 'absent' | { at: string }
+
+export function isEmployeeDeadlineOpen(state: MealDeadlineState, now = new Date()) {
+  if (state === 'unknown' || state === 'absent') return false
+  const at = Date.parse(state.at)
+  if (Number.isNaN(at)) return false
+  return now.getTime() < at
+}
+
+export function isMealOpen(day: DayMenu, meal: MealKind, deadlines: MonthDeadlines, now: JalaliDateTime, deadline?: MealDeadlineState) {
   if (!day[meal]) return false
-  if (deadlineAt) {
-    const at = Date.parse(deadlineAt)
-    return Number.isNaN(at) ? false : Date.now() < at
-  }
+  if (deadline !== undefined) return isEmployeeDeadlineOpen(deadline)
   return isOrderingOpen(mealDate(day), deadlines[meal], now)
 }
 
