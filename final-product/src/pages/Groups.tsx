@@ -63,7 +63,7 @@ function LiveGroupsPage() {
     setMessage('')
     void Promise.all([
       groupApi.list(controller.signal),
-      userApi.listAll({}, controller.signal),
+      userApi.listAll({ role: 'EMPLOYEE', isActive: true }, controller.signal),
     ]).then(async ([listed, listedUsers]) => {
       const nextCounts: Record<string, number> = {}
       await Promise.all(listed.map(async (item) => {
@@ -141,7 +141,7 @@ function LiveGroupsPage() {
   const group = detail && detail.id === openId ? detail : groups.find((item) => item.id === openId) ?? null
   const memberIds = useMemo(() => new Set(members.map((item) => item.userId)), [members])
   const others = useMemo(
-    () => users.filter((item) => item.isActive && !memberIds.has(item.id)),
+    () => users.filter((item) => item.role === 'EMPLOYEE' && item.isActive && !memberIds.has(item.id)),
     [users, memberIds],
   )
 
