@@ -5,6 +5,7 @@ import { addMonths, currentDateTime, JALALI_MONTHS, monthKey, type JalaliDate, t
 import { canGiveFeedback } from './lib/orders'
 import { ADMIN_ACCOUNT_ID, normalizeUsername, passwordIssue, setSessionSecret, usernameIssue, verifySessionSecret } from './lib/credentials'
 import { fa } from './lib/text'
+import type { SessionUser } from './auth/roles'
 import { can, canAccess, LANDING_PAGE } from './permissions'
 import type {
   ActivityItem,
@@ -113,9 +114,21 @@ function uid(prefix: string) {
   return `${prefix}-${Math.random().toString(36).slice(2, 8)}`
 }
 
-export function StoreProvider({ children, onLogout }: { children: ReactNode; onLogout: () => void }) {
+export function StoreProvider({
+  children,
+  session,
+  onLogout,
+}: {
+  children: ReactNode
+  session: SessionUser
+  onLogout: () => Promise<void>
+}) {
   const initial = useMemo(() => createSnapshot(), [])
-  const [role, setRoleState] = useState<Role>('employee')
+  const [role, setRoleState] = useState<Role>(session.role)
+
+  useEffect(() => {
+    setRoleState(session.role)
+  }, [session.id, session.role])
   const [theme, setThemeState] = useState<'light' | 'dark'>(() => (localStorage.getItem('meal-theme') === 'dark' ? 'dark' : 'light'))
   const [page, setPageState] = useState<Page>('overview')
   const [collapsed, setCollapsed] = useState(false)
@@ -158,10 +171,9 @@ export function StoreProvider({ children, onLogout }: { children: ReactNode; onL
   const monthName = JALALI_MONTHS[selectedMonth.jm - 1]
 
   const personaId = PERSONA_ID[role]
-  const persona = employees.find((item) => item.id === personaId) ?? null
-  const personaName = persona ? fullName(persona) : 'مدیر سامانه'
-  const personaUsername = persona?.username ?? 'admin'
-  const buildingName = persona ? buildings.find((item) => item.id === persona.buildingId)?.name ?? '—' : 'بدون ساختمان'
+  const personaName = session.username
+  const personaUsername = session.username
+  const buildingName = session.buildingId ? 'دارای ساختمان سازمانی' : 'بدون ساختمان'
 
   function clockStamp() {
     const hour = String(now.hour).padStart(2, '0')
@@ -180,6 +192,7 @@ export function StoreProvider({ children, onLogout }: { children: ReactNode; onL
   }
 
   function setRole(next: Role) {
+    if (!import.meta.env.DEV) return
     setRoleState(next)
     setPageState((current) => (canAccess(next, current) ? current : LANDING_PAGE))
     setMobileNav(false)
@@ -675,7 +688,9 @@ export function StoreProvider({ children, onLogout }: { children: ReactNode; onL
     previewImpact: impact,
     markNote: (id) => setNotes((list) => list.map((item) => (item.id === id ? { ...item, read: true } : item))),
     markAllNotes: () => setNotes((list) => list.map((item) => (!item.employeeId || item.employeeId === personaId ? { ...item, read: true } : item))),
-    logout: onLogout,
+    logout: () => {
+      void onLogout()
+    },
   }
 
   return <StoreContext.Provider value={value}>{children}</StoreContext.Provider>

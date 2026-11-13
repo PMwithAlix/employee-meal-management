@@ -1,9 +1,12 @@
 import { useState } from 'react'
 import { Eye, EyeOff, Moon, Sun } from 'lucide-react'
+import { useAuth } from '../auth/AuthProvider'
+import { AuthRequestError } from '../auth/errors'
 import { BrandWordmark } from '../components/Brand'
 import { Button, Field, controlClass } from '../components/ui'
 
-export function Login({ onSuccess }: { onSuccess: () => void }) {
+export function Login() {
+  const auth = useAuth()
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
@@ -27,6 +30,7 @@ export function Login({ onSuccess }: { onSuccess: () => void }) {
         className="w-full max-w-sm rounded-2xl border border-line bg-surface px-5 py-6 shadow-card"
         onSubmit={(event) => {
           event.preventDefault()
+          if (busy) return
           if (!username.trim()) {
             setError('نام کاربری را وارد کنید.')
             return
@@ -37,7 +41,12 @@ export function Login({ onSuccess }: { onSuccess: () => void }) {
           }
           setError('')
           setBusy(true)
-          window.setTimeout(onSuccess, 500)
+          void auth
+            .login(username.trim(), password)
+            .catch((failure: unknown) => {
+              setError(failure instanceof AuthRequestError ? failure.message : 'ورود انجام نشد. دوباره تلاش کنید.')
+            })
+            .finally(() => setBusy(false))
         }}
       >
         <div className="mb-6 text-center">
@@ -47,7 +56,7 @@ export function Login({ onSuccess }: { onSuccess: () => void }) {
         </div>
         <div className="space-y-3">
           <Field label="نام کاربری">
-            <input className={controlClass} autoComplete="username" placeholder="نام کاربری انگلیسی" value={username} onChange={(event) => setUsername(event.target.value)} />
+            <input className={controlClass} autoComplete="username" placeholder="نام کاربری انگلیسی" value={username} onChange={(event) => setUsername(event.target.value)} disabled={busy} />
           </Field>
           <Field label="رمز عبور">
             <div className="relative">
@@ -58,6 +67,7 @@ export function Login({ onSuccess }: { onSuccess: () => void }) {
                 placeholder="رمز عبور خود را وارد کنید"
                 value={password}
                 onChange={(event) => setPassword(event.target.value)}
+                disabled={busy}
               />
               <button
                 type="button"
