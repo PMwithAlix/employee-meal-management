@@ -26,6 +26,7 @@ import { GroupsPage } from '../pages/Groups'
 import { ReportsPage } from '../pages/Reports'
 import { ActivityPage } from '../pages/Activity'
 import { SettingsPage } from '../pages/Settings'
+import { BrandIcon, BrandWordmark, BRAND_NAME } from './Brand'
 
 function useIsDesktop() {
   const query = '(min-width: 768px)'
@@ -66,7 +67,7 @@ export function Shell() {
   const iconOnly = app.collapsed && desktop
 
   useEffect(() => {
-    document.title = `${PAGE_TITLES[app.page]} · سامانه غذا`
+    document.title = `${PAGE_TITLES[app.page]} · ${BRAND_NAME}`
   }, [app.page])
 
   useEffect(() => {
@@ -84,12 +85,12 @@ export function Shell() {
           iconOnly && 'md:w-[72px]',
         )}
       >
-        <div className={cn('flex h-14 items-center gap-2 border-b border-line px-3', iconOnly && 'md:justify-center md:px-2')}>
-          <span className="grid h-8 w-8 shrink-0 place-items-center rounded-md bg-primary text-sm font-semibold text-onprimary">غ</span>
-          <span className={cn('min-w-0', iconOnly && 'md:hidden')}>
-            <span className="block truncate text-sm font-semibold leading-5">سامانه غذا</span>
-            <span className="block truncate text-[11px] text-muted">سفارش ماهانه</span>
-          </span>
+        <div className={cn('flex h-14 shrink-0 items-center overflow-hidden border-b border-line', iconOnly ? 'justify-center px-2' : 'px-3')}>
+          {iconOnly ? (
+            <BrandIcon className="h-8 w-8 rounded-md" />
+          ) : (
+            <BrandWordmark className="h-8 max-h-8" />
+          )}
         </div>
         <nav className="flex-1 overflow-auto px-2 py-3" aria-label="بخش‌های برنامه">
           {groups.map((group) => (
@@ -146,6 +147,7 @@ export function Shell() {
           <button className="hidden h-11 w-11 shrink-0 place-items-center rounded-md md:grid" aria-label={app.collapsed ? 'باز کردن نوار کناری' : 'جمع کردن نوار کناری'} title={app.collapsed ? 'باز کردن نوار کناری' : 'جمع کردن نوار کناری'} onClick={() => app.setCollapsed(!app.collapsed)}>
             {app.collapsed ? <PanelRightOpen size={18} /> : <PanelRightClose size={18} />}
           </button>
+          <BrandIcon className="h-8 w-8 shrink-0 rounded-md md:hidden" />
           <div className="min-w-0 flex-1">
             <h1 className="truncate text-sm font-semibold">{PAGE_TITLES[app.page]}</h1>
             <div className="flex items-center gap-1">
