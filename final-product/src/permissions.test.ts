@@ -29,8 +29,10 @@ describe('usesLiveOrganizationData', () => {
 
 describe('management observer access', () => {
   it('can open reports and activity without mutating capabilities', () => {
+    expect(canAccess('management', 'overview')).toBe(true)
     expect(canAccess('management', 'reports')).toBe(true)
     expect(canAccess('management', 'activity')).toBe(true)
+    expect(can('management', 'guest.edit')).toBe(false)
     for (const capability of mutating) {
       expect(can('management', capability)).toBe(false)
     }

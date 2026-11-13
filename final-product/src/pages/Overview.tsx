@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react'
 import { CalendarClock, Moon, Sun, Utensils } from 'lucide-react'
 import { useApp } from '../store'
+import { Button } from '../components/ui'
 import { formatDeadlineFromInstant } from '../lib/deadlines'
 import { classifyEmployeeDeadline, findOrder, isElapsedDeadlineDay, isOpenDeadlineDay, upcomingChosenMeals } from '../lib/orders'
 import { addDays, isSameDate, JALALI_MONTHS, weekdayName, type JalaliDate, type JalaliDateTime } from '../lib/jalali'
@@ -8,6 +9,7 @@ import { fa, cn } from '../lib/text'
 import { useRecentAudit } from '../audit/useRecentAudit'
 import { useGuestMonthCount } from '../guests/useGuestMonthCount'
 import { usePublishedMenu } from '../menus/usePublishedMenu'
+import { combinedActiveCount, managementOpenDaysMetric, metricValue, openDaysMetric } from '../overview/metrics'
 import { useSupportOrderCounts } from '../orders/useSupportOrderCounts'
 import type { MealFilter, StatusFilter } from '../types'
 
@@ -211,13 +213,11 @@ function Bucket({ title, count, sample, onClick }: { title: string; count: numbe
   return <button type="button" className={cn(className, 'hover:bg-elevated')} onClick={onClick}>{body}</button>
 }
 
-function metricValue(status: string, count: number | null) {
-  if (status === 'loading') return '…'
-  if (status === 'ready' && count !== null) return fa(count)
-  return '—'
+function SupportOverview() {
+  return <LiveOpsOverview variant="support" />
 }
 
-function SupportOverview() {
+function LiveOpsOverview({ variant }: { variant: 'support' | 'management' }) {
   const app = useApp()
   const guests = useGuestMonthCount()
   const counts = useSupportOrderCounts()
@@ -226,7 +226,22 @@ function SupportOverview() {
   const openDays = published.status === 'ready' && app.deadlineStatus === 'ready'
     ? published.pickerDays.filter((day) => isOpenDeadlineDay(day, app.mealDeadlineAt))
     : []
-  const openValue = published.status === 'loading' || app.deadlineStatus === 'loading' ? '…' : published.status === 'ready' && app.deadlineStatus === 'ready' ? fa(openDays.length) : '—'
+  const openValue = variant === 'management'
+    ? managementOpenDaysMetric(published.status, app.deadlineStatus, openDays.length)
+    : openDaysMetric(published.status, app.deadlineStatus, openDays.length)
+  const deadlinesLoading = published.status === 'loading' || app.deadlineStatus === 'loading'
+  const deadlinesReady = published.status === 'ready' && app.deadlineStatus === 'ready'
+  const managementDeadlinesEmpty = variant === 'management' && app.deadlineStatus === 'ready' && (published.status === 'empty' || (published.status === 'ready' && openDays.length === 0))
+  const managementDeadlinesError = variant === 'management' && !deadlinesLoading && !deadlinesReady && !managementDeadlinesEmpty
+  const fourth = variant === 'support'
+    ? { label: 'سفارش مهمان', value: metricValue(guests.status, guests.count), hint: 'مورد فعال', icon: Utensils }
+    : { label: 'سفارش‌های فعال', value: metricValue(counts.status, combinedActiveCount(counts.status, counts.lunch, counts.dinner)), hint: 'مجموع ناهار و شام', icon: Utensils }
+  const retry = () => {
+    counts.retry()
+    published.retry()
+    recent.retry()
+  }
+
   return (
     <div className="space-y-4">
       <Stats
@@ -234,33 +249,25 @@ function SupportOverview() {
           { label: 'ناهارهای ثبت‌شده', value: metricValue(counts.status, counts.lunch), hint: 'همه ساختمان‌ها', icon: Sun },
           { label: 'شام‌های ثبت‌شده', value: metricValue(counts.status, counts.dinner), hint: 'جدا از ناهار', icon: Moon },
           { label: 'روزهای باز', value: openValue, hint: 'هنوز مهلت دارند', icon: CalendarClock },
-          { label: 'سفارش مهمان', value: metricValue(guests.status, guests.count), hint: 'مورد فعال', icon: Utensils },
+          fourth,
         ]}
       />
+      {variant === 'management' && (counts.status === 'error' || managementDeadlinesError || recent.status === 'error') && (
+        <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-line bg-surface px-3 py-2">
+          <p className="text-sm text-danger">{counts.message || published.message || recent.message || 'داده‌های نمای کلی از سامانه خوانده نشد.'}</p>
+          <Button variant="secondary" onClick={retry}>تلاش دوباره</Button>
+        </div>
+      )}
       <div className="grid gap-4 lg:grid-cols-2">
-        <Panel title="مهلت‌های پیش رو" action={<button className="min-h-11 px-2 text-xs text-link" onClick={() => app.setPage('menuMgmt')}>مدیریت منو</button>}>
-          {published.status === 'loading' || app.deadlineStatus === 'loading' ? <p className="text-sm text-muted">در حال خواندن مهلت‌ها…</p> : published.status !== 'ready' || app.deadlineStatus !== 'ready' ? <p className="text-sm text-danger">مهلت‌ها از سامانه خوانده نشد.</p> : openDays.length === 0 ? <p className="text-sm text-muted">روز بازی با مهلت ذخیره‌شده نیست.</p> : (
-            <ul className="space-y-2 text-sm">
-              {openDays.slice(0, 4).map((day) => {
-                const lunch = classifyEmployeeDeadline(app.mealDeadlineAt(day, 'lunch'))
-                const dinner = classifyEmployeeDeadline(app.mealDeadlineAt(day, 'dinner'))
-                const lunchState = app.mealDeadlineAt(day, 'lunch')
-                const dinnerState = app.mealDeadlineAt(day, 'dinner')
-                return (
-                  <li key={day.jd} className="flex flex-col gap-1 sm:flex-row sm:justify-between sm:gap-3">
-                    <span className="min-w-0">{fa(day.jd)} {JALALI_MONTHS[day.jm - 1]}، {day.weekday}</span>
-                    <span className="break-words text-muted">
-                      {day.lunch && lunch === 'open' && typeof lunchState === 'object' ? `ناهار ${formatDeadlineFromInstant(lunchState.at, day.gregorianDate) ?? 'مهلت باز'}` : ''}
-                      {day.lunch && lunch === 'open' && day.dinner && dinner === 'open' ? ' · ' : ''}
-                      {day.dinner && dinner === 'open' && typeof dinnerState === 'object' ? `شام ${formatDeadlineFromInstant(dinnerState.at, day.gregorianDate) ?? 'مهلت باز'}` : ''}
-                    </span>
-                  </li>
-                )
-              })}
-            </ul>
-          )}
+        <Panel title="مهلت‌های پیش رو" action={variant === 'support'
+          ? <button className="min-h-11 px-2 text-xs text-link" onClick={() => app.setPage('menuMgmt')}>مدیریت منو</button>
+          : <button className="min-h-11 px-2 text-xs text-link" onClick={() => app.setPage('reports')}>گزارش‌ها</button>}
+        >
+          {deadlinesLoading ? <p className="text-sm text-muted">در حال خواندن مهلت‌ها…</p> : variant === 'support' ? (
+            published.status !== 'ready' || app.deadlineStatus !== 'ready' ? <p className="text-sm text-danger">مهلت‌ها از سامانه خوانده نشد.</p> : openDays.length === 0 ? <p className="text-sm text-muted">روز بازی با مهلت ذخیره‌شده نیست.</p> : <UpcomingDeadlines days={openDays} />
+          ) : managementDeadlinesError ? <p className="text-sm text-danger">{published.message || app.deadlineMessage || 'مهلت‌ها از سامانه خوانده نشد.'}</p> : managementDeadlinesEmpty ? <p className="text-sm text-muted">روز بازی با مهلت ذخیره‌شده نیست.</p> : <UpcomingDeadlines days={openDays} />}
         </Panel>
-        <Panel title="فعالیت عملیاتی اخیر" action={<button className="min-h-11 px-2 text-xs text-link" onClick={() => app.setPage('activity')}>تاریخچه</button>}>
+        <Panel title={variant === 'support' ? 'فعالیت عملیاتی اخیر' : 'فعالیت اخیر'} action={<button className="min-h-11 px-2 text-xs text-link" onClick={() => app.setPage('activity')}>{variant === 'support' ? 'تاریخچه' : 'تاریخچه کامل'}</button>}>
           {recent.status === 'loading' ? <p className="text-sm text-muted">در حال خواندن تاریخچه…</p> : recent.status !== 'ready' ? <p className="text-sm text-danger">{recent.message || 'تاریخچه خوانده نشد.'}</p> : recent.items.length === 0 ? <p className="text-sm text-muted">رویدادی ثبت نشده است.</p> : (
             <ul className="divide-y divide-line text-sm">
               {recent.items.map((item) => (
@@ -274,6 +281,30 @@ function SupportOverview() {
         </Panel>
       </div>
     </div>
+  )
+}
+
+function UpcomingDeadlines({ days }: { days: ReturnType<typeof usePublishedMenu>['pickerDays'] }) {
+  const app = useApp()
+  return (
+    <ul className="space-y-2 text-sm">
+      {days.slice(0, 4).map((day) => {
+        const lunch = classifyEmployeeDeadline(app.mealDeadlineAt(day, 'lunch'))
+        const dinner = classifyEmployeeDeadline(app.mealDeadlineAt(day, 'dinner'))
+        const lunchState = app.mealDeadlineAt(day, 'lunch')
+        const dinnerState = app.mealDeadlineAt(day, 'dinner')
+        return (
+          <li key={day.jd} className="flex flex-col gap-1 sm:flex-row sm:justify-between sm:gap-3">
+            <span className="min-w-0">{fa(day.jd)} {JALALI_MONTHS[day.jm - 1]}، {day.weekday}</span>
+            <span className="break-words text-muted">
+              {day.lunch && lunch === 'open' && typeof lunchState === 'object' ? `ناهار ${formatDeadlineFromInstant(lunchState.at, day.gregorianDate) ?? 'مهلت باز'}` : ''}
+              {day.lunch && lunch === 'open' && day.dinner && dinner === 'open' ? ' · ' : ''}
+              {day.dinner && dinner === 'open' && typeof dinnerState === 'object' ? `شام ${formatDeadlineFromInstant(dinnerState.at, day.gregorianDate) ?? 'مهلت باز'}` : ''}
+            </span>
+          </li>
+        )
+      })}
+    </ul>
   )
 }
 
@@ -323,40 +354,10 @@ function HrOverview() {
 }
 
 function ManagementOverview() {
-  const app = useApp()
-  const inMonth = (order: { jy: number; jm: number }) => order.jy === app.selectedMonth.jy && order.jm === app.selectedMonth.jm
-  const lunch = app.orders.filter((order) => inMonth(order) && order.meal === 'lunch' && order.choice).length
-  const dinner = app.orders.filter((order) => inMonth(order) && order.meal === 'dinner' && order.choice).length
   return (
     <div className="space-y-4">
       <p className="rounded-md border border-line bg-surface px-3 py-2 text-sm text-muted">دسترسی مدیریت فقط مشاهده است. ایجاد، ویرایش و حذف در این نقش وجود ندارد.</p>
-      <Stats
-        items={[
-          { label: 'ناهارهای ثبت‌شده', value: fa(lunch), hint: app.monthTitle, icon: Sun },
-          { label: 'شام‌های ثبت‌شده', value: fa(dinner), hint: 'جدا از ناهار', icon: Moon },
-          { label: 'ساختمان‌ها', value: fa(app.buildings.length), hint: 'خلاصه عملیاتی', icon: CalendarClock },
-          { label: 'رویدادهای اخیر', value: fa(Math.min(app.activity.length, 6)), hint: 'در تاریخچه', icon: Utensils },
-        ]}
-      />
-      <div className="grid gap-4 lg:grid-cols-2">
-        <Panel title="خلاصه ساختمان‌ها" action={<button className="min-h-11 px-2 text-xs text-link" onClick={() => app.setPage('reports')}>گزارش‌ها</button>}>
-          <ul className="divide-y divide-line text-sm">
-            {app.buildings.map((building) => {
-              const people = app.employees.filter((employee) => employee.buildingId === building.id)
-              const lunchCount = app.orders.filter((order) => inMonth(order) && order.meal === 'lunch' && order.choice && people.some((employee) => employee.id === order.employeeId)).length
-              return (
-                <li key={building.id} className="flex items-center justify-between py-2">
-                  <span>{building.name}</span>
-                  <span className="text-muted">{fa(people.filter((employee) => employee.active).length)} کارمند · {fa(lunchCount)} ناهار</span>
-                </li>
-              )
-            })}
-          </ul>
-        </Panel>
-        <Panel title="فعالیت اخیر" action={<button className="min-h-11 px-2 text-xs text-link" onClick={() => app.setPage('activity')}>تاریخچه کامل</button>}>
-          <ActivityList />
-        </Panel>
-      </div>
+      <LiveOpsOverview variant="management" />
     </div>
   )
 }
@@ -394,16 +395,3 @@ function AdminOverview() {
   )
 }
 
-function ActivityList() {
-  const app = useApp()
-  return (
-    <ul className="divide-y divide-line text-sm">
-      {app.activity.slice(0, 5).map((item) => (
-        <li key={item.id} className="py-2">
-          <p>{item.actor} · {item.action}</p>
-          <p className="text-xs text-muted">{item.target} · {item.at}</p>
-        </li>
-      ))}
-    </ul>
-  )
-}

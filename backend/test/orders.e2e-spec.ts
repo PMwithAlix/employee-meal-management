@@ -1042,6 +1042,42 @@ describe('Orders (e2e)', () => {
       ).status,
     ).toBe(200);
 
+    const overviewLunch = await request(app.getHttpServer())
+      .get('/api/v1/orders')
+      .query({
+        from: mealDate(1),
+        to: mealDate(2),
+        mealType: MealType.LUNCH,
+        status: 'ACTIVE',
+        page: 1,
+        pageSize: 1,
+      })
+      .set('Cookie', managementCookie);
+    expect(overviewLunch.status).toBe(200);
+    expect(Number.isInteger(overviewLunch.body.total)).toBe(true);
+    expect(overviewLunch.body.pageSize).toBe(1);
+    expect(overviewLunch.body.items.length).toBeLessThanOrEqual(1);
+    expect(overviewLunch.body.total).toBeGreaterThanOrEqual(
+      overviewLunch.body.items.length,
+    );
+
+    const publishedMenu = await request(app.getHttpServer())
+      .get(`/api/v1/published-menus/${YEAR}/${MONTH}`)
+      .set('Cookie', managementCookie);
+    expect(publishedMenu.status).toBe(200);
+    const deadlines = await request(app.getHttpServer())
+      .get(`/api/v1/order-deadlines/${YEAR}/${MONTH}`)
+      .set('Cookie', managementCookie);
+    expect(deadlines.status).toBe(200);
+    expect(Array.isArray(deadlines.body)).toBe(true);
+    expect(
+      (
+        await request(app.getHttpServer())
+          .get('/api/v1/guest-orders')
+          .set('Cookie', managementCookie)
+      ).status,
+    ).toBe(403);
+
     expect(
       (
         await request(app.getHttpServer())

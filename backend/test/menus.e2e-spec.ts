@@ -257,6 +257,13 @@ describe('Menus (e2e)', () => {
     expect(published.status).toBe(200);
     publishedId = published.body.id as string;
     expect(published.body.status).toBe('PUBLISHED');
+    expect(
+      (
+        await request(app.getHttpServer())
+          .get('/api/v1/published-menus/1411/1')
+          .set('Cookie', managementCookie)
+      ).status,
+    ).toBe(200);
 
     expect(
       (
