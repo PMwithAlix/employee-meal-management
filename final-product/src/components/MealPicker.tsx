@@ -31,16 +31,24 @@ export function MealPicker({
   const [failed, setFailed] = useState(false)
   const mealLabel = kind === 'lunch' ? 'ناهار' : 'شام'
 
+  function cardRect() {
+    if (!trigger) return null
+    const card = trigger.tagName === 'BUTTON' ? trigger : (trigger.querySelector('button') ?? trigger)
+    return card.getBoundingClientRect()
+  }
+
   function place() {
-    if (!trigger) return
-    const rect = trigger.getBoundingClientRect()
+    const rect = cardRect()
+    if (!rect) return
     const vw = window.innerWidth
     const vh = window.innerHeight
+    const gutter = 8
     const mobile = vw < 768
-    const width = mobile ? Math.min(vw - 16, Math.max(rect.width, vw - 16)) : Math.min(280, Math.max(rect.width, 200))
-    let left = mobile ? 8 : rect.left
-    if (left + width > vw - 8) left = Math.max(8, vw - 8 - width)
-    if (left < 8) left = 8
+    const width = mobile ? Math.min(rect.width, vw - gutter * 2) : Math.min(280, Math.max(rect.width, 200))
+    const rtl = document.documentElement.dir === 'rtl'
+    let left = mobile && rtl ? rect.right - width : rect.left
+    if (left + width > vw - gutter) left = vw - gutter - width
+    if (left < gutter) left = gutter
     const spaceBelow = Math.max(80, vh - rect.bottom - 8)
     const spaceAbove = Math.max(80, rect.top - 8)
     const placeAbove = spaceBelow < 168 && spaceAbove > spaceBelow
