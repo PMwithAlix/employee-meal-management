@@ -111,7 +111,7 @@ function LiveReportsPage() {
     const controller = new AbortController()
     void Promise.all([
       buildingApi.list(controller.signal),
-      userApi.listAll({ role: 'EMPLOYEE' }, controller.signal),
+      userApi.listAll({ role: 'EMPLOYEE', isActive: true }, controller.signal),
       groupApi.list(controller.signal),
     ]).then(([listedBuildings, listedUsers, listedGroups]) => {
       if (controller.signal.aborted) return
