@@ -26,9 +26,9 @@ export const orderApi = {
       return {
         items,
         orders: items.map(toUiOrder).filter((item): item is Order => item !== null),
-        total: typeof record?.total === 'number' ? record.total : items.length,
-        page: typeof record?.page === 'number' ? record.page : query.page ?? 1,
-        pageSize: typeof record?.pageSize === 'number' ? record.pageSize : query.pageSize ?? items.length,
+        total: typeof record?.total === 'number' ? record.total : Number.NaN,
+        page: typeof record?.page === 'number' ? record.page : Number.NaN,
+        pageSize: typeof record?.pageSize === 'number' ? record.pageSize : Number.NaN,
       }
     })
   },
@@ -40,27 +40,27 @@ export const orderApi = {
     const orders: Order[] = []
     let received = 0
     let page = 1
-    let total = 0
+    let total: number | null = null
     for (;;) {
       if (page > maxPages) throw incomplete()
       const listed = await this.listMine({ page, pageSize }, signal)
-      if (!Number.isFinite(listed.total) || listed.total < 0) throw incomplete()
-      total = listed.total
-      const size = listed.pageSize > 0 ? listed.pageSize : pageSize
-      const lastPage = total === 0 ? 1 : Math.ceil(total / size)
+      if (!Number.isInteger(listed.total) || listed.total < 0) throw incomplete()
+      if (listed.page !== page || listed.pageSize !== pageSize) throw incomplete()
+      if (listed.items.length > pageSize) throw incomplete()
+      if (total === null) total = listed.total
+      else if (listed.total !== total) throw incomplete()
       if (listed.items.length === 0) {
-        if (received < total) throw incomplete()
+        if (received !== total) throw incomplete()
         break
       }
       received += listed.items.length
+      if (received > total) throw incomplete()
       orders.push(...listed.orders)
-      if (page >= lastPage) {
-        if (received < total) throw incomplete()
-        break
-      }
+      const lastPage = total === 0 ? 1 : Math.ceil(total / pageSize)
+      if (page >= lastPage) break
       page += 1
     }
-    if (received < total) throw incomplete()
+    if (total === null || received !== total) throw incomplete()
     return { orders, total }
   },
 

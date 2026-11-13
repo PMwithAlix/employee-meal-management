@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { deadlineKey, isDeadlineOpen, parseBackendOrder, toUiOrder } from './map'
+import { deadlineKey, isDeadlineOpen, parseBackendOrder, parseDeadline, toUiOrder } from './map'
 
 const payload = {
   id: 'order-1',
@@ -51,8 +51,24 @@ describe('parseBackendOrder', () => {
 
 describe('deadlines', () => {
   it('builds a mealDate+type key and compares ISO deadlines', () => {
+    const now = new Date('2026-01-01T00:00:00.000Z')
     expect(deadlineKey('2026-10-23', 'lunch')).toBe('2026-10-23:LUNCH')
-    expect(isDeadlineOpen('2099-01-01T00:00:00.000Z', new Date('2026-01-01T00:00:00.000Z'))).toBe(true)
-    expect(isDeadlineOpen('2020-01-01T00:00:00.000Z', new Date('2026-01-01T00:00:00.000Z'))).toBe(false)
+    expect(isDeadlineOpen('2099-01-01T00:00:00.000Z', now)).toBe(true)
+    expect(isDeadlineOpen('2020-01-01T00:00:00.000Z', now)).toBe(false)
+    expect(isDeadlineOpen('2026-01-01T00:00:00.000Z', now)).toBe(false)
+    expect(isDeadlineOpen('not-a-date', now)).toBe(false)
+  })
+
+  it('drops backend deadlines whose timestamp cannot be parsed', () => {
+    const row = {
+      id: 'dl-1',
+      mealDate: '2026-10-23',
+      jalaliDate: '1405-08-01',
+      mealType: 'LUNCH',
+      deadlineAt: 'not-a-date',
+      createdBy: 'user-1',
+    }
+    expect(parseDeadline(row)).toBeNull()
+    expect(parseDeadline({ ...row, deadlineAt: '2026-10-23T06:30:00.000Z' })?.deadlineAt).toBe('2026-10-23T06:30:00.000Z')
   })
 })

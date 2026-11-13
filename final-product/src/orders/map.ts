@@ -90,7 +90,7 @@ export function parseDeadline(value: unknown): BackendDeadline | null {
   const body = asRecord(value)
   if (!body || typeof body.id !== 'string' || typeof body.mealDate !== 'string') return null
   if (body.mealType !== 'LUNCH' && body.mealType !== 'DINNER') return null
-  if (typeof body.deadlineAt !== 'string') return null
+  if (typeof body.deadlineAt !== 'string' || Number.isNaN(Date.parse(body.deadlineAt))) return null
   return {
     id: body.id,
     mealDate: body.mealDate,

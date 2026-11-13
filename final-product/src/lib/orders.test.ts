@@ -24,6 +24,14 @@ describe('isEmployeeDeadlineOpen', () => {
     expect(isEmployeeDeadlineOpen({ at }, new Date(at))).toBe(false)
     expect(isEmployeeDeadlineOpen({ at }, new Date('2026-08-22T06:29:59.999Z'))).toBe(true)
   })
+
+  it('does not treat an unparseable deadline as elapsed or as a local fallback', () => {
+    const now = new Date('2026-08-22T06:30:00.000Z')
+    expect(classifyEmployeeDeadline({ at: 'not-a-date' }, now)).toBe('unknown')
+    expect(classifyEmployeeDeadline({ at: '' }, now)).toBe('unknown')
+    expect(isEmployeeDeadlineOpen({ at: 'not-a-date' }, now)).toBe(false)
+    expect(isMealOpen(day, 'lunch', defaultMonthDeadlines(), currentDateTime(), { at: 'not-a-date' })).toBe(false)
+  })
 })
 
 describe('isMealOpen', () => {
@@ -70,6 +78,10 @@ describe('isElapsedDeadlineDay', () => {
     expect(isOpenDeadlineDay(day, () => 'unknown')).toBe(false)
     expect(classifyEmployeeDeadline('unknown')).toBe('unknown')
     expect(classifyEmployeeDeadline('absent')).toBe('absent')
+    const now = new Date('2026-08-22T06:30:00.000Z')
+    expect(classifyEmployeeDeadline({ at: '2026-08-22T07:00:00.000Z' }, now)).toBe('open')
+    expect(classifyEmployeeDeadline({ at: '2026-08-22T06:00:00.000Z' }, now)).toBe('elapsed')
+    expect(classifyEmployeeDeadline({ at: '2026-08-22T06:30:00.000Z' }, now)).toBe('elapsed')
   })
 })
 

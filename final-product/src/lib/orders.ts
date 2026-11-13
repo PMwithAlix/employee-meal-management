@@ -48,7 +48,7 @@ export function classifyEmployeeDeadline(state: MealDeadlineState, now = new Dat
   if (state === 'unknown') return 'unknown'
   if (state === 'absent') return 'absent'
   const at = Date.parse(state.at)
-  if (Number.isNaN(at)) return 'elapsed'
+  if (Number.isNaN(at)) return 'unknown'
   return now.getTime() < at ? 'open' : 'elapsed'
 }
 

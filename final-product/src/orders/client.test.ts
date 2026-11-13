@@ -83,35 +83,11 @@ describe('orderApi', () => {
   })
 
   it('rejects a truncated personal-order listing when more than 50 pages remain', async () => {
-    const fetchMock = vi.fn(async () => new Response(JSON.stringify({
-      items: [{
-        id: 'order-keep',
-        userId: 'user-1',
-        mealDate: '2026-11-14',
-        mealType: 'LUNCH',
-        quantity: 1,
-        status: 'ACTIVE',
-        currentCycle: {
-          id: 'c-keep',
-          cycleNumber: 1,
-          menuItemId: 'item-1',
-          menuVersionId: 'v1',
-          optionTitle: 'عدسی',
-          usernameSnapshot: 'emp',
-          buildingIdSnapshot: null,
-          buildingNameSnapshot: null,
-          mealDateSnapshot: '2026-11-14',
-          mealTypeSnapshot: 'LUNCH',
-          status: 'ACTIVE',
-          createdAt: '2026-11-14T00:00:00.000Z',
-          groups: [],
-        },
-        rating: null,
-      }],
-      total: 5001,
-      page: 1,
-      pageSize: 100,
-    }), { status: 200 }))
+    const fetchMock = vi.fn(async (url: string) => {
+      const page = Number(new URL(url, 'http://local.test').searchParams.get('page'))
+      const items = Array.from({ length: 100 }, (_, index) => backendOrder(`order-${(page - 1) * 100 + index}`))
+      return jsonPage(page, 5001, items)
+    })
     vi.stubGlobal('fetch', fetchMock)
     await expect(orderApi.listAllMine()).rejects.toMatchObject({
       kind: 'http',
@@ -149,7 +125,10 @@ describe('orderApi', () => {
       return jsonPage(page, 150, [])
     })
     vi.stubGlobal('fetch', fetchMock)
-    await expect(orderApi.listAllMine()).rejects.toBeInstanceOf(AuthRequestError)
+    await expect(orderApi.listAllMine()).rejects.toMatchObject({
+      kind: 'http',
+      message: 'بارگذاری همه سفارش‌ها کامل نشد.',
+    } satisfies Partial<AuthRequestError>)
   })
 
   it('accepts an empty first page when total is zero', async () => {
@@ -167,6 +146,34 @@ describe('orderApi', () => {
       kind: 'http',
       message: 'بارگذاری همه سفارش‌ها کامل نشد.',
     })
+  })
+
+  it('rejects when collected records exceed total', async () => {
+    const fetchMock = vi.fn(async () => jsonPage(1, 1, [backendOrder('a'), backendOrder('b')]))
+    vi.stubGlobal('fetch', fetchMock)
+    await expect(orderApi.listAllMine()).rejects.toMatchObject({
+      kind: 'http',
+      message: 'بارگذاری همه سفارش‌ها کامل نشد.',
+    })
+  })
+
+  it('rejects when the response page does not match the request', async () => {
+    const fetchMock = vi.fn(async () => jsonPage(2, 1, [backendOrder('a')]))
+    vi.stubGlobal('fetch', fetchMock)
+    await expect(orderApi.listAllMine()).rejects.toMatchObject({ kind: 'http' })
+  })
+
+  it('rejects when the response pageSize does not match the request', async () => {
+    const fetchMock = vi.fn(async () => jsonPage(1, 1, [backendOrder('a')], 50))
+    vi.stubGlobal('fetch', fetchMock)
+    await expect(orderApi.listAllMine()).rejects.toMatchObject({ kind: 'http' })
+  })
+
+  it('rejects when a page contains more items than pageSize', async () => {
+    const items = Array.from({ length: 101 }, (_, index) => backendOrder(`overflow-${index}`))
+    const fetchMock = vi.fn(async () => jsonPage(1, 101, items, 100))
+    vi.stubGlobal('fetch', fetchMock)
+    await expect(orderApi.listAllMine()).rejects.toMatchObject({ kind: 'http' })
   })
 
   it('lists personal orders with credentials and without seed fallback', async () => {
