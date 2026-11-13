@@ -33,6 +33,10 @@ export function canAccess(role: Role, page: Page) {
   return PAGE_ACCESS[role].includes(page)
 }
 
+export function usesLiveOrganizationData(role: Role) {
+  return role === 'support' || role === 'admin' || role === 'management'
+}
+
 export function can(role: Role, capability: Capability) {
   return ROLE_CAPABILITIES[role].includes(capability)
 }

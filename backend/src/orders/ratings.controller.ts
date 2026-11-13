@@ -27,6 +27,7 @@ export class RatingsController {
   constructor(private readonly ratings: RatingsService) {}
 
   @Put('orders/me/:id/rating')
+  @Roles(Role.EMPLOYEE, Role.HR, Role.SUPPORT, Role.ADMIN)
   @ApiOperation({ summary: 'ثبت یا ویرایش نظرسنجی سفارش خود' })
   upsertMine(
     @CurrentUser() actor: AuthUser,

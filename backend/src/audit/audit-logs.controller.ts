@@ -11,7 +11,7 @@ import { ListAuditLogsQueryDto } from './dto/list-audit-logs.query';
 @ApiCookieAuth()
 @Controller('audit-logs')
 @UseGuards(AuthGuard, RolesGuard)
-@Roles(Role.ADMIN, Role.SUPPORT)
+@Roles(Role.ADMIN, Role.SUPPORT, Role.MANAGEMENT)
 export class AuditLogsController {
   constructor(private readonly audit: AuditService) {}
 

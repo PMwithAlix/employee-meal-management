@@ -53,6 +53,7 @@ describe('Organization (e2e)', () => {
   let hrCookie = '';
   let employeeCookie = '';
   let supportCookie = '';
+  let managementCookie = '';
   let buildingId = '';
   let otherBuildingId = '';
   let employeeId = '';
@@ -124,21 +125,26 @@ describe('Organization (e2e)', () => {
     hrCookie = cookieHeader(await login('e2e.org.hr'));
     employeeCookie = cookieHeader(await login('e2e.org.employee'));
     supportCookie = cookieHeader(await login('e2e.org.support'));
-    const managementCookie = cookieHeader(await login('e2e.org.management'));
-    for (const cookie of [employeeCookie, managementCookie]) {
-      expect(
-        (
-          await request(app.getHttpServer())
-            .get('/api/v1/users')
-            .set('Cookie', cookie)
-        ).status,
-      ).toBe(403);
-    }
+    managementCookie = cookieHeader(await login('e2e.org.management'));
+    expect(
+      (
+        await request(app.getHttpServer())
+          .get('/api/v1/users')
+          .set('Cookie', employeeCookie)
+      ).status,
+    ).toBe(403);
     expect(
       (
         await request(app.getHttpServer())
           .get('/api/v1/users')
           .set('Cookie', supportCookie)
+      ).status,
+    ).toBe(200);
+    expect(
+      (
+        await request(app.getHttpServer())
+          .get('/api/v1/users')
+          .set('Cookie', managementCookie)
       ).status,
     ).toBe(200);
     expect(
@@ -501,7 +507,7 @@ describe('Organization (e2e)', () => {
     ).toBe(true);
   });
 
-  it('lets support and admin read audit logs without secrets or employee access', async () => {
+  it('lets support, admin and management read audit logs without secrets or employee access', async () => {
     const listed = await request(app.getHttpServer())
       .get('/api/v1/audit-logs')
       .query({ page: 1, pageSize: 20 })
@@ -527,5 +533,128 @@ describe('Organization (e2e)', () => {
           .set('Cookie', adminCookie)
       ).status,
     ).toBe(200);
+    const managementListed = await request(app.getHttpServer())
+      .get('/api/v1/audit-logs')
+      .query({ page: 1, pageSize: 5 })
+      .set('Cookie', managementCookie);
+    expect(managementListed.status).toBe(200);
+    expect(Number.isInteger(managementListed.body.total)).toBe(true);
+    expect(managementListed.body.pageSize).toBe(5);
+    expect(managementListed.body.items.length).toBeLessThanOrEqual(5);
+    expect(managementListed.body.total).toBeGreaterThanOrEqual(
+      managementListed.body.items.length,
+    );
+    const managementSerialized = JSON.stringify(managementListed.body);
+    expect(managementSerialized).not.toMatch(/passwordHash/i);
+    expect(managementSerialized).not.toMatch(/"password"/i);
+    if (managementListed.body.total > 5) {
+      const page2 = await request(app.getHttpServer())
+        .get('/api/v1/audit-logs')
+        .query({ page: 2, pageSize: 5 })
+        .set('Cookie', managementCookie);
+      expect(page2.status).toBe(200);
+      expect(page2.body.page).toBe(2);
+      expect(page2.body.total).toBe(managementListed.body.total);
+    }
+    const filtered = await request(app.getHttpServer())
+      .get('/api/v1/audit-logs')
+      .query({ action: 'USER_CREATED', page: 1, pageSize: 20 })
+      .set('Cookie', managementCookie);
+    expect(filtered.status).toBe(200);
+    expect(
+      (filtered.body.items as Array<{ action: string }>).every(
+        (row) => row.action === 'USER_CREATED',
+      ),
+    ).toBe(true);
+  });
+
+  it('lets management read directory and groups but rejects every mutating org action', async () => {
+    const users = await request(app.getHttpServer())
+      .get('/api/v1/users')
+      .set('Cookie', managementCookie);
+    expect(users.status).toBe(200);
+    expect(Number.isInteger(users.body.total)).toBe(true);
+    expect(JSON.stringify(users.body)).not.toMatch(/passwordHash/i);
+    expect(
+      (
+        await request(app.getHttpServer())
+          .get('/api/v1/groups')
+          .set('Cookie', managementCookie)
+      ).status,
+    ).toBe(200);
+    expect(
+      (
+        await request(app.getHttpServer())
+          .get(`/api/v1/groups/${groupId}/members`)
+          .set('Cookie', managementCookie)
+      ).status,
+    ).toBe(200);
+    expect(
+      (
+        await request(app.getHttpServer())
+          .get('/api/v1/buildings')
+          .set('Cookie', managementCookie)
+      ).status,
+    ).toBe(200);
+    expect(
+      (
+        await request(app.getHttpServer())
+          .post('/api/v1/users')
+          .set('Cookie', managementCookie)
+          .send({
+            username: 'e2e.org.mgmt.blocked',
+            password,
+            role: Role.EMPLOYEE,
+            buildingId,
+          })
+      ).status,
+    ).toBe(403);
+    expect(
+      (
+        await request(app.getHttpServer())
+          .patch(`/api/v1/users/${employeeId}`)
+          .set('Cookie', managementCookie)
+          .send({ role: Role.ADMIN })
+      ).status,
+    ).toBe(403);
+    expect(
+      (
+        await request(app.getHttpServer())
+          .post(`/api/v1/users/${employeeId}/deactivate`)
+          .set('Cookie', managementCookie)
+      ).status,
+    ).toBe(403);
+    expect(
+      (
+        await request(app.getHttpServer())
+          .post('/api/v1/buildings')
+          .set('Cookie', managementCookie)
+          .send({ name: 'e2e-org-mgmt-blocked' })
+      ).status,
+    ).toBe(403);
+    expect(
+      (
+        await request(app.getHttpServer())
+          .patch(`/api/v1/buildings/${buildingId}`)
+          .set('Cookie', managementCookie)
+          .send({ name: 'e2e-org-mgmt-rename' })
+      ).status,
+    ).toBe(403);
+    expect(
+      (
+        await request(app.getHttpServer())
+          .post('/api/v1/groups')
+          .set('Cookie', managementCookie)
+          .send({ name: 'گروه آزمایشی مدیریت' })
+      ).status,
+    ).toBe(403);
+    expect(
+      (
+        await request(app.getHttpServer())
+          .post(`/api/v1/groups/${groupId}/members`)
+          .set('Cookie', managementCookie)
+          .send({ userId: employeeId })
+      ).status,
+    ).toBe(403);
   });
 });

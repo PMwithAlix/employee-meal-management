@@ -34,14 +34,14 @@ export class BuildingsController {
   }
 
   @Get()
-  @Roles(Role.ADMIN, Role.HR, Role.SUPPORT)
+  @Roles(Role.ADMIN, Role.HR, Role.SUPPORT, Role.MANAGEMENT)
   @ApiOperation({ summary: 'فهرست ساختمان‌ها' })
   list() {
     return this.buildings.list();
   }
 
   @Get(':id')
-  @Roles(Role.ADMIN, Role.HR, Role.SUPPORT)
+  @Roles(Role.ADMIN, Role.HR, Role.SUPPORT, Role.MANAGEMENT)
   @ApiOperation({ summary: 'جزئیات ساختمان' })
   get(@Param('id', ParseUUIDPipe) id: string) {
     return this.buildings.get(id);

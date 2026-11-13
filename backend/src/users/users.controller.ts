@@ -39,14 +39,14 @@ export class UsersController {
   }
 
   @Get()
-  @Roles(Role.ADMIN, Role.HR, Role.SUPPORT)
+  @Roles(Role.ADMIN, Role.HR, Role.SUPPORT, Role.MANAGEMENT)
   @ApiOperation({ summary: 'فهرست و جست‌وجوی کاربران' })
   list(@Query() query: ListUsersQueryDto) {
     return this.users.list(query);
   }
 
   @Get(':id')
-  @Roles(Role.ADMIN, Role.HR, Role.SUPPORT)
+  @Roles(Role.ADMIN, Role.HR, Role.SUPPORT, Role.MANAGEMENT)
   @ApiOperation({ summary: 'جزئیات کاربر' })
   get(@Param('id', ParseUUIDPipe) id: string) {
     return this.users.get(id);

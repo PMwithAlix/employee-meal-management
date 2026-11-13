@@ -38,14 +38,14 @@ export class GroupsController {
   }
 
   @Get()
-  @Roles(Role.ADMIN, Role.HR, Role.SUPPORT)
+  @Roles(Role.ADMIN, Role.HR, Role.SUPPORT, Role.MANAGEMENT)
   @ApiOperation({ summary: 'فهرست گروه‌ها' })
   list() {
     return this.groups.list();
   }
 
   @Get(':id')
-  @Roles(Role.ADMIN, Role.HR, Role.SUPPORT)
+  @Roles(Role.ADMIN, Role.HR, Role.SUPPORT, Role.MANAGEMENT)
   @ApiOperation({ summary: 'جزئیات گروه' })
   get(@Param('id', ParseUUIDPipe) id: string) {
     return this.groups.get(id);
@@ -74,7 +74,7 @@ export class GroupsController {
   }
 
   @Get(':id/members')
-  @Roles(Role.ADMIN, Role.HR, Role.SUPPORT)
+  @Roles(Role.ADMIN, Role.HR, Role.SUPPORT, Role.MANAGEMENT)
   @ApiOperation({ summary: 'اعضای فعال گروه' })
   members(@Param('id', ParseUUIDPipe) id: string) {
     return this.groups.members(id);
@@ -103,7 +103,7 @@ export class GroupsController {
   }
 
   @Get(':id/memberships/history')
-  @Roles(Role.ADMIN, Role.HR, Role.SUPPORT)
+  @Roles(Role.ADMIN, Role.HR, Role.SUPPORT, Role.MANAGEMENT)
   @ApiOperation({ summary: 'تاریخچه عضویت‌های گروه' })
   history(@Param('id', ParseUUIDPipe) id: string) {
     return this.groups.history(id);

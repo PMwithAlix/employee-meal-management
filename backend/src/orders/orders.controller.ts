@@ -31,6 +31,7 @@ export class OrdersController {
   constructor(private readonly orders: OrdersService) {}
 
   @Post()
+  @Roles(Role.EMPLOYEE, Role.HR, Role.SUPPORT, Role.ADMIN)
   @ApiOperation({ summary: 'ثبت سفارش کارمند (خود یا توسط SUPPORT/ADMIN)' })
   create(@CurrentUser() actor: AuthUser, @Body() dto: CreateOrderDto) {
     return this.orders.create(actor, dto);
@@ -52,6 +53,7 @@ export class OrdersController {
   }
 
   @Patch('me/:id')
+  @Roles(Role.EMPLOYEE, Role.HR, Role.SUPPORT, Role.ADMIN)
   @ApiOperation({ summary: 'تغییر گزینه سفارش خود قبل از مهلت' })
   updateMine(
     @CurrentUser() actor: AuthUser,
@@ -62,6 +64,7 @@ export class OrdersController {
   }
 
   @Post('me/:id/cancel')
+  @Roles(Role.EMPLOYEE, Role.HR, Role.SUPPORT, Role.ADMIN)
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'لغو سفارش خود قبل از مهلت' })
   cancelMine(
@@ -72,14 +75,14 @@ export class OrdersController {
   }
 
   @Get()
-  @Roles(Role.ADMIN, Role.SUPPORT)
+  @Roles(Role.ADMIN, Role.SUPPORT, Role.MANAGEMENT)
   @ApiOperation({ summary: 'فهرست سفارش‌های سازمان' })
   listManaged(@Query() query: ListOrdersQueryDto) {
     return this.orders.listManaged(query);
   }
 
   @Get(':id')
-  @Roles(Role.ADMIN, Role.SUPPORT)
+  @Roles(Role.ADMIN, Role.SUPPORT, Role.MANAGEMENT)
   @ApiOperation({ summary: 'جزئیات سفارش کارمند' })
   getManaged(@Param('id', ParseUUIDPipe) id: string) {
     return this.orders.getManaged(id);

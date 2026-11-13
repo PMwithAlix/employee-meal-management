@@ -360,7 +360,7 @@ describe('Orders (e2e)', () => {
   });
 
   it('enforces RBAC for org-wide and guest order APIs', async () => {
-    for (const cookie of [employeeCookie, hrCookie, managementCookie]) {
+    for (const cookie of [employeeCookie, hrCookie]) {
       expect(
         (
           await request(app.getHttpServer())
@@ -368,6 +368,8 @@ describe('Orders (e2e)', () => {
             .set('Cookie', cookie)
         ).status,
       ).toBe(403);
+    }
+    for (const cookie of [employeeCookie, hrCookie, managementCookie]) {
       expect(
         (
           await request(app.getHttpServer())
@@ -376,6 +378,13 @@ describe('Orders (e2e)', () => {
         ).status,
       ).toBe(403);
     }
+    expect(
+      (
+        await request(app.getHttpServer())
+          .get('/api/v1/orders')
+          .set('Cookie', managementCookie)
+      ).status,
+    ).toBe(200);
   });
 
   it('lets an employee create, reject duplicates, edit, cancel, and reorder', async () => {
@@ -904,6 +913,208 @@ describe('Orders (e2e)', () => {
     expect(again.body.currentCycle.groups).toEqual(
       created.body.currentCycle.groups,
     );
+  });
+
+  it('lets management read lunch, dinner, monthly filters and snapshots without mutating', async () => {
+    const dinner = await request(app.getHttpServer())
+      .post('/api/v1/orders')
+      .set('Cookie', employeeCookie)
+      .send({
+        mealDate: mealDate(1),
+        mealType: MealType.DINNER,
+        menuItemId: dinnerA,
+      });
+    expect([201, 409]).toContain(dinner.status);
+
+    const lunchReport = await request(app.getHttpServer())
+      .get('/api/v1/orders')
+      .query({
+        from: mealDate(1),
+        to: mealDate(2),
+        mealType: MealType.LUNCH,
+        status: 'ACTIVE',
+        page: 1,
+        pageSize: 20,
+      })
+      .set('Cookie', managementCookie);
+    expect(lunchReport.status).toBe(200);
+    expect(Number.isInteger(lunchReport.body.total)).toBe(true);
+    expect(lunchReport.body.total).toBeGreaterThanOrEqual(
+      lunchReport.body.items.length,
+    );
+    expect(
+      (lunchReport.body.items as Array<{ mealType: string }>).every(
+        (row) => row.mealType === MealType.LUNCH,
+      ),
+    ).toBe(true);
+
+    const dinnerReport = await request(app.getHttpServer())
+      .get('/api/v1/orders')
+      .query({
+        from: mealDate(1),
+        to: mealDate(2),
+        mealType: MealType.DINNER,
+        status: 'ACTIVE',
+        page: 1,
+        pageSize: 20,
+      })
+      .set('Cookie', managementCookie);
+    expect(dinnerReport.status).toBe(200);
+    expect(
+      (dinnerReport.body.items as Array<{ mealType: string }>).every(
+        (row) => row.mealType === MealType.DINNER,
+      ),
+    ).toBe(true);
+
+    const monthly = await request(app.getHttpServer())
+      .get('/api/v1/orders')
+      .query({
+        from: mealDate(1),
+        to: mealDate(2),
+        status: 'ACTIVE',
+        page: 1,
+        pageSize: 20,
+      })
+      .set('Cookie', managementCookie);
+    expect(monthly.status).toBe(200);
+    expect(monthly.body.total).toBeGreaterThan(0);
+
+    const byBuilding = await request(app.getHttpServer())
+      .get('/api/v1/orders')
+      .query({ buildingId, from: mealDate(1), to: mealDate(2), pageSize: 50 })
+      .set('Cookie', managementCookie);
+    expect(byBuilding.status).toBe(200);
+    expect(
+      (
+        byBuilding.body.items as Array<{
+          currentCycle?: { buildingIdSnapshot: string | null };
+        }>
+      ).every(
+        (row) => row.currentCycle?.buildingIdSnapshot === buildingId,
+      ),
+    ).toBe(true);
+
+    const byEmployee = await request(app.getHttpServer())
+      .get('/api/v1/orders')
+      .query({ userId: employeeId, from: mealDate(1), to: mealDate(2), pageSize: 50 })
+      .set('Cookie', managementCookie);
+    expect(byEmployee.status).toBe(200);
+    expect(
+      (byEmployee.body.items as Array<{ userId: string }>).every(
+        (row) => row.userId === employeeId,
+      ),
+    ).toBe(true);
+
+    const byGroup = await request(app.getHttpServer())
+      .get('/api/v1/orders')
+      .query({ groupId, from: mealDate(1), to: mealDate(2), pageSize: 50 })
+      .set('Cookie', managementCookie);
+    expect(byGroup.status).toBe(200);
+    expect(byGroup.body.items.length).toBeGreaterThan(0);
+
+    const sample = monthly.body.items[0] as {
+      id: string;
+      currentCycle: {
+        usernameSnapshot: string;
+        buildingNameSnapshot: string;
+        groups: Array<{ groupNameSnapshot: string }>;
+      };
+    };
+    const detail = await request(app.getHttpServer())
+      .get(`/api/v1/orders/${sample.id}`)
+      .set('Cookie', managementCookie);
+    expect(detail.status).toBe(200);
+    expect(detail.body.currentCycle.usernameSnapshot).toBe(
+      sample.currentCycle.usernameSnapshot,
+    );
+    expect(detail.body.currentCycle.buildingNameSnapshot).toBe(
+      sample.currentCycle.buildingNameSnapshot,
+    );
+    expect(detail.body.currentCycle.groups).toEqual(
+      sample.currentCycle.groups,
+    );
+
+    expect(
+      (
+        await request(app.getHttpServer())
+          .get('/api/v1/ratings')
+          .set('Cookie', managementCookie)
+      ).status,
+    ).toBe(200);
+
+    expect(
+      (
+        await request(app.getHttpServer())
+          .post('/api/v1/orders')
+          .set('Cookie', managementCookie)
+          .send({
+            mealDate: mealDate(1),
+            mealType: MealType.LUNCH,
+            menuItemId: lunchA,
+          })
+      ).status,
+    ).toBe(403);
+    expect(
+      (
+        await request(app.getHttpServer())
+          .patch(`/api/v1/orders/${sample.id}`)
+          .set('Cookie', managementCookie)
+          .send({ menuItemId: lunchB })
+      ).status,
+    ).toBe(403);
+    expect(
+      (
+        await request(app.getHttpServer())
+          .post(`/api/v1/orders/${sample.id}/cancel`)
+          .set('Cookie', managementCookie)
+      ).status,
+    ).toBe(403);
+    expect(
+      (
+        await request(app.getHttpServer())
+          .post('/api/v1/guest-orders')
+          .set('Cookie', managementCookie)
+          .send({
+            buildingId,
+            mealDate: mealDate(1),
+            mealType: MealType.LUNCH,
+            menuItemId: lunchA,
+            quantity: 1,
+          })
+      ).status,
+    ).toBe(403);
+    expect(
+      (
+        await request(app.getHttpServer())
+          .put(`/api/v1/order-deadlines/${YEAR}/${MONTH}`)
+          .set('Cookie', managementCookie)
+          .send({ items: [] })
+      ).status,
+    ).toBe(403);
+    expect(
+      (
+        await request(app.getHttpServer())
+          .put('/api/v1/meal-settings')
+          .set('Cookie', managementCookie)
+          .send({ items: [] })
+      ).status,
+    ).toBe(403);
+    expect(
+      (
+        await request(app.getHttpServer())
+          .post('/api/v1/menus')
+          .set('Cookie', managementCookie)
+          .send({ year: YEAR, month: MONTH })
+      ).status,
+    ).toBe(403);
+    expect(
+      (
+        await request(app.getHttpServer())
+          .put(`/api/v1/orders/me/${sample.id}/rating`)
+          .set('Cookie', managementCookie)
+          .send({ score: 5 })
+      ).status,
+    ).toBe(403);
   });
 
   it('writes complete before/after deadline audits and rolls back on failure', async () => {

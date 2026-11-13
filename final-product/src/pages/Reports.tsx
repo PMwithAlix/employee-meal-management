@@ -10,6 +10,7 @@ import { formatGregorianDate, jalaliFromMealDate } from '../menus/map'
 import { orderApi } from '../orders/client'
 import type { BackendOrder } from '../orders/types'
 import { useStaffRatings } from '../orders/useStaffRatings'
+import { usesLiveOrganizationData } from '../permissions'
 import { useApp } from '../store'
 import { userApi, type DirectoryUser } from '../users/client'
 import type { MealKind } from '../types'
@@ -18,7 +19,7 @@ type ReportTab = 'lunch' | 'dinner' | 'monthly' | 'comments'
 
 export function ReportsPage() {
   const app = useApp()
-  if (app.role === 'support' || app.role === 'admin') return <LiveReportsPage />
+  if (usesLiveOrganizationData(app.role)) return <LiveReportsPage />
   return <SeedReportsPage />
 }
 

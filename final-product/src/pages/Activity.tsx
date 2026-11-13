@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Button, Empty } from '../components/ui'
 import { AuthRequestError } from '../auth/errors'
 import { auditApi, type AuditLogItem } from '../audit/client'
+import { usesLiveOrganizationData } from '../permissions'
 import { useApp } from '../store'
 
 function normalize(value: string) {
@@ -20,7 +21,7 @@ function formatJson(value: unknown) {
 
 export function ActivityPage() {
   const app = useApp()
-  if (app.role === 'support' || app.role === 'admin') return <AuditActivityPage />
+  if (usesLiveOrganizationData(app.role)) return <AuditActivityPage />
   return <SeedActivityPage />
 }
 
