@@ -9,7 +9,7 @@ import type { SessionUser } from './auth/roles'
 import { AuthRequestError } from './auth/errors'
 import { formatGregorianDate } from './menus/map'
 import { orderApi } from './orders/client'
-import { deadlineKey } from './orders/map'
+import { mealDeadlineFromMap, toDeadlineMap } from './orders/map'
 import { can, canAccess, LANDING_PAGE } from './permissions'
 import type {
   ActivityItem,
@@ -167,7 +167,7 @@ export function StoreProvider({
   const [myOrdersMessage, setMyOrdersMessage] = useState('')
   const [myOrdersBoot, setMyOrdersBoot] = useState(0)
   const [orderingKey, setOrderingKey] = useState<string | null>(null)
-  const [deadlineMap, setDeadlineMap] = useState<Record<string, string>>({})
+  const [deadlineMap, setDeadlineMap] = useState<Record<string, string | null>>({})
   const [deadlineStatus, setDeadlineStatus] = useState<'loading' | 'ready' | 'unavailable' | 'error'>('loading')
   const [deadlineMessage, setDeadlineMessage] = useState('')
   const [guests, setGuests] = useState(initial.guests)
@@ -214,9 +214,7 @@ export function StoreProvider({
         }
       }
       if (deadlinesResult.status === 'fulfilled') {
-        const next: Record<string, string> = {}
-        for (const row of deadlinesResult.value) next[deadlineKey(row.mealDate, row.mealType)] = row.deadlineAt
-        setDeadlineMap(next)
+        setDeadlineMap(toDeadlineMap(deadlinesResult.value))
         setDeadlineStatus('ready')
         setDeadlineMessage('')
       } else {
@@ -269,10 +267,8 @@ export function StoreProvider({
   }
 
   function mealDeadlineAt(day: Pick<DayMenu, 'jy' | 'jm' | 'jd' | 'gregorianDate'>, meal: MealKind): MealDeadlineState {
-    if (deadlineStatus !== 'ready') return 'unknown'
     const date = day.gregorianDate ?? formatGregorianDate(day.jy, day.jm, day.jd)
-    const at = deadlineMap[deadlineKey(date, meal)]
-    return at ? { at } : 'absent'
+    return mealDeadlineFromMap(deadlineMap, deadlineStatus === 'ready', date, meal)
   }
 
   function mealDeadlineSummary(meal: MealKind, mealDates: string[]) {

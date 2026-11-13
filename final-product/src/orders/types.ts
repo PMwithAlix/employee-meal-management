@@ -61,7 +61,7 @@ export type BackendDeadline = {
   mealDate: string
   jalaliDate: string | null
   mealType: BackendMealType
-  deadlineAt: string
+  deadlineAt: string | null
   createdBy: string
 }
 

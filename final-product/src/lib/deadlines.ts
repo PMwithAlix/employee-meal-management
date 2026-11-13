@@ -82,7 +82,7 @@ export function formatDeadlineFromInstant(deadlineAt: string, mealDate?: string)
   return `${when}، ${clock}`
 }
 
-export function summarizeBackendDeadlines(map: Record<string, string>, meal: MealKind, mealDates: string[]) {
+export function summarizeBackendDeadlines(map: Record<string, string | null>, meal: MealKind, mealDates: string[]) {
   const suffix = meal === 'lunch' ? ':LUNCH' : ':DINNER'
   if (mealDates.length === 0) return 'مهلت تعریف نشده'
   const labels = new Set<string>()

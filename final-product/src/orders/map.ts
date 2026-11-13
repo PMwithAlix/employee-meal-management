@@ -1,4 +1,5 @@
 import { jalaliFromMealDate, toBackendMeal, toFrontendMeal } from '../menus/map'
+import type { MealDeadlineState } from '../lib/orders'
 import type { MealKind, Order } from '../types'
 import type { BackendDeadline, BackendOrder, OrderCycleStatus } from './types'
 
@@ -88,17 +89,41 @@ export function toUiOrder(payload: BackendOrder): Order | null {
 
 export function parseDeadline(value: unknown): BackendDeadline | null {
   const body = asRecord(value)
-  if (!body || typeof body.id !== 'string' || typeof body.mealDate !== 'string') return null
+  if (!body || typeof body.mealDate !== 'string') return null
   if (body.mealType !== 'LUNCH' && body.mealType !== 'DINNER') return null
-  if (typeof body.deadlineAt !== 'string' || Number.isNaN(Date.parse(body.deadlineAt))) return null
+  const id = typeof body.id === 'string' ? body.id : ''
+  const jalaliDate = typeof body.jalaliDate === 'string' ? body.jalaliDate : null
+  const createdBy = typeof body.createdBy === 'string' ? body.createdBy : ''
+  const deadlineAt = typeof body.deadlineAt === 'string' && !Number.isNaN(Date.parse(body.deadlineAt)) ? body.deadlineAt : null
+  if (deadlineAt && !id) return null
   return {
-    id: body.id,
+    id,
     mealDate: body.mealDate,
-    jalaliDate: typeof body.jalaliDate === 'string' ? body.jalaliDate : null,
+    jalaliDate,
     mealType: body.mealType,
-    deadlineAt: body.deadlineAt,
-    createdBy: typeof body.createdBy === 'string' ? body.createdBy : '',
+    deadlineAt,
+    createdBy,
   }
+}
+
+export function toDeadlineMap(rows: BackendDeadline[]) {
+  const next: Record<string, string | null> = {}
+  for (const row of rows) next[deadlineKey(row.mealDate, row.mealType)] = row.deadlineAt
+  return next
+}
+
+export function mealDeadlineFromMap(
+  map: Record<string, string | null>,
+  ready: boolean,
+  mealDate: string,
+  meal: MealKind,
+): MealDeadlineState {
+  if (!ready) return 'unknown'
+  const key = deadlineKey(mealDate, meal)
+  if (!Object.prototype.hasOwnProperty.call(map, key)) return 'absent'
+  const at = map[key]
+  if (at == null || Number.isNaN(Date.parse(at))) return 'unknown'
+  return { at }
 }
 
 export function deadlineKey(mealDate: string, mealType: 'LUNCH' | 'DINNER' | MealKind) {

@@ -280,4 +280,16 @@ describe('orderApi', () => {
     await orderApi.deadlines(1405, 8)
     expect(String((fetchMock.mock.calls as unknown as Array<[string, RequestInit]>)[0][0])).toBe('/api/v1/order-deadlines/1405/8')
   })
+
+  it('keeps an invalid deadline row instead of treating the meal as absent', async () => {
+    const fetchMock = vi.fn(async () => new Response(JSON.stringify([
+      { id: 'dl-1', mealDate: '2026-10-23', mealType: 'LUNCH', deadlineAt: 'not-a-date', createdBy: 'user-1' },
+      { id: 'dl-2', mealDate: '2026-10-23', mealType: 'DINNER', deadlineAt: '2026-10-23T06:30:00.000Z', createdBy: 'user-1' },
+    ]), { status: 200 }))
+    vi.stubGlobal('fetch', fetchMock)
+    const rows = await orderApi.deadlines(1405, 8)
+    expect(rows).toHaveLength(2)
+    expect(rows[0]).toMatchObject({ mealType: 'LUNCH', deadlineAt: null })
+    expect(rows[1]?.deadlineAt).toBe('2026-10-23T06:30:00.000Z')
+  })
 })
