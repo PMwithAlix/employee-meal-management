@@ -1,8 +1,9 @@
 import type { ReactNode } from 'react'
 import { CalendarClock, Moon, Sun, Utensils } from 'lucide-react'
+import { Empty } from '../components/ui'
 import { useApp } from '../store'
-import { deadlineLabel, findOrder, isMealOpen } from '../lib/orders'
-import { JALALI_MONTHS } from '../lib/jalali'
+import { deadlineLabel, findOrder, isMealOpen, upcomingChosenMeals } from '../lib/orders'
+import { addDays, isSameDate, JALALI_MONTHS, weekdayName, type JalaliDate, type JalaliDateTime } from '../lib/jalali'
 import { fa, cn } from '../lib/text'
 import type { MealFilter, StatusFilter } from '../types'
 
@@ -26,16 +27,22 @@ function Stats({ items }: { items: Array<{ label: string; value: string; hint: s
   )
 }
 
-function Panel({ title, action, children }: { title: string; action?: ReactNode; children: ReactNode }) {
+function Panel({ title, action, children, featured }: { title: string; action?: ReactNode; children: ReactNode; featured?: boolean }) {
   return (
     <section className="rounded-md border border-line bg-surface">
       <div className="flex items-center justify-between gap-3 border-b border-line px-4 py-3">
-        <h2 className="text-sm font-semibold">{title}</h2>
+        <h2 className={featured ? 'text-base font-semibold' : 'text-sm font-semibold'}>{title}</h2>
         {action}
       </div>
       <div className="p-4">{children}</div>
     </section>
   )
+}
+
+function dayHeading(date: JalaliDate, now: JalaliDateTime) {
+  if (isSameDate(date, now)) return 'امروز'
+  if (isSameDate(date, addDays(now, 1))) return 'فردا'
+  return weekdayName(date)
 }
 
 export function OverviewPage() {
@@ -57,14 +64,11 @@ function EmployeeOverview() {
   const openDays = app.days.filter((day) => (day.lunch && isMealOpen(day, 'lunch', app.deadlines, app.now)) || (day.dinner && isMealOpen(day, 'dinner', app.deadlines, app.now)))
   const upcoming = openDays
   const selectedDays = app.days.filter((day) => mine.some((order) => order.jd === day.jd && order.choice))
-  const incomplete = app.days.filter((day) => {
-    const lunchOpen = Boolean(day.lunch) && isMealOpen(day, 'lunch', app.deadlines, app.now)
-    const dinnerOpen = Boolean(day.dinner) && isMealOpen(day, 'dinner', app.deadlines, app.now)
-    if (!lunchOpen && !dinnerOpen) return false
-    const lunch = findOrder(app.orders, id, day, day.jd, 'lunch')
-    const dinner = findOrder(app.orders, id, day, day.jd, 'dinner')
-    return (lunchOpen && !lunch?.choice) || (dinnerOpen && !dinner?.choice)
+  const missingLunch = app.days.filter((day) => {
+    if (!day.lunch || !isMealOpen(day, 'lunch', app.deadlines, app.now)) return false
+    return !findOrder(app.orders, id, day, day.jd, 'lunch')?.choice
   })
+  const upcomingMeals = upcomingChosenMeals(app.orders, id, app.now)
   const passed = app.days.filter((day) => {
     const defined = (['lunch', 'dinner'] as const).filter((meal) => day[meal])
     return defined.length > 0 && defined.every((meal) => !isMealOpen(day, meal, app.deadlines, app.now))
@@ -93,12 +97,32 @@ function EmployeeOverview() {
           { label: 'شام‌های ثبت‌شده', value: fa(dinnerCount), hint: 'مستقل از ناهار', icon: Moon },
         ]}
       />
+      <Panel title="سه وعده پیش رو" featured>
+        {upcomingMeals.length === 0 ? (
+          <Empty title="سفارش آینده‌ای ثبت نشده" body="ناهار یا شام وقتی اینجا می‌آید که غذا انتخاب شده باشد و زمان وعده هنوز نرسیده باشد." />
+        ) : (
+          <ul className="divide-y divide-line">
+            {upcomingMeals.map((order) => (
+              <li key={order.id} className="flex flex-col gap-1 py-3 first:pt-0 last:pb-0 sm:flex-row sm:items-center sm:justify-between sm:gap-3">
+                <span className="min-w-0">
+                  <span className="block text-sm font-medium">{dayHeading(order, app.now)}</span>
+                  <span className="text-xs text-muted">{fa(order.jd)} {JALALI_MONTHS[order.jm - 1]} {fa(order.jy)}</span>
+                </span>
+                <span className="min-w-0 sm:text-end">
+                  <span className={cn('block text-xs', order.meal === 'lunch' ? 'text-lunch' : 'text-dinner')}>{order.meal === 'lunch' ? 'ناهار' : 'شام'}</span>
+                  <span className="break-words text-sm font-medium">{order.choice}</span>
+                </span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </Panel>
       <div className="grid gap-4 lg:grid-cols-2">
         <Panel title="وضعیت سفارش‌ها" action={<button className="min-h-11 px-2 text-xs text-link" onClick={() => jump('all')}>رفتن به منو</button>}>
           <div className="space-y-3">
             <Bucket title="روزهای پیش رو" count={upcoming.length} sample={upcoming.slice(0, 3).map((day) => fa(day.jd))} onClick={() => jump('open')} />
             <Bucket title="روزهای دارای انتخاب" count={selectedDays.length} sample={selectedDays.slice(-3).map((day) => fa(day.jd))} onClick={() => jump('selected')} />
-            <Bucket title="انتخاب ناقص" count={incomplete.length} sample={incomplete.slice(0, 3).map((day) => fa(day.jd))} onClick={() => jump('unselected')} />
+            <Bucket title="ناهار ثبت‌نشده" count={missingLunch.length} sample={missingLunch.slice(0, 3).map((day) => fa(day.jd))} onClick={() => jump('unselected', 'lunch')} />
             <Bucket title="مهلت گذشته" count={passed.length} sample={passed.slice(-3).map((day) => fa(day.jd))} />
           </div>
         </Panel>
