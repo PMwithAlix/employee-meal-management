@@ -9,6 +9,10 @@ import {
   Min,
   validateSync,
 } from 'class-validator';
+import {
+  DEFAULT_ADMIN_PASSWORD,
+  DEFAULT_ADMIN_USERNAME,
+} from '../modules/auth/default-admin';
 
 export enum NodeEnv {
   Development = 'development',
@@ -82,6 +86,26 @@ export class EnvironmentVariables {
   @IsInt()
   @Min(60)
   LOGIN_RATE_LIMIT_WINDOW_SECONDS!: number;
+
+  @Transform(({ value }) => {
+    if (typeof value === 'boolean') {
+      return value;
+    }
+    if (value === undefined || value === '') {
+      return undefined;
+    }
+    return value === 'true' || value === '1';
+  })
+  @IsBoolean()
+  BOOTSTRAP_ADMIN_ENABLED!: boolean;
+
+  @IsString()
+  @IsNotEmpty()
+  BOOTSTRAP_ADMIN_USERNAME!: string;
+
+  @IsString()
+  @IsNotEmpty()
+  BOOTSTRAP_ADMIN_PASSWORD!: string;
 }
 
 const defaultsFor = (config: Record<string, unknown>) => {
@@ -100,6 +124,9 @@ const defaultsFor = (config: Record<string, unknown>) => {
     ARGON2_PARALLELISM: 1,
     LOGIN_RATE_LIMIT_MAX: isTest ? 1000 : 5,
     LOGIN_RATE_LIMIT_WINDOW_SECONDS: 900,
+    BOOTSTRAP_ADMIN_ENABLED: !isTest,
+    BOOTSTRAP_ADMIN_USERNAME: DEFAULT_ADMIN_USERNAME,
+    BOOTSTRAP_ADMIN_PASSWORD: DEFAULT_ADMIN_PASSWORD,
   };
 };
 

@@ -13,3 +13,6 @@ process.env.ARGON2_TIME_COST ??= '1';
 process.env.ARGON2_PARALLELISM ??= '1';
 process.env.LOGIN_RATE_LIMIT_MAX ??= '1000';
 process.env.LOGIN_RATE_LIMIT_WINDOW_SECONDS ??= '900';
+process.env.BOOTSTRAP_ADMIN_ENABLED ??= 'false';
+process.env.BOOTSTRAP_ADMIN_USERNAME ??= 'khaan.admin';
+process.env.BOOTSTRAP_ADMIN_PASSWORD ??= 'Nakhoda-Khaan1405';

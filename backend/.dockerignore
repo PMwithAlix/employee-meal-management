@@ -2,5 +2,15 @@ node_modules
 dist
 coverage
 .env
+.env.*
+!.env.example
 .git
+.gitignore
+*.md
 npm-debug.log
+Dockerfile
+docker-compose.yml
+.dockerignore
+test
+**/*.spec.ts
+**/*.e2e-spec.ts

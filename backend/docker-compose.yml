@@ -1,3 +1,6 @@
+# Postgres only, for local `npm run start:dev`.
+# Full stack (api + web + db): docker compose up --build  from the repo root.
+
 services:
   postgres:
     image: postgres:16-alpine
