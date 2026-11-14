@@ -46,4 +46,20 @@ export const buildingApi = {
   update(id: string, name: string, signal?: AbortSignal) {
     return authRequest<unknown>(`/buildings/${id}`, { ...session, method: 'PATCH', body: { name }, signal }).then(requireBuilding)
   },
+
+  deactivate(id: string, signal?: AbortSignal) {
+    return authRequest<unknown>(`/buildings/${id}/deactivate`, {
+      ...session,
+      method: 'POST',
+      signal,
+    }).then(requireBuilding)
+  },
+
+  reactivate(id: string, signal?: AbortSignal) {
+    return authRequest<unknown>(`/buildings/${id}/reactivate`, {
+      ...session,
+      method: 'POST',
+      signal,
+    }).then(requireBuilding)
+  },
 }
