@@ -6,6 +6,8 @@ export const AuditAction = {
   PasswordReset: 'PASSWORD_RESET',
   BuildingCreated: 'BUILDING_CREATED',
   BuildingUpdated: 'BUILDING_UPDATED',
+  BuildingDeactivated: 'BUILDING_DEACTIVATED',
+  BuildingReactivated: 'BUILDING_REACTIVATED',
   GroupCreated: 'GROUP_CREATED',
   GroupUpdated: 'GROUP_UPDATED',
   GroupDeactivated: 'GROUP_DEACTIVATED',
