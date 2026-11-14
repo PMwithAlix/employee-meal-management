@@ -4,8 +4,8 @@ import { employeeBuildingCounts } from './useHrOverviewData';
 describe('employeeBuildingCounts', () => {
   it('counts active employees by building and keeps empty buildings visible', () => {
     const buildings = [
-      { id: 'b1', name: 'ساختمان یک' },
-      { id: 'b2', name: 'ساختمان دو' },
+      { id: 'b1', name: 'ساختمان یک', isActive: true },
+      { id: 'b2', name: 'ساختمان دو', isActive: true },
     ];
     const employees = [
       { id: 'u1', username: 'one', role: 'EMPLOYEE', buildingId: 'b1', buildingName: 'ساختمان یک', isActive: true, createdAt: '2026-11-01T00:00:00.000Z' },
