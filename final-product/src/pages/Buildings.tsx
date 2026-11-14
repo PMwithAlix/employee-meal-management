@@ -209,7 +209,7 @@ function LiveBuildingsPage() {
               ))}
             </ul>
           )}
-          {canMoveEmployee && (
+          {canMoveEmployee && building.isActive && (
             <form className="mt-4 space-y-2 border-t border-line pt-4" onSubmit={(event) => void transfer(event)}>
               <p className="text-sm font-medium">انتقال کارمند به این ساختمان</p>
               <p className="text-xs text-muted">هر کارمند فقط یک ساختمان دارد. سفارش‌های قبلی با ساختمان زمان ثبت باقی می‌مانند.</p>
