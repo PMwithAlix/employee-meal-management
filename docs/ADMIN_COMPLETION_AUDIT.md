@@ -28,7 +28,7 @@
 
 - Auth: login, logout, me, **change-password**, logout-all
 - Users: CRUD جزئی، deactivate/reactivate، reset-password — ADMIN و HR
-- Buildings: create, list, get, patch name — **بدون deactivate**
+- Buildings: create, list, get, patch name, deactivate/reactivate (ADMIN و HR)
 - Groups: list/get/create/patch/deactivate/members/history — محدودیت EMPLOYEE روی همین شاخه
 - Menus / published-menus
 - Orders, guest-orders, order-deadlines, meal-settings
@@ -39,7 +39,7 @@
 ## APIهای مفقود / خارج از محدوده Schema
 
 - **Notifications:** مدل Prisma هست؛ کنترلر/سرویس خواندن و علامت‌خوانده وجود ندارد. بدون Endpoint جدید و بدون Migration.
-- **غیرفعال‌سازی ساختمان:** فیلد `isActive` و Endpoint نیست.
+- **غیرفعال‌سازی ساختمان:** در شاخه تکمیل، فیلد `isActive` و Endpointهای deactivate/reactivate اضافه شده‌اند.
 - **تنظیمات سیستم عمومی:** فقط `meal-settings` (ساعت وعده). کلید/پیکربندی سراسری دیگر نیست.
 
 ## مشکلات کشف‌شده (ADMIN)
@@ -62,3 +62,12 @@
 5. اتصال فرم رمز به Backend و خروج پس از موفقیت (ابطال نشست).
 6. حذف نمایش Seed اعلان؛ پیام صادقانه نبود API.
 7. تست و Build فرانت و بک‌اند.
+
+
+## به‌روزرسانی چرخه عمر ساختمان — ۱۴ نوامبر ۲۰۲۶
+
+- سیاست تأییدشده: ساختمان فقط وقتی غیرفعال می‌شود که هیچ کاربر فعالی به آن تخصیص نداشته باشد.
+- حساب‌های غیرفعال، روابط تاریخی، سفارش‌ها و Snapshotهای موجود حفظ می‌شوند.
+- برای انتقال کاربران، ابتدا باید آن‌ها را به یک ساختمان فعال منتقل کرد؛ Backend تخصیص به ساختمان غیرفعال را رد می‌کند.
+- غیرفعال‌سازی/فعال‌سازی مجدد در Audit ثبت می‌شود و فقط ADMIN و HR مجازند.
+- Migration جدید `20261114000000_building_activation` ستون `buildings.isActive` را با پیش‌فرض true اضافه می‌کند.
