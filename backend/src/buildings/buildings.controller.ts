@@ -2,6 +2,8 @@ import {
   Body,
   Controller,
   Get,
+  HttpCode,
+  HttpStatus,
   Param,
   ParseUUIDPipe,
   Patch,
@@ -41,6 +43,7 @@ export class BuildingsController {
   }
 
   @Post(':id/deactivate')
+  @HttpCode(HttpStatus.OK)
   @Roles(Role.ADMIN, Role.HR)
   @ApiOperation({ summary: 'غیرفعال‌سازی ساختمان بدون کارمند فعال' })
   deactivate(@CurrentUser() actor: AuthUser, @Param('id', ParseUUIDPipe) id: string) {
@@ -48,6 +51,7 @@ export class BuildingsController {
   }
 
   @Post(':id/reactivate')
+  @HttpCode(HttpStatus.OK)
   @Roles(Role.ADMIN, Role.HR)
   @ApiOperation({ summary: 'فعال‌سازی مجدد ساختمان' })
   reactivate(@CurrentUser() actor: AuthUser, @Param('id', ParseUUIDPipe) id: string) {

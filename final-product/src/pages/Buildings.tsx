@@ -3,6 +3,11 @@ import { AuthRequestError } from '../auth/errors'
 import { buildingApi, type BuildingDetail, type BuildingSummary } from '../buildings/client'
 import { activeMemberCount } from '../buildings/map'
 import { usesLiveBuildingsPage } from '../buildings/access'
+import {
+  buildingStatusSuccessNotice,
+  buildingTransferSuccessNotice,
+  noticeAfterBuildingSelection,
+} from '../buildings/notice'
 import { Badge, Button, Dialog, Empty, Field, controlClass } from '../components/ui'
 import { can } from '../permissions'
 import { fa } from '../lib/text'
@@ -117,7 +122,7 @@ function LiveBuildingsPage() {
       setBuildings((items) => items.map((item) => item.id === updated.id ? updated : item))
       setDetail((current) => current?.id === updated.id ? { ...current, isActive: updated.isActive } : current)
       setStatusConfirmation(false)
-      setNotice(updated.isActive ? 'ساختمان دوباره فعال شد.' : 'ساختمان غیرفعال شد.')
+      setNotice(buildingStatusSuccessNotice(updated.isActive))
     } catch (error: unknown) {
       setStatusError(apiMessage(
         error,
@@ -138,7 +143,7 @@ function LiveBuildingsPage() {
       const updated = await userApi.update(moving, { buildingId: building.id })
       setUsers((list) => list.map((item) => (item.id === updated.id ? updated : item)))
       setMoving('')
-      setNotice(`حساب ${updated.username} به این ساختمان منتقل شد.`)
+      setNotice(buildingTransferSuccessNotice(updated.username))
       refresh()
     } catch (error: unknown) {
       setTransferError(apiMessage(error, 'انتقال کارمند انجام نشد.'))
@@ -162,7 +167,10 @@ function LiveBuildingsPage() {
         {status === 'ready' && buildings.map((item) => {
           const count = activeMemberCount(users, item.id)
           return (
-            <button key={item.id} className={`min-h-11 w-full rounded-md border px-3 py-2 text-start ${item.id === openId ? 'border-primary bg-surface' : 'border-line bg-surface'}`} onClick={() => setOpenId(item.id)}>
+            <button key={item.id} className={`min-h-11 w-full rounded-md border px-3 py-2 text-start ${item.id === openId ? 'border-primary bg-surface' : 'border-line bg-surface'}`} onClick={() => {
+              setNotice((current) => noticeAfterBuildingSelection(openId, item.id, current))
+              setOpenId(item.id)
+            }}>
               <span className="flex items-center justify-between gap-2">
                 <span className="block text-sm font-medium">{item.name}</span>
                 <Badge tone={item.isActive ? 'ok' : 'neutral'}>{item.isActive ? 'فعال' : 'غیرفعال'}</Badge>

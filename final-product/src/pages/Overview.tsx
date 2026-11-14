@@ -10,6 +10,7 @@ import { useRecentAudit } from '../audit/useRecentAudit'
 import { useGuestMonthCount } from '../guests/useGuestMonthCount'
 import { usePublishedMenu } from '../menus/usePublishedMenu'
 import { combinedActiveCount, managementOpenDaysMetric, metricValue, openDaysMetric, retryManagementOverview } from '../overview/metrics'
+import { opsDeadlineFailed, opsDeadlinePanel, overviewBannerMessage } from '../overview/deadlinePanel'
 import { useOrgDirectoryCounts } from '../overview/useOrgDirectoryCounts'
 import { employeeBuildingCounts, useHrOverviewData } from '../overview/useHrOverviewData'
 import { useSupportOrderCounts } from '../orders/useSupportOrderCounts'
@@ -235,6 +236,14 @@ function LiveOpsOverview({ variant }: { variant: 'support' | 'management' | 'adm
   const deadlinesReady = published.status === 'ready' && app.deadlineStatus === 'ready'
   const managementDeadlinesEmpty = variant === 'management' && app.deadlineStatus === 'ready' && (published.status === 'empty' || (published.status === 'ready' && openDays.length === 0))
   const managementDeadlinesError = variant === 'management' && !deadlinesLoading && !deadlinesReady && !managementDeadlinesEmpty
+  const deadlinePanel = opsDeadlinePanel({
+    publishedStatus: published.status,
+    publishedMessage: published.message,
+    deadlineStatus: app.deadlineStatus,
+    deadlineMessage: app.deadlineMessage,
+    openCount: openDays.length,
+  })
+  const adminDeadlinesError = variant === 'admin' && opsDeadlineFailed(published.status, app.deadlineStatus)
   const fourth = variant === 'management'
     ? { label: 'سفارش‌های فعال', value: metricValue(counts.status, combinedActiveCount(counts.status, counts.lunch, counts.dinner)), hint: 'مجموع ناهار و شام', icon: Utensils }
     : { label: 'سفارش مهمان', value: metricValue(guests.status, guests.count), hint: 'مورد فعال', icon: Utensils }
@@ -259,9 +268,15 @@ function LiveOpsOverview({ variant }: { variant: 'support' | 'management' | 'adm
           fourth,
         ]}
       />
-      {(variant === 'management' || variant === 'admin') && (counts.status === 'error' || (variant === 'admin' && guests.status === 'error') || managementDeadlinesError || recent.status === 'error') && (
+      {(variant === 'management' || variant === 'admin') && (counts.status === 'error' || (variant === 'admin' && guests.status === 'error') || managementDeadlinesError || adminDeadlinesError || recent.status === 'error') && (
         <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-line bg-surface px-3 py-2">
-          <p className="text-sm text-danger">{counts.message || published.message || recent.message || 'داده‌های نمای کلی از سامانه خوانده نشد.'}</p>
+          <p className="text-sm text-danger">{overviewBannerMessage({
+            countsMessage: counts.message,
+            guestsMessage: variant === 'admin' ? guests.message : '',
+            publishedMessage: published.message,
+            deadlineMessage: app.deadlineMessage,
+            recentMessage: recent.message,
+          })}</p>
           <Button variant="secondary" onClick={retry}>تلاش دوباره</Button>
         </div>
       )}
@@ -270,9 +285,17 @@ function LiveOpsOverview({ variant }: { variant: 'support' | 'management' | 'adm
           ? <button className="min-h-11 px-2 text-xs text-link" onClick={() => app.setPage('reports')}>گزارش‌ها</button>
           : <button className="min-h-11 px-2 text-xs text-link" onClick={() => app.setPage('menuMgmt')}>مدیریت منو</button>}
         >
-          {deadlinesLoading ? <p className="text-sm text-muted">در حال خواندن مهلت‌ها…</p> : variant === 'support' || variant === 'admin' ? (
-            published.status !== 'ready' || app.deadlineStatus !== 'ready' ? <p className="text-sm text-danger">مهلت‌ها از سامانه خوانده نشد.</p> : openDays.length === 0 ? <p className="text-sm text-muted">روز بازی با مهلت ذخیره‌شده نیست.</p> : <UpcomingDeadlines days={openDays} />
-          ) : managementDeadlinesError ? <p className="text-sm text-danger">{published.message || app.deadlineMessage || 'مهلت‌ها از سامانه خوانده نشد.'}</p> : managementDeadlinesEmpty ? <p className="text-sm text-muted">روز بازی با مهلت ذخیره‌شده نیست.</p> : <UpcomingDeadlines days={openDays} />}
+          {variant === 'management' ? (
+            deadlinesLoading ? <p className="text-sm text-muted">در حال خواندن مهلت‌ها…</p> : managementDeadlinesError ? <p className="text-sm text-danger">{published.message || app.deadlineMessage || 'مهلت‌ها از سامانه خوانده نشد.'}</p> : managementDeadlinesEmpty ? <p className="text-sm text-muted">روز بازی با مهلت ذخیره‌شده نیست.</p> : <UpcomingDeadlines days={openDays} />
+          ) : deadlinePanel.kind === 'loading' ? (
+            <p className="text-sm text-muted">در حال خواندن مهلت‌ها…</p>
+          ) : deadlinePanel.kind === 'empty-menu' || deadlinePanel.kind === 'empty-open' ? (
+            <p className="text-sm text-muted">{deadlinePanel.message}</p>
+          ) : deadlinePanel.kind === 'error' ? (
+            <p className="text-sm text-danger">{deadlinePanel.message}</p>
+          ) : (
+            <UpcomingDeadlines days={openDays} />
+          )}
         </Panel>
         <Panel title={variant === 'support' ? 'فعالیت عملیاتی اخیر' : 'فعالیت اخیر'} action={<button className="min-h-11 px-2 text-xs text-link" onClick={() => app.setPage('activity')}>{variant === 'support' ? 'تاریخچه' : 'تاریخچه کامل'}</button>}>
           {recent.status === 'loading' ? <p className="text-sm text-muted">در حال خواندن تاریخچه…</p> : recent.status !== 'ready' ? <p className="text-sm text-danger">{recent.message || 'تاریخچه خوانده نشد.'}</p> : recent.items.length === 0 ? <p className="text-sm text-muted">رویدادی ثبت نشده است.</p> : (

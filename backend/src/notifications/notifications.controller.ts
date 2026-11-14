@@ -1,6 +1,8 @@
 import {
   Controller,
   Get,
+  HttpCode,
+  HttpStatus,
   Param,
   ParseUUIDPipe,
   Post,
@@ -31,12 +33,14 @@ export class NotificationsController {
   }
 
   @Post(':id/read')
+  @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'علامت‌گذاری یک اعلان به‌عنوان خوانده‌شده' })
   markRead(@CurrentUser() user: AuthUser, @Param('id', ParseUUIDPipe) id: string) {
     return this.notifications.markRead(user.id, id);
   }
 
   @Post('read-all')
+  @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'علامت‌گذاری همه اعلان‌های کاربر به‌عنوان خوانده‌شده' })
   markAllRead(@CurrentUser() user: AuthUser) {
     return this.notifications.markAllRead(user.id);

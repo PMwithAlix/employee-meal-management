@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import {
   Bell,
   LogOut,
@@ -15,7 +15,23 @@ import { NAV_ITEMS, pageTitle } from '../navigation'
 import { useApp } from '../store'
 import { cn } from '../lib/text'
 import { AuthRequestError } from '../auth/errors'
-import { notificationApi, type NotificationItem } from '../notifications/client'
+import { notificationApi } from '../notifications/client'
+import {
+  NOTIFICATION_PAGE_SIZE,
+  applyLoadMoreError,
+  applyLoadMoreSuccess,
+  applyMarkAllRead,
+  applyMarkOneRead,
+  applyNotificationRefreshError,
+  applyNotificationRefreshSuccess,
+  beginLoadMore,
+  beginNotificationRefresh,
+  canRequestMore,
+  emptyNotificationPanel,
+  hasMoreNotifications,
+  nextNotificationPage,
+  type NotificationPanelState,
+} from '../notifications/panel'
 import type { Role } from '../types'
 import { BottomNav } from './BottomNav'
 import { OverviewPage } from '../pages/Overview'
@@ -62,10 +78,15 @@ export function Shell() {
   const [notesOpen, setNotesOpen] = useState(false)
   const [profileOpen, setProfileOpen] = useState(false)
   const [notificationRefresh, setNotificationRefresh] = useState(0)
-  const [notificationStatus, setNotificationStatus] = useState<'loading' | 'ready' | 'error'>('loading')
-  const [notificationMessage, setNotificationMessage] = useState('')
-  const [notificationItems, setNotificationItems] = useState<NotificationItem[]>([])
-  const [unreadNotificationCount, setUnreadNotificationCount] = useState(0)
+  const [notifications, setNotifications] = useState<NotificationPanelState>(emptyNotificationPanel)
+  const notificationsRef = useRef(notifications)
+  notificationsRef.current = notifications
+  const notificationGeneration = useRef(0)
+  const loadMoreLock = useRef(false)
+  const unreadNotificationCount = notifications.unreadCount
+  const notificationStatus = notifications.status
+  const notificationMessage = notifications.message
+  const notificationItems = notifications.items
   const visible = NAV_ITEMS.filter((item) => canAccess(app.role, item.id))
   const groups = [...new Set(visible.map((item) => item.group))]
   const Page = PAGES[app.page]
@@ -81,30 +102,64 @@ export function Shell() {
 
   useEffect(() => {
     const controller = new AbortController()
-    setNotificationStatus('loading')
-    setNotificationMessage('')
-    void notificationApi.list({ page: 1, pageSize: 20 }, controller.signal).then((result) => {
-      if (controller.signal.aborted) return
-      setNotificationItems(result.items)
-      setUnreadNotificationCount(result.unreadCount)
-      setNotificationStatus('ready')
+    const generation = ++notificationGeneration.current
+    setNotifications((current) => beginNotificationRefresh(current))
+    void notificationApi.list({ page: 1, pageSize: NOTIFICATION_PAGE_SIZE }, controller.signal).then((result) => {
+      if (controller.signal.aborted || generation !== notificationGeneration.current) return
+      setNotifications(applyNotificationRefreshSuccess(result))
     }).catch((error: unknown) => {
-      if (controller.signal.aborted) return
-      setNotificationStatus('error')
-      setNotificationMessage(error instanceof AuthRequestError ? error.message : 'بارگذاری اعلان‌ها انجام نشد.')
+      if (controller.signal.aborted || generation !== notificationGeneration.current) return
+      setNotifications((current) => applyNotificationRefreshError(
+        current,
+        error instanceof AuthRequestError ? error.message : 'بارگذاری اعلان‌ها انجام نشد.',
+      ))
     })
     return () => controller.abort()
   }, [notificationRefresh])
+
+  async function loadMoreNotifications() {
+    const current = notificationsRef.current
+    if (loadMoreLock.current || !canRequestMore(current)) return
+    loadMoreLock.current = true
+    const page = nextNotificationPage(current)
+    const generation = notificationGeneration.current
+    setNotifications(beginLoadMore(current))
+    try {
+      const result = await notificationApi.list({ page, pageSize: NOTIFICATION_PAGE_SIZE })
+      if (generation !== notificationGeneration.current) {
+        setNotifications((state) => (
+          state.moreStatus === 'loading' ? { ...state, moreStatus: 'idle', moreMessage: '' } : state
+        ))
+        return
+      }
+      setNotifications((state) => applyLoadMoreSuccess(state, result))
+    } catch (error) {
+      if (generation !== notificationGeneration.current) {
+        setNotifications((state) => (
+          state.moreStatus === 'loading' ? { ...state, moreStatus: 'idle', moreMessage: '' } : state
+        ))
+        return
+      }
+      setNotifications((state) => applyLoadMoreError(
+        state,
+        error instanceof AuthRequestError ? error.message : 'بارگذاری اعلان‌های قدیمی‌تر انجام نشد.',
+      ))
+    } finally {
+      loadMoreLock.current = false
+    }
+  }
 
   async function markNotificationRead(id: string) {
     const current = notificationItems.find((item) => item.id === id)
     if (!current || current.readAt) return
     try {
       const updated = await notificationApi.markRead(id)
-      setNotificationItems((items) => items.map((item) => item.id === id ? updated : item))
-      setUnreadNotificationCount((count) => Math.max(0, count - 1))
+      setNotifications((state) => applyMarkOneRead(state, updated))
     } catch (error) {
-      setNotificationMessage(error instanceof AuthRequestError ? error.message : 'علامت‌گذاری اعلان انجام نشد.')
+      setNotifications((state) => ({
+        ...state,
+        message: error instanceof AuthRequestError ? error.message : 'علامت‌گذاری اعلان انجام نشد.',
+      }))
     }
   }
 
@@ -112,10 +167,12 @@ export function Shell() {
     if (unreadNotificationCount === 0) return
     try {
       const result = await notificationApi.markAllRead()
-      setNotificationItems((items) => items.map((item) => ({ ...item, readAt: item.readAt ?? result.readAt })))
-      setUnreadNotificationCount(0)
+      setNotifications((state) => applyMarkAllRead(state, result.readAt))
     } catch (error) {
-      setNotificationMessage(error instanceof AuthRequestError ? error.message : 'علامت‌گذاری اعلان‌ها انجام نشد.')
+      setNotifications((state) => ({
+        ...state,
+        message: error instanceof AuthRequestError ? error.message : 'علامت‌گذاری اعلان‌ها انجام نشد.',
+      }))
     }
   }
 
@@ -188,7 +245,7 @@ export function Shell() {
       </aside>
 
       <div className={cn('min-h-screen min-w-0', app.collapsed ? 'md:mr-[72px]' : 'md:mr-60')}>
-        <header className="sticky top-0 z-20 flex min-h-14 items-center gap-2 border-b border-line bg-bg/95 px-3 py-1 backdrop-blur md:px-5">
+        <header className={cn('sticky top-0 z-20 flex min-h-14 items-center gap-2 border-b border-line bg-bg/95 px-3 py-1 backdrop-blur md:px-5', notesOpen && 'z-50')}>
           <button className="hidden h-11 w-11 shrink-0 place-items-center rounded-md md:grid" aria-label={app.collapsed ? 'باز کردن نوار کناری' : 'جمع کردن نوار کناری'} title={app.collapsed ? 'باز کردن نوار کناری' : 'جمع کردن نوار کناری'} onClick={() => app.setCollapsed(!app.collapsed)}>
             {app.collapsed ? <PanelRightOpen size={18} /> : <PanelRightClose size={18} />}
           </button>
@@ -231,8 +288,16 @@ export function Shell() {
                 )}
               </button>
               {notesOpen && (
-                <div className="absolute end-0 z-30 mt-1 w-[min(22rem,calc(100vw-1.5rem))] rounded-md border border-line bg-surface p-2 shadow-card">
-                  <div className="mb-2 flex items-center justify-between gap-2 px-1">
+                <div
+                  className={cn(
+                    'flex flex-col overflow-hidden rounded-md border border-line bg-surface p-2 shadow-card',
+                    desktop
+                      ? 'absolute end-0 z-30 mt-1 w-[min(22rem,calc(100vw-1.5rem))]'
+                      : 'fixed inset-x-3 z-50 max-h-[calc(100dvh-3.5rem-env(safe-area-inset-top,0px)-env(safe-area-inset-bottom,0px)-1rem)]',
+                  )}
+                  style={desktop ? undefined : { top: 'calc(3.5rem + env(safe-area-inset-top, 0px))' }}
+                >
+                  <div className="mb-2 flex shrink-0 items-center justify-between gap-2 px-1">
                     <p className="text-sm font-medium">اعلان‌ها</p>
                     <button
                       type="button"
@@ -255,7 +320,7 @@ export function Shell() {
                     <p className="px-2 py-4 text-sm text-muted">اعلانی برای این حساب ثبت نشده است.</p>
                   )}
                   {notificationStatus === 'ready' && notificationItems.length > 0 && (
-                    <div className="max-h-80 space-y-1 overflow-auto">
+                    <div className={cn('min-h-0 space-y-1 overflow-auto', desktop ? 'max-h-80' : 'flex-1')}>
                       {notificationItems.map((item) => (
                         <button
                           key={item.id}
@@ -272,6 +337,21 @@ export function Shell() {
                           <span className="mt-1 block text-[11px] text-muted">{formatNotificationDate(item.createdAt)}</span>
                         </button>
                       ))}
+                    </div>
+                  )}
+                  {notificationStatus === 'ready' && (hasMoreNotifications(notifications) || notifications.moreStatus === 'error') && (
+                    <div className="mt-2 shrink-0 border-t border-line px-1 pt-2">
+                      {notifications.moreStatus === 'error' && (
+                        <p className="mb-2 text-xs text-danger">{notifications.moreMessage}</p>
+                      )}
+                      <button
+                        type="button"
+                        className="min-h-11 w-full rounded-md px-2 text-sm text-link disabled:opacity-50"
+                        disabled={notifications.moreStatus === 'loading'}
+                        onClick={() => void loadMoreNotifications()}
+                      >
+                        {notifications.moreStatus === 'loading' ? 'در حال بارگذاری…' : 'نمایش اعلان‌های قدیمی‌تر'}
+                      </button>
                     </div>
                   )}
                 </div>
@@ -313,7 +393,11 @@ export function Shell() {
           </div>
         </header>
         {(notesOpen || profileOpen) && (
-          <button className="fixed inset-0 z-10" aria-label="بستن" onClick={() => { setNotesOpen(false); setProfileOpen(false) }}>
+          <button
+            className={cn('fixed inset-0', notesOpen && !desktop ? 'z-[45]' : 'z-10')}
+            aria-label="بستن"
+            onClick={() => { setNotesOpen(false); setProfileOpen(false) }}
+          >
             <X className="sr-only" />
           </button>
         )}

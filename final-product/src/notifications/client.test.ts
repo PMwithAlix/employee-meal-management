@@ -39,6 +39,28 @@ describe('notificationApi', () => {
     );
   });
 
+  it('requests a later notifications page with the same contract', async () => {
+    const fetchMock = vi.fn(async () => new Response(JSON.stringify({
+      items: [{ ...item, id: 'notification-21' }],
+      total: 25,
+      unreadCount: 25,
+      page: 2,
+      pageSize: 20,
+    }), { status: 200 }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(notificationApi.list({ page: 2, pageSize: 20 })).resolves.toMatchObject({
+      page: 2,
+      total: 25,
+      unreadCount: 25,
+      items: [{ id: 'notification-21' }],
+    });
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/v1/notifications?page=2&pageSize=20',
+      expect.objectContaining({ credentials: 'include' }),
+    );
+  });
+
   it('marks one notification read through its own endpoint', async () => {
     const read = { ...item, readAt: '2026-11-14T10:05:00.000Z' };
     const fetchMock = vi.fn(async () => new Response(JSON.stringify(read), { status: 200 }));
