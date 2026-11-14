@@ -9,6 +9,10 @@ import { ConfigService } from '@nestjs/config';
 import { Request } from 'express';
 import { Observable } from 'rxjs';
 import { EnvironmentVariables, NodeEnv } from '../../config/env.validation';
+import {
+  isAllowedRequestOrigin,
+  parseAllowedOrigins,
+} from '../http/request-origin';
 
 const SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
 
@@ -28,8 +32,13 @@ export class OriginInterceptor implements NestInterceptor {
       return next.handle();
     }
 
-    const allowed = this.config.get('FRONTEND_ORIGIN', { infer: true });
-    const origin = request.headers.origin;
+    const allowed = parseAllowedOrigins(
+      this.config.get('FRONTEND_ORIGIN', { infer: true }),
+    );
+    const origin = Array.isArray(request.headers.origin)
+      ? request.headers.origin[0]
+      : request.headers.origin;
+
     if (!origin) {
       const env = this.config.get('NODE_ENV', { infer: true });
       if (env === NodeEnv.Production) {
@@ -38,7 +47,7 @@ export class OriginInterceptor implements NestInterceptor {
       return next.handle();
     }
 
-    if (origin !== allowed) {
+    if (!isAllowedRequestOrigin(origin, request, allowed)) {
       throw new ForbiddenException('Origin نامعتبر است.');
     }
     return next.handle();
