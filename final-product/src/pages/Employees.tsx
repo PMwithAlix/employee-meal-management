@@ -157,7 +157,7 @@ function LiveEmployeesPage() {
           <input value={q} onChange={(event) => { setQ(event.target.value); setPage(1) }} placeholder="نام کاربری" aria-label="جستجوی کارمند" className="h-11 min-w-0 flex-1 basis-full rounded-md border border-line bg-surface px-3 text-base sm:basis-48" />
           <select className="h-11 min-w-0 flex-1 rounded-md border border-line bg-surface px-2 text-base" value={buildingId} onChange={(event) => { setBuildingId(event.target.value); setPage(1) }}>
             <option value="all">همه ساختمان‌ها</option>
-            {buildings.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
+            {buildings.filter((item) => item.isActive).map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
           </select>
           <select className="h-11 min-w-0 flex-1 rounded-md border border-line bg-surface px-2 text-base" value={role} onChange={(event) => { setRole(event.target.value as 'all' | DirectoryRole | HrManagedRole); setPage(1) }}>
             {isAdmin && <option value="all">همه نقش‌ها</option>}
