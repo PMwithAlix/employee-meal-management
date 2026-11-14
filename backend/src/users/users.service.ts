@@ -57,13 +57,12 @@ export class UsersService {
     assertCanAssignRole(actor, dto.role);
     const buildingId = dto.buildingId ?? null;
     assertRoleBuilding(dto.role, buildingId);
-    if (buildingId) {
-      await this.requireBuilding(buildingId);
-    }
-
     const passwordHash = await this.passwords.hash(dto.password);
     try {
       return await this.prisma.$transaction(async (tx) => {
+        if (buildingId) {
+          await this.requireActiveBuilding(tx, buildingId);
+        }
         const created = await tx.user.create({
           data: {
             username,
@@ -149,13 +148,12 @@ export class UsersService {
       assertCanAssignRole(actor, dto.role);
     }
     assertRoleBuilding(nextRole, nextBuilding);
-    if (nextBuilding) {
-      await this.requireBuilding(nextBuilding);
-    }
-
     const changed =
       nextRole !== current.role || nextBuilding !== current.buildingId;
     const updated = await this.prisma.$transaction(async (tx) => {
+      if (nextBuilding) {
+        await this.requireActiveBuilding(tx, nextBuilding);
+      }
       const user = await tx.user.update({
         where: { id },
         data: { role: nextRole, buildingId: nextBuilding },
@@ -285,10 +283,26 @@ export class UsersService {
     return user;
   }
 
-  private async requireBuilding(id: string) {
-    const building = await this.prisma.building.findUnique({ where: { id } });
+  private async requireActiveBuilding(
+    tx: Prisma.TransactionClient,
+    id: string,
+  ) {
+    const buildings = await tx.$queryRaw<
+      Array<{ id: string; isActive: boolean }>
+    >`
+      SELECT id, is_active AS "isActive"
+      FROM "buildings"
+      WHERE id = ${id}::uuid
+      FOR KEY SHARE
+    `;
+    const building = buildings[0];
     if (!building) {
       throw new NotFoundException('ساختمان پیدا نشد.');
+    }
+    if (!building.isActive) {
+      throw new UnprocessableEntityException(
+        'امکان تخصیص کاربر به ساختمان غیرفعال وجود ندارد.',
+      );
     }
     return building;
   }
