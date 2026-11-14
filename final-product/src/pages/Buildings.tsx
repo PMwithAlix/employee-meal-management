@@ -191,6 +191,7 @@ function LiveBuildingsPage() {
               </div>
             )}
           </div>
+          {notice && <p className="mt-2 text-sm text-ok" role="status">{notice}</p>}
           {detailStatus === 'loading' && <p className="mt-2 text-sm text-muted">در حال خواندن جزئیات ساختمان…</p>}
           {detailStatus === 'error' && (
             <div className="mt-2 space-y-2">
@@ -223,7 +224,6 @@ function LiveBuildingsPage() {
                 <Button type="submit" disabled={!moving || transferBusy}>{transferBusy ? 'در حال انتقال' : 'انتقال'}</Button>
               </div>
               {transferError && <p className="text-sm text-danger">{transferError}</p>}
-              {notice && <p className="text-sm text-ok" role="status">{notice}</p>}
             </form>
           )}
         </section>
