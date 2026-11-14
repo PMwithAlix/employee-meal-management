@@ -34,4 +34,63 @@ describe('UsersService inactive building guard', () => {
     );
     expect(tx.user.update).not.toHaveBeenCalled();
   });
+
+  it('rejects creating a user assigned to an inactive building', async () => {
+    const tx = {
+      $queryRaw: jest.fn().mockResolvedValue([{ id: buildingId, isActive: false }]),
+      user: { create: jest.fn() },
+    };
+    const prisma = {
+      $transaction: jest.fn((callback: (client: typeof tx) => unknown) => callback(tx)),
+    };
+    const passwords = { hash: jest.fn().mockResolvedValue('password-hash') };
+    const service = new UsersService(
+      prisma as never,
+      passwords as never,
+      {} as never,
+      {} as never,
+    );
+
+    await expect(service.create(actor, {
+      username: 'employee.new',
+      password: 'Password123',
+      role: 'EMPLOYEE',
+      buildingId,
+    } as never)).rejects.toBeInstanceOf(UnprocessableEntityException);
+
+    expect(tx.$queryRaw).toHaveBeenCalled();
+    expect(tx.user.create).not.toHaveBeenCalled();
+  });
+
+  it('rejects moving an existing user to an inactive building', async () => {
+    const current = {
+      id: userId,
+      username: 'employee.one',
+      role: 'EMPLOYEE',
+      buildingId: '44444444-4444-4444-4444-444444444444',
+      isActive: true,
+    };
+    const tx = {
+      $queryRaw: jest.fn().mockResolvedValue([{ id: buildingId, isActive: false }]),
+      user: { update: jest.fn() },
+    };
+    const prisma = {
+      user: { findUnique: jest.fn().mockResolvedValue(current) },
+      $transaction: jest.fn((callback: (client: typeof tx) => unknown) => callback(tx)),
+    };
+    const service = new UsersService(
+      prisma as never,
+      {} as never,
+      {} as never,
+      {} as never,
+    );
+
+    await expect(service.update(actor, userId, { buildingId } as never)).rejects.toBeInstanceOf(
+      UnprocessableEntityException,
+    );
+
+    expect(tx.$queryRaw).toHaveBeenCalled();
+    expect(tx.user.update).not.toHaveBeenCalled();
+  });
+
 });
