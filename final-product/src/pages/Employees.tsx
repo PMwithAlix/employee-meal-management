@@ -401,7 +401,7 @@ function LiveEmployeeForm({
           <Field label="ساختمان">
             <select className={controlClass} value={buildingId} onChange={(event) => setBuildingId(event.target.value)}>
               <option value="">انتخاب ساختمان</option>
-              {buildings.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
+              {buildings.filter((item) => item.isActive).map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
             </select>
             {tried && fields.building && <p className="mt-1 text-sm text-danger">{fields.building}</p>}
           </Field>
