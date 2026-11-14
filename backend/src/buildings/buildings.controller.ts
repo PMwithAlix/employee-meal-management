@@ -40,6 +40,20 @@ export class BuildingsController {
     return this.buildings.list();
   }
 
+  @Post(':id/deactivate')
+  @Roles(Role.ADMIN, Role.HR)
+  @ApiOperation({ summary: 'غیرفعال‌سازی ساختمان بدون کارمند فعال' })
+  deactivate(@CurrentUser() actor: AuthUser, @Param('id', ParseUUIDPipe) id: string) {
+    return this.buildings.deactivate(actor, id);
+  }
+
+  @Post(':id/reactivate')
+  @Roles(Role.ADMIN, Role.HR)
+  @ApiOperation({ summary: 'فعال‌سازی مجدد ساختمان' })
+  reactivate(@CurrentUser() actor: AuthUser, @Param('id', ParseUUIDPipe) id: string) {
+    return this.buildings.reactivate(actor, id);
+  }
+
   @Get(':id')
   @Roles(Role.ADMIN, Role.HR, Role.SUPPORT, Role.MANAGEMENT)
   @ApiOperation({ summary: 'جزئیات ساختمان' })
