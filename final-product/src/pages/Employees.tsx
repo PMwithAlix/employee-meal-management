@@ -312,7 +312,7 @@ function LiveEmployeeForm({
   const [username, setUsername] = useState(current?.username ?? '')
   const [password, setPassword] = useState('')
   const [assignedRole, setAssignedRole] = useState<DirectoryRole>(allowAllRoles && current && isDirectoryRole(current.role) ? current.role : 'EMPLOYEE')
-  const [buildingId, setBuildingId] = useState(buildings.find((item) => item.id === current?.buildingId && item.isActive)?.id ?? buildings.find((item) => item.isActive)?.id ?? '')
+  const [buildingId, setBuildingId] = useState(buildings.find((item) => item.id === current?.buildingId && item.isActive)?.id ?? (current ? '' : buildings.find((item) => item.isActive)?.id ?? ''))
   const [error, setError] = useState('')
   const [tried, setTried] = useState(false)
   const [saving, setSaving] = useState(false)
