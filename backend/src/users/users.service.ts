@@ -290,7 +290,7 @@ export class UsersService {
     const buildings = await tx.$queryRaw<
       Array<{ id: string; isActive: boolean }>
     >`
-      SELECT id, is_active AS "isActive"
+      SELECT "id", "isActive"
       FROM "buildings"
       WHERE id = ${id}::uuid
       FOR KEY SHARE
