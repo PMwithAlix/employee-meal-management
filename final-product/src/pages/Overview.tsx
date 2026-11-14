@@ -11,6 +11,7 @@ import { useGuestMonthCount } from '../guests/useGuestMonthCount'
 import { usePublishedMenu } from '../menus/usePublishedMenu'
 import { combinedActiveCount, managementOpenDaysMetric, metricValue, openDaysMetric, retryManagementOverview } from '../overview/metrics'
 import { useOrgDirectoryCounts } from '../overview/useOrgDirectoryCounts'
+import { employeeBuildingCounts, useHrOverviewData } from '../overview/useHrOverviewData'
 import { useSupportOrderCounts } from '../orders/useSupportOrderCounts'
 import type { MealFilter, StatusFilter } from '../types'
 
@@ -316,36 +317,51 @@ function UpcomingDeadlines({ days }: { days: ReturnType<typeof usePublishedMenu>
 
 function HrOverview() {
   const app = useApp()
-  const active = app.employees.filter((employee) => employee.active).length
+  const org = useHrOverviewData()
+  const active = org.employees.filter((employee) => employee.isActive).length
+  const inactive = org.employees.length - active
+  const distribution = employeeBuildingCounts(org.buildings, org.employees)
+  const max = Math.max(...distribution.map((building) => building.count), 1)
+
   return (
     <div className="space-y-4">
       <Stats
         items={[
-          { label: 'کارکنان فعال', value: fa(active), hint: `${fa(app.employees.length - active)} حساب غیرفعال`, icon: Utensils },
-          { label: 'ساختمان‌های فعال', value: fa(app.buildings.length), hint: 'هر کارمند یک ساختمان', icon: CalendarClock },
-          { label: 'گروه‌ها', value: fa(app.groups.length), hint: 'عضویت چندگانه مجاز است', icon: Sun },
-          { label: 'حساب جدید این ماه', value: fa(1), hint: 'پارسا کیانی، ۱ آبان', icon: Moon },
+          { label: 'کارکنان فعال', value: metricValue(org.status, org.status === 'ready' ? active : null), hint: org.status === 'ready' ? `${fa(inactive)} حساب غیرفعال` : 'فهرست کارکنان', icon: Utensils },
+          { label: 'کارکنان غیرفعال', value: metricValue(org.status, org.status === 'ready' ? inactive : null), hint: 'حساب‌های غیرفعال', icon: Moon },
+          { label: 'ساختمان‌ها', value: metricValue(org.status, org.status === 'ready' ? org.buildings.length : null), hint: 'فهرست سازمانی', icon: CalendarClock },
+          { label: 'گروه‌ها', value: metricValue(org.status, org.status === 'ready' ? org.groups.length : null), hint: 'گروه‌های فعال', icon: Sun },
         ]}
       />
+      {org.status === 'error' && (
+        <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-line bg-surface px-3 py-2">
+          <p className="text-sm text-danger">{org.message}</p>
+          <Button variant="secondary" onClick={org.retry}>تلاش دوباره</Button>
+        </div>
+      )}
       <div className="grid gap-4 lg:grid-cols-[1.4fr_1fr]">
         <Panel title="توزیع کارکنان بر اساس ساختمان">
-          <ul className="space-y-3">
-            {app.buildings.map((building) => {
-              const count = app.employees.filter((employee) => employee.active && employee.buildingId === building.id).length
-              const max = Math.max(...app.buildings.map((item) => app.employees.filter((employee) => employee.active && employee.buildingId === item.id).length), 1)
-              return (
+          {org.status === 'loading' ? (
+            <p className="text-sm text-muted">در حال خواندن اطلاعات سازمان…</p>
+          ) : org.status === 'error' ? (
+            <p className="text-sm text-danger">توزیع کارکنان از سامانه خوانده نشد.</p>
+          ) : distribution.length === 0 ? (
+            <p className="text-sm text-muted">ساختمانی ثبت نشده است.</p>
+          ) : (
+            <ul className="space-y-3">
+              {distribution.map((building) => (
                 <li key={building.id}>
                   <div className="mb-1 flex justify-between text-sm">
                     <span>{building.name}</span>
-                    <span className="text-muted">{fa(count)} نفر</span>
+                    <span className="text-muted">{fa(building.count)} نفر</span>
                   </div>
                   <div className="h-1.5 rounded bg-surface2">
-                    <div className="h-1.5 rounded bg-primary" style={{ width: `${(count / max) * 100}%` }} />
+                    <div className="h-1.5 rounded bg-primary" style={{ width: `${(building.count / max) * 100}%` }} />
                   </div>
                 </li>
-              )
-            })}
-          </ul>
+              ))}
+            </ul>
+          )}
         </Panel>
         <Panel title="میانبرها">
           <div className="grid gap-2">
