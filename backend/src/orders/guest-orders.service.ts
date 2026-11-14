@@ -30,12 +30,26 @@ export class GuestOrdersService {
   async create(actor: AuthUser, dto: CreateGuestOrderDto) {
     const mealDate = parseGregorianDateOnly(dto.mealDate);
     return this.prisma.$transaction(async (tx) => {
-      const building = await tx.building.findUnique({
+      const lockedBuildings = await tx.$queryRaw<Array<{ id: string }>>`
+        SELECT "id"
+        FROM "buildings"
+        WHERE "id" = ${dto.buildingId}::uuid AND "isActive" = TRUE
+        FOR KEY SHARE
+      `;
+      if (lockedBuildings.length === 0) {
+        const existingBuilding = await tx.building.findUnique({
+          where: { id: dto.buildingId },
+        });
+        if (!existingBuilding) {
+          throw new NotFoundException('ساختمان پیدا نشد.');
+        }
+        throw new UnprocessableEntityException(
+          'ثبت سفارش مهمان برای ساختمان غیرفعال امکان‌پذیر نیست.',
+        );
+      }
+      const building = await tx.building.findUniqueOrThrow({
         where: { id: dto.buildingId },
       });
-      if (!building) {
-        throw new NotFoundException('ساختمان پیدا نشد.');
-      }
       const item = await requirePublishedOption(
         tx,
         dto.menuItemId,
