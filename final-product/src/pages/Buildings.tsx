@@ -3,7 +3,7 @@ import { AuthRequestError } from '../auth/errors'
 import { buildingApi, type BuildingDetail, type BuildingSummary } from '../buildings/client'
 import { activeMemberCount } from '../buildings/map'
 import { usesLiveBuildingsPage } from '../buildings/access'
-import { Button, Dialog, Empty, Field, controlClass } from '../components/ui'
+import { Badge, Button, Dialog, Empty, Field, controlClass } from '../components/ui'
 import { can } from '../permissions'
 import { fa } from '../lib/text'
 import { useApp } from '../store'
@@ -41,6 +41,9 @@ function LiveBuildingsPage() {
   const [transferBusy, setTransferBusy] = useState(false)
   const [transferError, setTransferError] = useState('')
   const [notice, setNotice] = useState('')
+  const [statusConfirmation, setStatusConfirmation] = useState(false)
+  const [statusMutation, setStatusMutation] = useState(false)
+  const [statusError, setStatusError] = useState('')
 
   useEffect(() => {
     const controller = new AbortController()
@@ -103,6 +106,28 @@ function LiveBuildingsPage() {
     setBoot((value) => value + 1)
   }
 
+  async function changeBuildingStatus() {
+    if (!building || statusMutation) return
+    setStatusMutation(true)
+    setStatusError('')
+    try {
+      const updated = building.isActive
+        ? await buildingApi.deactivate(building.id)
+        : await buildingApi.reactivate(building.id)
+      setBuildings((items) => items.map((item) => item.id === updated.id ? updated : item))
+      setDetail((current) => current?.id === updated.id ? { ...current, isActive: updated.isActive } : current)
+      setStatusConfirmation(false)
+      setNotice(updated.isActive ? 'ساختمان دوباره فعال شد.' : 'ساختمان غیرفعال شد.')
+    } catch (error: unknown) {
+      setStatusError(apiMessage(
+        error,
+        building.isActive ? 'غیرفعال‌سازی ساختمان انجام نشد.' : 'فعال‌سازی ساختمان انجام نشد.',
+      ))
+    } finally {
+      setStatusMutation(false)
+    }
+  }
+
   async function transfer(event: { preventDefault: () => void }) {
     event.preventDefault()
     if (!moving || !building || transferBusy) return
@@ -138,7 +163,10 @@ function LiveBuildingsPage() {
           const count = activeMemberCount(users, item.id)
           return (
             <button key={item.id} className={`min-h-11 w-full rounded-md border px-3 py-2 text-start ${item.id === openId ? 'border-primary bg-surface' : 'border-line bg-surface'}`} onClick={() => setOpenId(item.id)}>
-              <span className="block text-sm font-medium">{item.name}</span>
+              <span className="flex items-center justify-between gap-2">
+                <span className="block text-sm font-medium">{item.name}</span>
+                <Badge tone={item.isActive ? 'ok' : 'neutral'}>{item.isActive ? 'فعال' : 'غیرفعال'}</Badge>
+              </span>
               <span className="text-xs text-muted">{fa(count)} کارمند فعال</span>
             </button>
           )
@@ -146,9 +174,22 @@ function LiveBuildingsPage() {
       </div>
       {status === 'ready' && building && (
         <section className="rounded-md border border-line bg-surface p-4">
-          <div className="flex items-center justify-between gap-3">
-            <h2 className="text-base font-semibold">{building.name}</h2>
-            {canEditBuilding && <Button variant="secondary" onClick={() => setEditing(building.id)}>ویرایش نام</Button>}
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="flex items-center gap-2">
+              <h2 className="text-base font-semibold">{building.name}</h2>
+              <Badge tone={building.isActive ? 'ok' : 'neutral'}>{building.isActive ? 'فعال' : 'غیرفعال'}</Badge>
+            </div>
+            {canEditBuilding && (
+              <div className="flex flex-wrap gap-2">
+                <Button variant="secondary" onClick={() => setEditing(building.id)}>ویرایش نام</Button>
+                <Button
+                  variant={building.isActive ? 'danger' : 'primary'}
+                  onClick={() => { setStatusError(''); setStatusConfirmation(true) }}
+                >
+                  {building.isActive ? 'غیرفعال‌سازی' : 'فعال‌سازی'}
+                </Button>
+              </div>
+            )}
           </div>
           {detailStatus === 'loading' && <p className="mt-2 text-sm text-muted">در حال خواندن جزئیات ساختمان…</p>}
           {detailStatus === 'error' && (
@@ -186,6 +227,30 @@ function LiveBuildingsPage() {
             </form>
           )}
         </section>
+      )}
+      {statusConfirmation && building && (
+        <Dialog
+          open
+          title={building.isActive ? 'غیرفعال‌سازی ساختمان' : 'فعال‌سازی ساختمان'}
+          onClose={() => !statusMutation && setStatusConfirmation(false)}
+        >
+          <p className="text-sm">
+            {building.isActive
+              ? 'ساختمان فقط زمانی غیرفعال می‌شود که هیچ کارمند فعالی به آن اختصاص نداشته باشد. حساب‌های غیرفعال و سوابق قبلی حفظ می‌شوند.'
+              : 'ساختمان دوباره برای تخصیص کاربران و عملیات جدید فعال می‌شود.'}
+          </p>
+          {statusError && <p className="mt-2 text-sm text-danger">{statusError}</p>}
+          <div className="mt-4 flex justify-end gap-2">
+            <Button variant="secondary" disabled={statusMutation} onClick={() => setStatusConfirmation(false)}>انصراف</Button>
+            <Button
+              variant={building.isActive ? 'danger' : 'primary'}
+              disabled={statusMutation}
+              onClick={() => void changeBuildingStatus()}
+            >
+              {statusMutation ? 'در حال ذخیره' : 'تأیید'}
+            </Button>
+          </div>
+        </Dialog>
       )}
       {editing && (
         <LiveBuildingForm
