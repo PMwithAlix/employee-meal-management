@@ -78,6 +78,16 @@ describe('BuildingsService activation lifecycle', () => {
     );
   });
 
+
+  it('keeps an already inactive building unchanged without writing another audit event', async () => {
+    const { service, tx, audit, current } = setup({ initialActive: false });
+
+    await expect(service.deactivate(actor, buildingId)).resolves.toEqual(current);
+    expect(tx.user.count).not.toHaveBeenCalled();
+    expect(tx.building.update).not.toHaveBeenCalled();
+    expect(audit.record).not.toHaveBeenCalled();
+  });
+
   it('does not deactivate a missing building', async () => {
     const { service, tx } = setup({ locked: [] });
 
