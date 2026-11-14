@@ -7,11 +7,11 @@ const actor = {
 } as never;
 const buildingId = '22222222-2222-2222-2222-222222222222';
 
-function setup(options?: { activeUsers?: number; locked?: Array<{ id: string }> }) {
+function setup(options?: { activeUsers?: number; locked?: Array<{ id: string }>; initialActive?: boolean }) {
   const current = {
     id: buildingId,
     name: 'ساختمان مرکزی',
-    isActive: true,
+    isActive: options?.initialActive ?? true,
     createdAt: new Date('2026-11-01T00:00:00.000Z'),
     updatedAt: new Date('2026-11-01T00:00:00.000Z'),
   };
@@ -89,7 +89,7 @@ describe('BuildingsService activation lifecycle', () => {
   });
 
   it('reactivates an inactive building and records the audit event', async () => {
-    const { service, tx, audit } = setup();
+    const { service, tx, audit } = setup({ initialActive: false });
 
     await expect(service.reactivate(actor, buildingId)).resolves.toMatchObject({
       id: buildingId,
