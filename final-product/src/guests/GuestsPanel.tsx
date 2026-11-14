@@ -398,7 +398,7 @@ export function GuestsPanel() {
           <input className={controlClass} value={note} onChange={(event) => setNote(event.target.value)} />
         </Field>
         {formError && <p className="text-sm text-danger">{formError}</p>}
-        <Button type="submit" className="w-full" disabled={formBusy || !allowed}>{formBusy ? 'در حال ثبت...' : 'ثبت سفارش مهمان'}</Button>
+        <Button type="submit" className="w-full" disabled={formBusy || !allowed || !buildings.some((item) => item.isActive)}>{formBusy ? 'در حال ثبت...' : 'ثبت سفارش مهمان'}</Button>
       </form>
 
       <Dialog open={Boolean(detail)} title="جزئیات سفارش مهمان" onClose={() => setDetail(null)} wide>
