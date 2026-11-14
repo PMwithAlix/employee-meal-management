@@ -16,7 +16,7 @@ jobs:
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 
       - name: Setup Node.js
-        uses: actions/setup-node@60edb22ea587637f45d1744122d1416a4f4d7b0 # v4.0.5
+        uses: actions/setup-node@v4
         with:
           node-version: '20'
           cache: npm
@@ -29,7 +29,7 @@ jobs:
           npm run build
 
       - name: Deploy dist to server
-        uses: appleboy/scp-action@bf279722388120b035371aaded8893d73501c8b # v0.1.7
+        uses: appleboy/scp-action@v0.1.7
         with:
           host: ${{ secrets.SSH_HOST }}
           username: ${{ secrets.SSH_USER }}
