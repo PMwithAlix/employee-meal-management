@@ -14,6 +14,8 @@ import { canAccess, ROLES } from '../permissions'
 import { NAV_ITEMS, pageTitle } from '../navigation'
 import { useApp } from '../store'
 import { cn } from '../lib/text'
+import { AuthRequestError } from '../auth/errors'
+import { notificationApi, type NotificationItem } from '../notifications/client'
 import type { Role } from '../types'
 import { BottomNav } from './BottomNav'
 import { OverviewPage } from '../pages/Overview'
@@ -59,6 +61,11 @@ export function Shell() {
   const desktop = useIsDesktop()
   const [notesOpen, setNotesOpen] = useState(false)
   const [profileOpen, setProfileOpen] = useState(false)
+  const [notificationRefresh, setNotificationRefresh] = useState(0)
+  const [notificationStatus, setNotificationStatus] = useState<'loading' | 'ready' | 'error'>('loading')
+  const [notificationMessage, setNotificationMessage] = useState('')
+  const [notificationItems, setNotificationItems] = useState<NotificationItem[]>([])
+  const [unreadNotificationCount, setUnreadNotificationCount] = useState(0)
   const visible = NAV_ITEMS.filter((item) => canAccess(app.role, item.id))
   const groups = [...new Set(visible.map((item) => item.group))]
   const Page = PAGES[app.page]
@@ -71,6 +78,46 @@ export function Shell() {
   useEffect(() => {
     if (desktop && app.mobileNav) app.setMobileNav(false)
   }, [desktop, app.mobileNav, app.setMobileNav])
+
+  useEffect(() => {
+    const controller = new AbortController()
+    setNotificationStatus('loading')
+    setNotificationMessage('')
+    void notificationApi.list({ page: 1, pageSize: 20 }, controller.signal).then((result) => {
+      if (controller.signal.aborted) return
+      setNotificationItems(result.items)
+      setUnreadNotificationCount(result.unreadCount)
+      setNotificationStatus('ready')
+    }).catch((error: unknown) => {
+      if (controller.signal.aborted) return
+      setNotificationStatus('error')
+      setNotificationMessage(error instanceof AuthRequestError ? error.message : 'بارگذاری اعلان‌ها انجام نشد.')
+    })
+    return () => controller.abort()
+  }, [notificationRefresh])
+
+  async function markNotificationRead(id: string) {
+    const current = notificationItems.find((item) => item.id === id)
+    if (!current || current.readAt) return
+    try {
+      const updated = await notificationApi.markRead(id)
+      setNotificationItems((items) => items.map((item) => item.id === id ? updated : item))
+      setUnreadNotificationCount((count) => Math.max(0, count - 1))
+    } catch (error) {
+      setNotificationMessage(error instanceof AuthRequestError ? error.message : 'علامت‌گذاری اعلان انجام نشد.')
+    }
+  }
+
+  async function markAllNotificationsRead() {
+    if (unreadNotificationCount === 0) return
+    try {
+      const result = await notificationApi.markAllRead()
+      setNotificationItems((items) => items.map((item) => ({ ...item, readAt: item.readAt ?? result.readAt })))
+      setUnreadNotificationCount(0)
+    } catch (error) {
+      setNotificationMessage(error instanceof AuthRequestError ? error.message : 'علامت‌گذاری اعلان‌ها انجام نشد.')
+    }
+  }
 
   return (
     <div className="min-h-screen bg-bg text-ink">
@@ -164,15 +211,68 @@ export function Shell() {
               {app.theme === 'dark' ? <Sun size={16} /> : <Moon size={16} />}
             </button>
             <div className="relative">
-              <button className="relative grid h-11 w-11 shrink-0 place-items-center rounded-md" aria-label="اعلان‌ها" title="اعلان‌ها" onClick={() => { setNotesOpen((value) => !value); setProfileOpen(false) }}>
+              <button
+                className="relative grid h-11 w-11 shrink-0 place-items-center rounded-md"
+                aria-label={unreadNotificationCount > 0 ? 'اعلان‌ها، ' + unreadNotificationCount + ' خوانده‌نشده' : 'اعلان‌ها'}
+                title="اعلان‌ها"
+                aria-expanded={notesOpen}
+                onClick={() => {
+                  const opening = !notesOpen
+                  setNotesOpen(opening)
+                  setProfileOpen(false)
+                  if (opening) setNotificationRefresh((value) => value + 1)
+                }}
+              >
                 <Bell size={16} />
+                {unreadNotificationCount > 0 && (
+                  <span className="absolute left-1 top-1 grid h-4 min-w-4 place-items-center rounded-full bg-danger px-1 text-[10px] text-onprimary">
+                    {unreadNotificationCount > 99 ? '۹۹+' : unreadNotificationCount.toLocaleString('fa-IR')}
+                  </span>
+                )}
               </button>
               {notesOpen && (
                 <div className="absolute end-0 z-30 mt-1 w-[min(22rem,calc(100vw-1.5rem))] rounded-md border border-line bg-surface p-2 shadow-card">
-                  <div className="mb-2 flex items-center justify-between px-1">
+                  <div className="mb-2 flex items-center justify-between gap-2 px-1">
                     <p className="text-sm font-medium">اعلان‌ها</p>
+                    <button
+                      type="button"
+                      className="min-h-9 px-2 text-xs text-link disabled:opacity-50"
+                      disabled={notificationStatus !== 'ready' || unreadNotificationCount === 0}
+                      onClick={() => void markAllNotificationsRead()}
+                    >
+                      خواندن همه
+                    </button>
                   </div>
-                  <p className="px-2 py-3 text-sm text-muted">فهرست اعلان از API سامانه در دسترس نیست. رویداد ساختگی نمایش داده نمی‌شود.</p>
+                  {notificationStatus === 'loading' && <p className="px-2 py-4 text-sm text-muted">در حال بارگذاری اعلان‌ها…</p>}
+                  {notificationStatus === 'error' && (
+                    <div className="px-2 py-3">
+                      <p className="text-sm text-danger">{notificationMessage}</p>
+                      <button type="button" className="mt-2 min-h-9 text-xs text-link" onClick={() => setNotificationRefresh((value) => value + 1)}>تلاش دوباره</button>
+                    </div>
+                  )}
+                  {notificationStatus === 'ready' && notificationItems.length === 0 && (
+                    <p className="px-2 py-4 text-sm text-muted">اعلانی برای این حساب ثبت نشده است.</p>
+                  )}
+                  {notificationStatus === 'ready' && notificationItems.length > 0 && (
+                    <div className="max-h-80 space-y-1 overflow-auto">
+                      {notificationItems.map((item) => (
+                        <button
+                          key={item.id}
+                          type="button"
+                          className={cn('block min-h-11 w-full rounded-md px-2 py-2 text-start hover:bg-surface2', !item.readAt && 'bg-infobg')}
+                          onClick={() => void markNotificationRead(item.id)}
+                          disabled={Boolean(item.readAt)}
+                        >
+                          <span className="flex items-center justify-between gap-2">
+                            <span className="text-sm font-medium">{item.title}</span>
+                            {!item.readAt && <span className="shrink-0 text-[11px] text-info">جدید</span>}
+                          </span>
+                          <span className="mt-0.5 block text-xs text-muted">{item.body}</span>
+                          <span className="mt-1 block text-[11px] text-muted">{formatNotificationDate(item.createdAt)}</span>
+                        </button>
+                      ))}
+                    </div>
+                  )}
                 </div>
               )}
             </div>
@@ -228,4 +328,10 @@ export function Shell() {
       </div>
     </div>
   )
+}
+
+function formatNotificationDate(value: string) {
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return value
+  return new Intl.DateTimeFormat('fa-IR', { dateStyle: 'short', timeStyle: 'short' }).format(date)
 }
