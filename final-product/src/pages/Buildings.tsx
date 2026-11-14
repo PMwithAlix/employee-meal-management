@@ -167,7 +167,7 @@ function LiveBuildingsPage() {
                 <span className="block text-sm font-medium">{item.name}</span>
                 <Badge tone={item.isActive ? 'ok' : 'neutral'}>{item.isActive ? 'فعال' : 'غیرفعال'}</Badge>
               </span>
-              <span className="text-xs text-muted">{fa(count)} کارمند فعال</span>
+              <span className="text-xs text-muted">{fa(count)} حساب فعال</span>
             </button>
           )
         })}
