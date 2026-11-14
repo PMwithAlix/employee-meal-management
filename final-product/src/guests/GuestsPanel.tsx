@@ -85,7 +85,7 @@ export function GuestsPanel() {
       if (controller.signal.aborted) return
       setBuildings(listed)
       setBuildingsStatus('ready')
-      setBuildingId((current) => current || listed[0]?.id || '')
+      setBuildingId((current) => current && listed.some((item) => item.id === current && item.isActive) ? current : listed.find((item) => item.isActive)?.id ?? '')
     }).catch((error: unknown) => {
       if (controller.signal.aborted) return
       setBuildings([])
@@ -368,8 +368,8 @@ export function GuestsPanel() {
       <form className="space-y-3 rounded-md border border-line bg-surface p-3" onSubmit={(event) => void onCreate(event)}>
         <Field label="ساختمان">
           <select className={controlClass} value={buildingId} onChange={(event) => setBuildingId(event.target.value)} disabled={buildingsStatus !== 'ready'}>
-            {buildings.length === 0 && <option value="">ساختمانی موجود نیست</option>}
-            {buildings.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
+            {buildings.every((item) => !item.isActive) && <option value="">ساختمان فعالی موجود نیست</option>}
+            {buildings.filter((item) => item.isActive).map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
           </select>
         </Field>
         {buildingsStatus === 'error' && <p className="text-sm text-danger">{buildingsMessage}</p>}
