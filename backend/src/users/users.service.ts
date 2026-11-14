@@ -216,6 +216,9 @@ export class UsersService {
       return current;
     }
     return this.prisma.$transaction(async (tx) => {
+      if (current.buildingId) {
+        await this.requireActiveBuilding(tx, current.buildingId);
+      }
       const user = await tx.user.update({
         where: { id },
         data: { isActive: true },
