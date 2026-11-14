@@ -6,15 +6,15 @@ import request from 'supertest';
 import { App } from 'supertest/types';
 import { AppModule } from '../src/app.module';
 import { configureApp } from '../src/app.setup';
-import { PasswordService } from '../src/auth/password.service';
+import { PasswordService } from '../src/modules/auth/password.service';
 import { EnvironmentVariables } from '../src/config/env.validation';
 import {
   formatDateOnly,
   jalaliToGregorian,
   utcDateFromGregorian,
-} from '../src/dates/jalali';
-import { buildMenuWorkbook } from '../src/menus/import/menu-workbook.builder';
-import { ImportPolicy } from '../src/menus/menu.types';
+} from '../src/common/calendar/jalali';
+import { buildMenuWorkbook } from '../src/modules/menus/import/menu-workbook.builder';
+import { ImportPolicy } from '../src/modules/menus/menu.types';
 
 const prisma = new PrismaClient();
 const password = 'Kavosh-1405';

@@ -6,7 +6,7 @@ import request from 'supertest';
 import { App } from 'supertest/types';
 import { AppModule } from '../src/app.module';
 import { configureApp } from '../src/app.setup';
-import { PasswordService } from '../src/auth/password.service';
+import { PasswordService } from '../src/modules/auth/password.service';
 import { EnvironmentVariables } from '../src/config/env.validation';
 
 const prisma = new PrismaClient();

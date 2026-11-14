@@ -2,9 +2,9 @@ import { Logger } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import { Role } from '@prisma/client';
 import { AppModule } from '../app.module';
-import { normalizeUsername, usernameIssue } from '../auth/crypto/username';
-import { passwordIssue } from '../auth/password.policy';
-import { PasswordService } from '../auth/password.service';
+import { normalizeUsername, usernameIssue } from '../modules/auth/security/username';
+import { passwordIssue } from '../modules/auth/password.policy';
+import { PasswordService } from '../modules/auth/password.service';
 import { PrismaService } from '../database/prisma.service';
 
 async function bootstrapAdmin() {

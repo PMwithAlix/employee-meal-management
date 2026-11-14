@@ -1,16 +1,16 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { validateEnv } from './config/env.validation';
-import { AuditModule } from './audit/audit.module';
-import { AuthModule } from './auth/auth.module';
-import { BuildingsModule } from './buildings/buildings.module';
+import { AuditModule } from './modules/audit/audit.module';
+import { AuthModule } from './modules/auth/auth.module';
+import { BuildingsModule } from './modules/buildings/buildings.module';
 import { DatabaseModule } from './database/database.module';
-import { GroupsModule } from './groups/groups.module';
+import { GroupsModule } from './modules/groups/groups.module';
 import { HealthModule } from './health/health.module';
-import { MenusModule } from './menus/menus.module';
-import { OrdersModule } from './orders/orders.module';
-import { NotificationsModule } from './notifications/notifications.module';
-import { UsersModule } from './users/users.module';
+import { MenusModule } from './modules/menus/menus.module';
+import { OrdersModule } from './modules/orders/orders.module';
+import { NotificationsModule } from './modules/notifications/notifications.module';
+import { UsersModule } from './modules/users/users.module';
 
 @Module({
   imports: [
