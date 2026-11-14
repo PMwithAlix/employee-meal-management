@@ -59,7 +59,7 @@ describe('buildingApi', () => {
   })
 
   it('deactivates and reactivates a building through dedicated endpoints', async () => {
-    const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
+    const fetchMock = vi.fn(async (url: string) => {
       const inactive = String(url).endsWith('/deactivate')
       return new Response(JSON.stringify({
         id: 'b1',
