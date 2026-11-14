@@ -42,7 +42,7 @@ export class BuildingsService {
   async deactivate(actor: AuthUser, id: string) {
     return this.prisma.$transaction(async (tx) => {
       const locked = await tx.$queryRaw<Array<{ id: string }>>`
-        SELECT id FROM "buildings" WHERE id = ${id}::uuid FOR UPDATE
+        SELECT "id" FROM "buildings" WHERE "id" = ${id}::uuid FOR UPDATE
       `;
       if (locked.length === 0) {
         throw new NotFoundException('ساختمان پیدا نشد.');
