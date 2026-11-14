@@ -244,6 +244,7 @@ export function Shell() {
                     </button>
                   </div>
                   {notificationStatus === 'loading' && <p className="px-2 py-4 text-sm text-muted">در حال بارگذاری اعلان‌ها…</p>}
+                  {notificationStatus === 'ready' && notificationMessage && <p className="px-2 py-2 text-xs text-danger">{notificationMessage}</p>}
                   {notificationStatus === 'error' && (
                     <div className="px-2 py-3">
                       <p className="text-sm text-danger">{notificationMessage}</p>
