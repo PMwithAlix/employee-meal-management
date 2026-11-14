@@ -91,7 +91,7 @@ export const userApi = {
     return authRequest<unknown>(`/users/${id}`, { ...session, signal }).then(requireUser)
   },
 
-  create(body: { username: string; password: string; role: string; buildingId: string }, signal?: AbortSignal) {
+  create(body: { username: string; password: string; role: string; buildingId?: string | null }, signal?: AbortSignal) {
     return authRequest<unknown>('/users', { ...session, method: 'POST', body, signal }).then(requireUser)
   },
 

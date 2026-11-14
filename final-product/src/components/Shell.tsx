@@ -8,12 +8,12 @@ import {
   Sun,
   X,
 } from 'lucide-react'
-import { PERSONA_ID, ROLE_LABEL } from '../data'
+import { ROLE_LABEL } from '../data'
 import { usernameInitials } from '../lib/credentials'
 import { canAccess, ROLES } from '../permissions'
 import { NAV_ITEMS, pageTitle } from '../navigation'
 import { useApp } from '../store'
-import { fa, cn } from '../lib/text'
+import { cn } from '../lib/text'
 import type { Role } from '../types'
 import { BottomNav } from './BottomNav'
 import { OverviewPage } from '../pages/Overview'
@@ -59,8 +59,6 @@ export function Shell() {
   const desktop = useIsDesktop()
   const [notesOpen, setNotesOpen] = useState(false)
   const [profileOpen, setProfileOpen] = useState(false)
-  const visibleNotes = app.notes.filter((note) => !note.employeeId || note.employeeId === PERSONA_ID[app.role])
-  const unread = visibleNotes.filter((note) => !note.read).length
   const visible = NAV_ITEMS.filter((item) => canAccess(app.role, item.id))
   const groups = [...new Set(visible.map((item) => item.group))]
   const Page = PAGES[app.page]
@@ -168,34 +166,13 @@ export function Shell() {
             <div className="relative">
               <button className="relative grid h-11 w-11 shrink-0 place-items-center rounded-md" aria-label="اعلان‌ها" title="اعلان‌ها" onClick={() => { setNotesOpen((value) => !value); setProfileOpen(false) }}>
                 <Bell size={16} />
-                {unread > 0 && <span className="absolute left-1 top-1 grid h-4 min-w-4 place-items-center rounded-full bg-danger px-1 text-[10px] text-onprimary">{fa(unread)}</span>}
               </button>
               {notesOpen && (
                 <div className="absolute end-0 z-30 mt-1 w-[min(22rem,calc(100vw-1.5rem))] rounded-md border border-line bg-surface p-2 shadow-card">
                   <div className="mb-2 flex items-center justify-between px-1">
                     <p className="text-sm font-medium">اعلان‌ها</p>
-                    <button className="min-h-11 px-2 text-xs text-link" onClick={app.markAllNotes}>خواندن همه</button>
                   </div>
-                  <div className="max-h-80 space-y-1 overflow-auto">
-                    {visibleNotes.map((note) => (
-                      <button
-                        key={note.id}
-                        className={cn('block min-h-11 w-full rounded-md px-2 py-2 text-start hover:bg-surface2', !note.read && 'bg-infobg')}
-                        onClick={() => {
-                          app.markNote(note.id)
-                          if (note.page) app.setPage(note.page)
-                          setNotesOpen(false)
-                        }}
-                      >
-                        <span className="flex items-center justify-between gap-2">
-                          <span className="text-sm font-medium">{note.title}</span>
-                          {!note.read && <span className="text-[11px] text-info">جدید</span>}
-                        </span>
-                        <span className="mt-0.5 block text-xs text-muted">{note.body}</span>
-                        <span className="mt-1 block text-[11px] text-muted">{note.at}</span>
-                      </button>
-                    ))}
-                  </div>
+                  <p className="px-2 py-3 text-sm text-muted">فهرست اعلان از API سامانه در دسترس نیست. رویداد ساختگی نمایش داده نمی‌شود.</p>
                 </div>
               )}
             </div>

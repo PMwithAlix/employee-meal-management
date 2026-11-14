@@ -24,6 +24,25 @@ describe('authRequest', () => {
     expect(JSON.stringify(init)).not.toMatch(/khaan\.sid|accessToken|sessionToken/i)
   })
 
+  it('posts change-password fields without treating a wrong current password as logout', async () => {
+    const onUnauthorized = vi.fn()
+    setUnauthorizedHandler(onUnauthorized)
+    const fetchMock = vi.fn(async () => new Response(JSON.stringify({ message: 'رمز عبور فعلی صحیح نیست.' }), { status: 401 }))
+    vi.stubGlobal('fetch', fetchMock)
+    await expect(authApi.changePassword('old', 'Newpass12', 'Newpass12')).rejects.toMatchObject({
+      kind: 'credentials',
+      status: 401,
+    })
+    const [url, init] = (fetchMock.mock.calls as unknown as Array<[string, RequestInit]>)[0]
+    expect(url).toBe('/api/v1/auth/change-password')
+    expect(JSON.parse(String(init.body))).toEqual({
+      currentPassword: 'old',
+      newPassword: 'Newpass12',
+      confirmNewPassword: 'Newpass12',
+    })
+    expect(onUnauthorized).not.toHaveBeenCalled()
+  })
+
   it('posts login credentials to the backend contract', async () => {
     const fetchMock = vi.fn(async () => new Response(JSON.stringify({ id: '1' }), { status: 200 }))
     vi.stubGlobal('fetch', fetchMock)

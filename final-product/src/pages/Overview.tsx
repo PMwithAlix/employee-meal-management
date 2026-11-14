@@ -10,6 +10,7 @@ import { useRecentAudit } from '../audit/useRecentAudit'
 import { useGuestMonthCount } from '../guests/useGuestMonthCount'
 import { usePublishedMenu } from '../menus/usePublishedMenu'
 import { combinedActiveCount, managementOpenDaysMetric, metricValue, openDaysMetric, retryManagementOverview } from '../overview/metrics'
+import { useOrgDirectoryCounts } from '../overview/useOrgDirectoryCounts'
 import { useSupportOrderCounts } from '../orders/useSupportOrderCounts'
 import type { MealFilter, StatusFilter } from '../types'
 
@@ -217,7 +218,7 @@ function SupportOverview() {
   return <LiveOpsOverview variant="support" />
 }
 
-function LiveOpsOverview({ variant }: { variant: 'support' | 'management' }) {
+function LiveOpsOverview({ variant }: { variant: 'support' | 'management' | 'admin' }) {
   const app = useApp()
   const guests = useGuestMonthCount()
   const counts = useSupportOrderCounts()
@@ -233,17 +234,18 @@ function LiveOpsOverview({ variant }: { variant: 'support' | 'management' }) {
   const deadlinesReady = published.status === 'ready' && app.deadlineStatus === 'ready'
   const managementDeadlinesEmpty = variant === 'management' && app.deadlineStatus === 'ready' && (published.status === 'empty' || (published.status === 'ready' && openDays.length === 0))
   const managementDeadlinesError = variant === 'management' && !deadlinesLoading && !deadlinesReady && !managementDeadlinesEmpty
-  const fourth = variant === 'support'
-    ? { label: 'سفارش مهمان', value: metricValue(guests.status, guests.count), hint: 'مورد فعال', icon: Utensils }
-    : { label: 'سفارش‌های فعال', value: metricValue(counts.status, combinedActiveCount(counts.status, counts.lunch, counts.dinner)), hint: 'مجموع ناهار و شام', icon: Utensils }
+  const fourth = variant === 'management'
+    ? { label: 'سفارش‌های فعال', value: metricValue(counts.status, combinedActiveCount(counts.status, counts.lunch, counts.dinner)), hint: 'مجموع ناهار و شام', icon: Utensils }
+    : { label: 'سفارش مهمان', value: metricValue(guests.status, guests.count), hint: 'مورد فعال', icon: Utensils }
   const retry = () => {
-    if (variant !== 'management') return
+    if (variant === 'support') return
     retryManagementOverview({
       counts: counts.retry,
       published: published.retry,
       recent: recent.retry,
       deadlines: app.retryDeadlines,
     })
+    if (variant === 'admin') guests.retry()
   }
 
   return (
@@ -256,18 +258,18 @@ function LiveOpsOverview({ variant }: { variant: 'support' | 'management' }) {
           fourth,
         ]}
       />
-      {variant === 'management' && (counts.status === 'error' || managementDeadlinesError || recent.status === 'error') && (
+      {(variant === 'management' || variant === 'admin') && (counts.status === 'error' || (variant === 'admin' && guests.status === 'error') || managementDeadlinesError || recent.status === 'error') && (
         <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-line bg-surface px-3 py-2">
           <p className="text-sm text-danger">{counts.message || published.message || recent.message || 'داده‌های نمای کلی از سامانه خوانده نشد.'}</p>
           <Button variant="secondary" onClick={retry}>تلاش دوباره</Button>
         </div>
       )}
       <div className="grid gap-4 lg:grid-cols-2">
-        <Panel title="مهلت‌های پیش رو" action={variant === 'support'
-          ? <button className="min-h-11 px-2 text-xs text-link" onClick={() => app.setPage('menuMgmt')}>مدیریت منو</button>
-          : <button className="min-h-11 px-2 text-xs text-link" onClick={() => app.setPage('reports')}>گزارش‌ها</button>}
+        <Panel title="مهلت‌های پیش رو" action={variant === 'management'
+          ? <button className="min-h-11 px-2 text-xs text-link" onClick={() => app.setPage('reports')}>گزارش‌ها</button>
+          : <button className="min-h-11 px-2 text-xs text-link" onClick={() => app.setPage('menuMgmt')}>مدیریت منو</button>}
         >
-          {deadlinesLoading ? <p className="text-sm text-muted">در حال خواندن مهلت‌ها…</p> : variant === 'support' ? (
+          {deadlinesLoading ? <p className="text-sm text-muted">در حال خواندن مهلت‌ها…</p> : variant === 'support' || variant === 'admin' ? (
             published.status !== 'ready' || app.deadlineStatus !== 'ready' ? <p className="text-sm text-danger">مهلت‌ها از سامانه خوانده نشد.</p> : openDays.length === 0 ? <p className="text-sm text-muted">روز بازی با مهلت ذخیره‌شده نیست.</p> : <UpcomingDeadlines days={openDays} />
           ) : managementDeadlinesError ? <p className="text-sm text-danger">{published.message || app.deadlineMessage || 'مهلت‌ها از سامانه خوانده نشد.'}</p> : managementDeadlinesEmpty ? <p className="text-sm text-muted">روز بازی با مهلت ذخیره‌شده نیست.</p> : <UpcomingDeadlines days={openDays} />}
         </Panel>
@@ -368,6 +370,7 @@ function ManagementOverview() {
 
 function AdminOverview() {
   const app = useApp()
+  const org = useOrgDirectoryCounts()
   const links: Array<{ label: string; page: 'menuMgmt' | 'employees' | 'buildings' | 'groups' | 'reports' | 'activity' }> = [
     { label: 'مدیریت منو', page: 'menuMgmt' },
     { label: 'مدیریت کارکنان', page: 'employees' },
@@ -378,14 +381,21 @@ function AdminOverview() {
   ]
   return (
     <div className="space-y-4">
+      <LiveOpsOverview variant="admin" />
       <Stats
         items={[
-          { label: 'کارکنان', value: fa(app.employees.length), hint: `${fa(app.employees.filter((employee) => employee.active).length)} فعال`, icon: Utensils },
-          { label: 'ساختمان‌ها', value: fa(app.buildings.length), hint: 'بدون ویژگی اضافه', icon: CalendarClock },
-          { label: 'سفارش ثبت‌شده', value: fa(app.orders.filter((order) => order.choice && order.jy === app.selectedMonth.jy && order.jm === app.selectedMonth.jm).length), hint: app.monthTitle, icon: Sun },
-          { label: 'گروه‌ها', value: fa(app.groups.length), hint: 'عضویت آزاد', icon: Moon },
+          { label: 'حساب‌ها', value: metricValue(org.status, org.users), hint: 'تمام نقش‌ها', icon: Utensils },
+          { label: 'کارکنان فعال', value: metricValue(org.status, org.activeEmployees), hint: 'نقش کارمند', icon: Sun },
+          { label: 'ساختمان‌ها', value: metricValue(org.status, org.buildings), hint: 'فهرست سازمانی', icon: CalendarClock },
+          { label: 'گروه‌های فعال', value: metricValue(org.status, org.groups), hint: 'عضویت فقط کارمند', icon: Moon },
         ]}
       />
+      {org.status === 'error' && (
+        <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-line bg-surface px-3 py-2">
+          <p className="text-sm text-danger">{org.message}</p>
+          <Button variant="secondary" onClick={org.retry}>تلاش دوباره</Button>
+        </div>
+      )}
       <Panel title="بخش‌های سامانه">
         <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
           {links.map((link) => (

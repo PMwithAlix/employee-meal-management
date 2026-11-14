@@ -1,7 +1,7 @@
 import { errorFromResponse, networkError } from './errors'
 
 // Session cookie `khaan.sid` is HttpOnly (Path=/api/v1). Never persist tokens in web storage.
-// Not wired in this stage: POST /api/v1/auth/logout-all, POST /api/v1/auth/change-password.
+// Not wired: POST /api/v1/auth/logout-all.
 
 export function apiBaseUrl() {
   const raw = import.meta.env.VITE_API_BASE_URL
@@ -85,6 +85,12 @@ export const authApi = {
     return authRequest<{ ok: true }>('/auth/logout', {
       method: 'POST',
       treatUnauthorizedAsSessionEnd: true,
+    })
+  },
+  changePassword(currentPassword: string, newPassword: string, confirmNewPassword: string) {
+    return authRequest<{ ok: true }>('/auth/change-password', {
+      method: 'POST',
+      body: { currentPassword, newPassword, confirmNewPassword },
     })
   },
 }

@@ -2,8 +2,8 @@ import { useEffect, useMemo, useState } from 'react'
 import { AuthRequestError } from '../auth/errors'
 import { buildingApi, type BuildingDetail, type BuildingSummary } from '../buildings/client'
 import { activeMemberCount } from '../buildings/map'
+import { usesLiveBuildingsPage } from '../buildings/access'
 import { Button, Dialog, Empty, Field, controlClass } from '../components/ui'
-import { fullName } from '../data'
 import { can } from '../permissions'
 import { fa } from '../lib/text'
 import { useApp } from '../store'
@@ -12,104 +12,8 @@ import { isHrManagedRole, type ManagedUser } from '../users/map'
 
 export function BuildingsPage() {
   const app = useApp()
-  if (app.role === 'hr') return <LiveBuildingsPage />
-  return <SeedBuildingsPage />
-}
-
-function SeedBuildingsPage() {
-  const app = useApp()
-  const [editing, setEditing] = useState<string | 'new' | null>(null)
-  const [openId, setOpenId] = useState(app.buildings[0]?.id ?? '')
-  const building = app.buildings.find((item) => item.id === openId)
-  const people = app.employees.filter((employee) => employee.buildingId === openId)
-  const [moving, setMoving] = useState('')
-
-  return (
-    <div className="grid gap-4 lg:grid-cols-[16rem_1fr]">
-      <div className="space-y-2">
-        <Button className="w-full" onClick={() => setEditing('new')}>ساختمان جدید</Button>
-        {app.buildings.map((item) => {
-          const count = app.employees.filter((employee) => employee.active && employee.buildingId === item.id).length
-          return (
-            <button key={item.id} className={`min-h-11 w-full rounded-md border px-3 py-2 text-start ${item.id === openId ? 'border-primary bg-surface' : 'border-line bg-surface'}`} onClick={() => setOpenId(item.id)}>
-              <span className="block text-sm font-medium">{item.name}</span>
-              <span className="text-xs text-muted">{fa(count)} کارمند فعال</span>
-            </button>
-          )
-        })}
-      </div>
-      {building && (
-        <section className="rounded-md border border-line bg-surface p-4">
-          <div className="flex items-center justify-between gap-3">
-            <h2 className="text-base font-semibold">{building.name}</h2>
-            <Button variant="secondary" onClick={() => setEditing(building.id)}>ویرایش نام</Button>
-          </div>
-          <p className="mt-2 text-sm text-muted">{fa(people.length)} نفر به این ساختمان وصل‌اند، از جمله حساب‌های غیرفعال.</p>
-          <ul className="mt-3 divide-y divide-line text-sm">
-            {people.map((employee) => (
-              <li key={employee.id} className="flex justify-between py-2">
-                <span>{fullName(employee)}</span>
-                <span className="text-muted">{employee.active ? 'فعال' : 'غیرفعال'}</span>
-              </li>
-            ))}
-          </ul>
-          <form
-            className="mt-4 space-y-2 border-t border-line pt-4"
-            onSubmit={(event) => {
-              event.preventDefault()
-              if (!moving) return
-              app.assignBuilding(moving, building.id)
-              setMoving('')
-            }}
-          >
-            <p className="text-sm font-medium">انتقال کارمند به این ساختمان</p>
-            <p className="text-xs text-muted">هر کارمند فقط یک ساختمان دارد. سفارش‌های قبلی با ساختمان زمان ثبت باقی می‌مانند.</p>
-            <div className="flex flex-wrap gap-2">
-              <select className="h-11 min-w-0 flex-1 rounded-md border border-line bg-bg px-2 text-base" aria-label="کارمند برای انتقال" value={moving} onChange={(event) => setMoving(event.target.value)}>
-                <option value="">انتخاب کارمند</option>
-                {app.employees.filter((employee) => employee.buildingId !== building.id).map((employee) => (
-                  <option key={employee.id} value={employee.id}>{fullName(employee)}</option>
-                ))}
-              </select>
-              <Button type="submit" disabled={!moving}>انتقال</Button>
-            </div>
-          </form>
-        </section>
-      )}
-      {editing && <SeedBuildingForm id={editing === 'new' ? undefined : editing} onClose={() => setEditing(null)} onCreated={setOpenId} />}
-    </div>
-  )
-}
-
-function SeedBuildingForm({ id, onClose, onCreated }: { id?: string; onClose: () => void; onCreated: (id: string) => void }) {
-  const app = useApp()
-  const current = app.buildings.find((item) => item.id === id)
-  const [name, setName] = useState(current?.name ?? '')
-  const [error, setError] = useState('')
-  return (
-    <Dialog open title={id ? 'ویرایش ساختمان' : 'ساختمان جدید'} onClose={onClose}>
-      <form
-        onSubmit={(event) => {
-          event.preventDefault()
-          if (!name.trim()) {
-            setError('نام ساختمان را وارد کنید.')
-            return
-          }
-          const nextId = app.saveBuilding(name, id)
-          if (nextId && !id) onCreated(nextId)
-          onClose()
-        }}
-      >
-        <Field label="نام ساختمان"><input className={controlClass} value={name} onChange={(event) => { setName(event.target.value); setError('') }} /></Field>
-        {error && <p className="mt-1 text-sm text-danger">{error}</p>}
-        <p className="mt-2 text-xs text-muted">در محدوده فعلی محصول، ساختمان فقط نام دارد.</p>
-        <div className="mt-4 flex justify-end gap-2">
-          <Button variant="secondary" onClick={onClose}>انصراف</Button>
-          <Button type="submit">ذخیره</Button>
-        </div>
-      </form>
-    </Dialog>
-  )
+  if (!usesLiveBuildingsPage(app.role)) return null
+  return <LiveBuildingsPage />
 }
 
 function apiMessage(error: unknown, fallback: string) {
@@ -187,8 +91,12 @@ function LiveBuildingsPage() {
   const building = detail && detail.id === openId ? detail : buildings.find((item) => item.id === openId) ?? null
   const people = useMemo(() => users.filter((item) => item.buildingId === openId), [users, openId])
   const movers = useMemo(
-    () => users.filter((item) => item.buildingId !== openId && isHrManagedRole(item.role)),
-    [users, openId],
+    () => users.filter((item) => {
+      if (item.buildingId === openId) return false
+      if (app.role === 'admin') return item.role !== 'ADMIN'
+      return isHrManagedRole(item.role)
+    }),
+    [users, openId, app.role],
   )
 
   function refresh() {

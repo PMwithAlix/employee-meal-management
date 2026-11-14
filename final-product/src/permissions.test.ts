@@ -53,6 +53,8 @@ describe('management observer access', () => {
     }
     expect(can('employee', 'order.self')).toBe(true)
     expect(can('hr', 'employee.edit')).toBe(true)
+    expect(can('admin', 'employee.edit')).toBe(true)
+    expect(can('admin', 'building.edit')).toBe(true)
     expect(can('admin', 'group.edit')).toBe(true)
     expect(can('hr', 'group.edit')).toBe(true)
     expect(can('support', 'group.edit')).toBe(false)

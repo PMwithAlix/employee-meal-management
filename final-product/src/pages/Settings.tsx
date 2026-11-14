@@ -1,5 +1,7 @@
 import { useState } from 'react'
-import { DEMO_PASSWORD, passwordIssue } from '../lib/credentials'
+import { authApi } from '../auth/client'
+import { AuthRequestError } from '../auth/errors'
+import { passwordIssue } from '../lib/credentials'
 import { useApp } from '../store'
 import { Button, Segmented } from '../components/ui'
 import { SecretField } from '../components/SecretField'
@@ -34,7 +36,7 @@ export function SettingsPage() {
 
         <section className="rounded-md border border-line bg-surface p-4">
           <h2 className="text-sm font-semibold">امنیت حساب</h2>
-          <p className="mt-1 text-xs text-muted">تغییر رمز فقط در همین نشست نمایشی اعمال می‌شود و ورود واقعی را کنترل نمی‌کند. رمز فعلی حساب‌های نمایشی در شروع نشست «{DEMO_PASSWORD}» است.</p>
+          <p className="mt-1 text-xs text-muted">پس از تغییر رمز، همه نشست‌های این حساب بسته می‌شوند و باید دوباره وارد شوید.</p>
           <form
             className="mt-3 grid gap-3 sm:grid-cols-2"
             onSubmit={(event) => {
@@ -44,17 +46,18 @@ export function SettingsPage() {
               setOk(false)
               if (blocked || saving) return
               setSaving(true)
-              const result = app.changePassword(current, next)
-              setSaving(false)
-              if (result) {
-                setMessage(result)
-                return
-              }
-              setOk(true)
-              setCurrent('')
-              setNext('')
-              setRepeat('')
-              setTried(false)
+              void authApi.changePassword(current, next, repeat).then(() => {
+                setOk(true)
+                setCurrent('')
+                setNext('')
+                setRepeat('')
+                setTried(false)
+                app.logout()
+              }).catch((error: unknown) => {
+                setMessage(error instanceof AuthRequestError ? error.message : 'تغییر رمز عبور انجام نشد.')
+              }).finally(() => {
+                setSaving(false)
+              })
             }}
           >
             <div className="sm:col-span-2">
@@ -63,7 +66,7 @@ export function SettingsPage() {
             <SecretField label="رمز جدید" value={next} onChange={setNext} autoComplete="new-password" error={tried ? errors.next : ''} />
             <SecretField label="تکرار رمز جدید" value={repeat} onChange={setRepeat} autoComplete="new-password" error={tried ? errors.repeat : ''} />
             {message ? <p className="text-sm text-danger sm:col-span-2">{message}</p> : null}
-            {ok ? <p className="text-sm text-ok sm:col-span-2">رمز عبور در این نشست به‌روز شد.</p> : null}
+            {ok ? <p className="text-sm text-ok sm:col-span-2">رمز عبور تغییر کرد. برای ادامه دوباره وارد شوید.</p> : null}
             <div className="sm:col-span-2">
               <Button type="submit" disabled={saving}>{saving ? 'در حال ذخیره' : 'تغییر رمز عبور'}</Button>
             </div>
