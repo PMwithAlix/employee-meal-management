@@ -82,14 +82,17 @@ export class BuildingsService {
   }
 
   async reactivate(actor: AuthUser, id: string) {
-    const current = await this.prisma.building.findUnique({ where: { id } });
-    if (!current) {
-      throw new NotFoundException('ساختمان پیدا نشد.');
-    }
-    if (current.isActive) {
-      return current;
-    }
     return this.prisma.$transaction(async (tx) => {
+      const locked = await tx.$queryRaw<Array<{ id: string }>>`
+        SELECT "id" FROM "buildings" WHERE "id" = ${id}::uuid FOR UPDATE
+      `;
+      if (locked.length === 0) {
+        throw new NotFoundException('ساختمان پیدا نشد.');
+      }
+      const current = await tx.building.findUniqueOrThrow({ where: { id } });
+      if (current.isActive) {
+        return current;
+      }
       const building = await tx.building.update({
         where: { id },
         data: { isActive: true },
