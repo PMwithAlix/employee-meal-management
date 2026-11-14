@@ -58,7 +58,7 @@ export class BuildingsService {
       });
       if (activeUsers > 0) {
         throw new ConflictException(
-          `ابتدا ${activeUsers} کارمند فعال این ساختمان را به ساختمان دیگری منتقل کنید.`,
+          `ابتدا ${activeUsers} کاربر فعال این ساختمان را به ساختمان دیگری منتقل کنید.`,
         );
       }
 
