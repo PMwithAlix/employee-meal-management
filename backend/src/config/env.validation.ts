@@ -112,13 +112,12 @@ const defaultsFor = (config: Record<string, unknown>) => {
   const env =
     typeof config.NODE_ENV === 'string' ? config.NODE_ENV : 'development';
   const isTest = env === 'test';
-  const isProduction = env === 'production';
   return {
     SESSION_TTL_SECONDS: isTest ? 3600 : 28800,
     SESSION_COOKIE_NAME: 'khaan.sid',
-    SESSION_COOKIE_PATH: '/api/v1',
+    SESSION_COOKIE_PATH: '/',
     SESSION_SAMESITE: SameSiteMode.Lax,
-    SESSION_SECURE: isProduction,
+    SESSION_SECURE: false,
     ARGON2_MEMORY_KIB: isTest ? 4096 : 19456,
     ARGON2_TIME_COST: isTest ? 1 : 2,
     ARGON2_PARALLELISM: 1,

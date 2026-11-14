@@ -3,7 +3,7 @@ import { apiBaseUrl, authApi, authRequest, setUnauthorizedHandler } from './auth
 import { AuthRequestError } from '../lib/auth-errors'
 
 describe('apiBaseUrl', () => {
-  it('uses same-origin when VITE_API_BASE_URL is empty so the cookie stays on /api/v1', () => {
+  it('uses same-origin when VITE_API_BASE_URL is empty so the session cookie stays first-party', () => {
     expect(apiBaseUrl()).toBe('')
   })
 })

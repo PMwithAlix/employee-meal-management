@@ -1,5 +1,7 @@
 import type { Request } from 'express';
 
+const SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
+
 export function parseAllowedOrigins(value: string) {
   return value
     .split(',')
@@ -7,20 +9,58 @@ export function parseAllowedOrigins(value: string) {
     .filter(Boolean);
 }
 
-export function requestHost(request: Request) {
-  const forwarded = request.headers['x-forwarded-host'];
-  const raw =
-    (Array.isArray(forwarded) ? forwarded[0] : forwarded)?.split(',')[0]?.trim() ||
-    request.headers.host;
+function headerValue(value: string | string[] | undefined) {
+  const raw = Array.isArray(value) ? value[0] : value;
   return raw?.split(',')[0]?.trim() ?? '';
 }
 
-export function originHost(origin: string) {
-  try {
-    return new URL(origin).host;
-  } catch {
+export function canonicalHost(value: string) {
+  const trimmed = value.trim().toLowerCase();
+  if (!trimmed) {
     return '';
   }
+  try {
+    const url = trimmed.includes('://')
+      ? new URL(trimmed)
+      : new URL(`http://${trimmed}`);
+    return url.hostname;
+  } catch {
+    return trimmed.replace(/^\[/, '').replace(/\]:\d+$/, '').replace(/:\d+$/, '');
+  }
+}
+
+export function requestHost(request: Request) {
+  const forwarded = headerValue(request.headers['x-forwarded-host']);
+  const raw = forwarded || headerValue(request.headers.host);
+  return canonicalHost(raw);
+}
+
+export function originHost(origin: string) {
+  return canonicalHost(origin);
+}
+
+export function requestPath(request: Request) {
+  return request.originalUrl ?? request.url ?? '';
+}
+
+export function isBrowserSameOrigin(request: Request) {
+  const site = headerValue(request.headers['sec-fetch-site']).toLowerCase();
+  return site === 'same-origin' || site === 'same-site';
+}
+
+export function isLoginRequest(request: Request) {
+  return /\/auth\/login(\?|$)/.test(requestPath(request));
+}
+
+export function shouldSkipOriginGuard(request: Request) {
+  const method = (request.method ?? 'GET').toUpperCase();
+  if (SAFE_METHODS.has(method) || requestPath(request).includes('/health')) {
+    return true;
+  }
+  if (isLoginRequest(request)) {
+    return true;
+  }
+  return isBrowserSameOrigin(request);
 }
 
 export function isAllowedRequestOrigin(

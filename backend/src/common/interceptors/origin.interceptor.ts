@@ -12,9 +12,8 @@ import { EnvironmentVariables, NodeEnv } from '../../config/env.validation';
 import {
   isAllowedRequestOrigin,
   parseAllowedOrigins,
+  shouldSkipOriginGuard,
 } from '../http/request-origin';
-
-const SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
 
 @Injectable()
 export class OriginInterceptor implements NestInterceptor {
@@ -24,11 +23,7 @@ export class OriginInterceptor implements NestInterceptor {
 
   intercept(context: ExecutionContext, next: CallHandler): Observable<unknown> {
     const request = context.switchToHttp().getRequest<Request>();
-    const method = request.method.toUpperCase();
-    if (
-      SAFE_METHODS.has(method) ||
-      (request.originalUrl ?? request.url).includes('/health')
-    ) {
+    if (shouldSkipOriginGuard(request)) {
       return next.handle();
     }
 

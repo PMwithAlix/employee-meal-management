@@ -11,10 +11,14 @@ function service(overrides?: {
   enabled?: boolean;
   username?: string;
   password?: string;
+  adminExists?: boolean;
 }) {
   const prisma = {
     user: {
       count: jest.fn().mockResolvedValue(overrides?.count ?? 0),
+      findUnique: jest
+        .fn()
+        .mockResolvedValue(overrides?.adminExists ? { id: 'existing-admin' } : null),
       create: jest.fn().mockResolvedValue({ username: DEFAULT_ADMIN_USERNAME }),
     },
   };
@@ -57,8 +61,14 @@ describe('BootstrapAdminService', () => {
     );
   });
 
-  it('skips when users already exist', async () => {
-    const { bootstrap, prisma } = service({ count: 3 });
+  it('creates the default admin when other users exist but that username does not', async () => {
+    const { bootstrap, prisma } = service({ count: 3, adminExists: false });
+    await expect(bootstrap.ensureInitialAdmin()).resolves.toBe('created');
+    expect(prisma.user.create).toHaveBeenCalled();
+  });
+
+  it('skips when the bootstrap username already exists', async () => {
+    const { bootstrap, prisma } = service({ adminExists: true, count: 3 });
     await expect(bootstrap.ensureInitialAdmin()).resolves.toBe('skipped');
     expect(prisma.user.create).not.toHaveBeenCalled();
   });
@@ -66,6 +76,6 @@ describe('BootstrapAdminService', () => {
   it('does nothing on startup when bootstrap is disabled', async () => {
     const { bootstrap, prisma } = service({ enabled: false });
     await bootstrap.onModuleInit();
-    expect(prisma.user.count).not.toHaveBeenCalled();
+    expect(prisma.user.findUnique).not.toHaveBeenCalled();
   });
 });

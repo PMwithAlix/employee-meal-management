@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import type { CookieOptions, Response } from 'express';
-import { EnvironmentVariables, NodeEnv } from '../../config/env.validation';
+import { EnvironmentVariables } from '../../config/env.validation';
 import { PrismaService } from '../../database/prisma.service';
 import { createSessionToken, hashSessionToken } from './security/session-token';
 
@@ -80,11 +80,9 @@ export class SessionService {
 
   private cookieOptions(): CookieOptions {
     const sameSite = this.config.get('SESSION_SAMESITE', { infer: true });
-    const production =
-      this.config.get('NODE_ENV', { infer: true }) === NodeEnv.Production;
     return {
       httpOnly: true,
-      secure: this.config.get('SESSION_SECURE', { infer: true }) ?? production,
+      secure: this.config.get('SESSION_SECURE', { infer: true }),
       sameSite,
       path: this.config.get('SESSION_COOKIE_PATH', { infer: true }),
       maxAge: this.ttlSeconds() * 1000,

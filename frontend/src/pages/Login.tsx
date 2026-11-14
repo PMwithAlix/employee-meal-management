@@ -44,7 +44,13 @@ export function Login() {
           void auth
             .login(username.trim(), password)
             .catch((failure: unknown) => {
-              setError(failure instanceof AuthRequestError ? failure.message : 'ورود انجام نشد. دوباره تلاش کنید.')
+              const message =
+                failure instanceof AuthRequestError
+                  ? failure.message
+                  : failure instanceof Error && failure.message.trim()
+                    ? failure.message
+                    : 'ورود انجام نشد. دوباره تلاش کنید.'
+              setError(message)
             })
             .finally(() => setBusy(false))
         }}

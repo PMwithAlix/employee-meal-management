@@ -1,6 +1,6 @@
 import { errorFromResponse, networkError } from '../lib/auth-errors'
 
-// Session cookie `khaan.sid` is HttpOnly (Path=/api/v1). Never persist tokens in web storage.
+// Session cookie `khaan.sid` is HttpOnly. Never persist tokens in web storage.
 // Not wired: POST /api/v1/auth/logout-all.
 
 export function apiBaseUrl() {

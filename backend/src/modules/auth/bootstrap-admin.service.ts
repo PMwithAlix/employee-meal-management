@@ -40,17 +40,24 @@ export class BootstrapAdminService implements OnModuleInit {
       throw new Error(policy);
     }
 
-    const existing = await this.prisma.user.count();
-    if (existing > 0) {
-      if (options?.failIfUsersExist) {
+    const username = normalizeUsername(usernameRaw);
+    const existingUser = await this.prisma.user.findUnique({
+      where: { username },
+      select: { id: true },
+    });
+    if (existingUser) {
+      return 'skipped' as const;
+    }
+
+    if (options?.failIfUsersExist) {
+      const existing = await this.prisma.user.count();
+      if (existing > 0) {
         throw new Error(
           'Bootstrap refused: users already exist. The first admin can only be created on an empty user table.',
         );
       }
-      return 'skipped' as const;
     }
 
-    const username = normalizeUsername(usernameRaw);
     const passwordHash = await this.passwords.hash(password);
     const admin = await this.prisma.user.create({
       data: {

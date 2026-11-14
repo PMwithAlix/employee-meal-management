@@ -2,10 +2,11 @@ import type { Request } from 'express';
 import {
   isAllowedRequestOrigin,
   parseAllowedOrigins,
+  shouldSkipOriginGuard,
 } from './request-origin';
 
-function req(headers: Record<string, string>): Request {
-  return { headers } as Request;
+function req(headers: Record<string, string>, extras?: Partial<Request>): Request {
+  return { headers, method: 'POST', url: '/api/v1/orders', ...extras } as Request;
 }
 
 describe('request origin', () => {
@@ -26,11 +27,11 @@ describe('request origin', () => {
     ).toBe(true);
   });
 
-  it('allows same-host Origin when the public URL is not localhost', () => {
+  it('allows same hostname even when ports differ', () => {
     expect(
       isAllowedRequestOrigin(
-        'http://10.0.0.8:8080',
-        req({ host: '10.0.0.8:8080' }),
+        'https://khaan.example.com',
+        req({ host: 'khaan.example.com:443' }),
         ['http://localhost:8080'],
       ),
     ).toBe(true);
@@ -49,7 +50,24 @@ describe('request origin', () => {
     ).toBe(true);
   });
 
-  it('rejects a foreign Origin', () => {
+  it('skips the origin guard for login even when Host is the container name', () => {
+    expect(
+      shouldSkipOriginGuard(
+        req(
+          { host: 'backend:3000', origin: 'https://khaan.example.com' },
+          { url: '/api/v1/auth/login' },
+        ),
+      ),
+    ).toBe(true);
+  });
+
+  it('skips the origin guard for same-origin fetch', () => {
+    expect(
+      shouldSkipOriginGuard(req({ 'sec-fetch-site': 'same-origin' })),
+    ).toBe(true);
+  });
+
+  it('rejects a foreign Origin for non-login writes', () => {
     expect(
       isAllowedRequestOrigin(
         'https://evil.example',
@@ -57,5 +75,8 @@ describe('request origin', () => {
         ['http://localhost:8080'],
       ),
     ).toBe(false);
+    expect(shouldSkipOriginGuard(req({ origin: 'https://evil.example' }))).toBe(
+      false,
+    );
   });
 });
