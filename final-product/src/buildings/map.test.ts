@@ -3,9 +3,10 @@ import { activeMemberCount, parseBuilding, parseBuildingDetail } from './map'
 
 describe('parseBuilding', () => {
   it('keeps id and name from the backend payload', () => {
-    expect(parseBuilding({ id: 'b1', name: 'اصلی', createdAt: '2026-11-01T00:00:00.000Z' })).toEqual({
+    expect(parseBuilding({ id: 'b1', name: 'اصلی', isActive: true, createdAt: '2026-11-01T00:00:00.000Z' })).toEqual({
       id: 'b1',
       name: 'اصلی',
+      isActive: true,
     })
   })
 
@@ -20,12 +21,13 @@ describe('parseBuildingDetail', () => {
     expect(parseBuildingDetail({
       id: 'b1',
       name: 'اصلی',
+      isActive: true,
       _count: { users: 4 },
-    })).toEqual({ id: 'b1', name: 'اصلی', usersCount: 4 })
+    })).toEqual({ id: 'b1', name: 'اصلی', isActive: true, usersCount: 4 })
   })
 
   it('does not invent a member count when _count is missing', () => {
-    expect(parseBuildingDetail({ id: 'b1', name: 'اصلی' })?.usersCount).toBeNull()
+    expect(parseBuildingDetail({ id: 'b1', name: 'اصلی', isActive: true })?.usersCount).toBeNull()
   })
 })
 
