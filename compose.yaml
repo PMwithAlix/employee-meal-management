@@ -24,6 +24,7 @@ services:
       retries: 10
       start_period: 10s
 
+
   backend:
     image: ${KHAAN_BACKEND_IMAGE:-khaan-backend:local}
     container_name: food-khaan-backend
