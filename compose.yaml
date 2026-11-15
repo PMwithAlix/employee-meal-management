@@ -2,7 +2,7 @@ name: khaan
 
 services:
   food-khaan-postgres:
-    image: postgres:16-alpine
+    image: postgres:15-alpine
     container_name: food-khaan-postgres
     restart: unless-stopped
     environment:
