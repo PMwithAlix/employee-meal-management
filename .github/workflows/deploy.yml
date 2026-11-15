@@ -90,7 +90,7 @@ jobs:
           ssh -i "$HOME/.ssh/id_deploy" -p "$SSH_PORT" -o StrictHostKeyChecking=yes \
             "$SSH_USER@$SSH_HOST" "bash -s" <<EOF
             set -e
-            APP_DIR="/home/develop/apps/food-khaan"
+            APP_DIR="/home/develop/food-khaan"
             cd "\$APP_DIR"
             
             sed -i "s|^KHAAN_BACKEND_IMAGE=.*|KHAAN_BACKEND_IMAGE=${BACKEND_IMAGE}|" .env
