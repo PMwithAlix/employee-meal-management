@@ -6,83 +6,74 @@ services:
     container_name: food-khaan-postgres
     restart: unless-stopped
     environment:
-      POSTGRES_USER: ${POSTGRES_USER}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
-      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER:?Set POSTGRES_USER in .env}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+      POSTGRES_DB: ${POSTGRES_DB:?Set POSTGRES_DB in .env}
     volumes:
       - khaan_postgres_data:/var/lib/postgresql/data
     networks:
       - food-khaan-network
     healthcheck:
-      test:
-        [
-          "CMD-SHELL",
-          "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"
-        ]
+      test: ["CMD-SHELL", "pg_isready -U \"$$POSTGRES_USER\" -d \"$$POSTGRES_DB\""]
       interval: 5s
       timeout: 5s
       retries: 10
       start_period: 10s
 
-
   backend:
-    image: ${KHAAN_BACKEND_IMAGE:-khaan-backend:local}
+    image: ${KHAAN_BACKEND_IMAGE:?Set KHAAN_BACKEND_IMAGE in .env}
     container_name: food-khaan-backend
-    build:
-      context: ./backend
-      dockerfile: Dockerfile
     restart: unless-stopped
     init: true
     depends_on:
-      postgres:
+      food-khaan-postgres:
         condition: service_healthy
     environment:
-      NODE_ENV: ${NODE_ENV:-production}
-      PORT: 3000
-      DATABASE_URL: postgresql://${POSTGRES_USER:-khaan}:${POSTGRES_PASSWORD:-khaan}@postgres:5432/${POSTGRES_DB:-khaan}?schema=public
-      FRONTEND_ORIGIN: ${FRONTEND_ORIGIN:-http://localhost:8080}
-      SESSION_TTL_SECONDS: ${SESSION_TTL_SECONDS:-28800}
-      SESSION_COOKIE_NAME: ${SESSION_COOKIE_NAME:-khaan.sid}
-      SESSION_COOKIE_PATH: ${SESSION_COOKIE_PATH:-/}
-      SESSION_SAMESITE: ${SESSION_SAMESITE:-lax}
-      SESSION_SECURE: ${SESSION_SECURE:-false}
-      ARGON2_MEMORY_KIB: ${ARGON2_MEMORY_KIB:-19456}
-      ARGON2_TIME_COST: ${ARGON2_TIME_COST:-2}
-      ARGON2_PARALLELISM: ${ARGON2_PARALLELISM:-1}
-      LOGIN_RATE_LIMIT_MAX: ${LOGIN_RATE_LIMIT_MAX:-5}
-      LOGIN_RATE_LIMIT_WINDOW_SECONDS: ${LOGIN_RATE_LIMIT_WINDOW_SECONDS:-900}
-      BOOTSTRAP_ADMIN_ENABLED: ${BOOTSTRAP_ADMIN_ENABLED:-true}
-      BOOTSTRAP_ADMIN_USERNAME: ${BOOTSTRAP_ADMIN_USERNAME:-khaan.admin}
-      BOOTSTRAP_ADMIN_PASSWORD: ${BOOTSTRAP_ADMIN_PASSWORD:-Nakhoda-Khaan1405}
+      NODE_ENV: ${NODE_ENV:?Set NODE_ENV in .env}
+      PORT: ${BACKEND_PORT:?Set BACKEND_PORT in .env}
+      DATABASE_URL: ${DATABASE_URL:?Set DATABASE_URL in .env}
+      FRONTEND_ORIGIN: ${FRONTEND_ORIGIN:?Set FRONTEND_ORIGIN in .env}
+      SESSION_TTL_SECONDS: ${SESSION_TTL_SECONDS:?Set SESSION_TTL_SECONDS in .env}
+      SESSION_COOKIE_NAME: ${SESSION_COOKIE_NAME:?Set SESSION_COOKIE_NAME in .env}
+      SESSION_COOKIE_PATH: ${SESSION_COOKIE_PATH:?Set SESSION_COOKIE_PATH in .env}
+      SESSION_SAMESITE: ${SESSION_SAMESITE:?Set SESSION_SAMESITE in .env}
+      SESSION_SECURE: ${SESSION_SECURE:?Set SESSION_SECURE in .env}
+      ARGON2_MEMORY_KIB: ${ARGON2_MEMORY_KIB:?Set ARGON2_MEMORY_KIB in .env}
+      ARGON2_TIME_COST: ${ARGON2_TIME_COST:?Set ARGON2_TIME_COST in .env}
+      ARGON2_PARALLELISM: ${ARGON2_PARALLELISM:?Set ARGON2_PARALLELISM in .env}
+      LOGIN_RATE_LIMIT_MAX: ${LOGIN_RATE_LIMIT_MAX:?Set LOGIN_RATE_LIMIT_MAX in .env}
+      LOGIN_RATE_LIMIT_WINDOW_SECONDS: ${LOGIN_RATE_LIMIT_WINDOW_SECONDS:?Set LOGIN_RATE_LIMIT_WINDOW_SECONDS in .env}
+      BOOTSTRAP_ADMIN_ENABLED: ${BOOTSTRAP_ADMIN_ENABLED:?Set BOOTSTRAP_ADMIN_ENABLED in .env}
+      BOOTSTRAP_ADMIN_USERNAME: ${BOOTSTRAP_ADMIN_USERNAME:?Set BOOTSTRAP_ADMIN_USERNAME in .env}
+      BOOTSTRAP_ADMIN_PASSWORD: ${BOOTSTRAP_ADMIN_PASSWORD:?Set BOOTSTRAP_ADMIN_PASSWORD in .env}
     networks:
       - food-khaan-network
     healthcheck:
       test:
-        [
-          'CMD',
-          'node',
-          '-e',
-          "fetch('http://127.0.0.1:3000/api/v1/health').then((r)=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
-        ]
+        - CMD
+        - node
+        - -e
+        - "fetch('http://127.0.0.1:' + process.env.PORT + '/api/v1/health').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"
       interval: 15s
       timeout: 5s
       retries: 8
       start_period: 40s
 
   frontend:
-    image: ${KHAAN_WEB_IMAGE:-khaan-web:local}
+    image: ${KHAAN_WEB_IMAGE:?Set KHAAN_WEB_IMAGE in .env}
     container_name: food-khaan-frontend
-    build:
-      context: ./frontend
-      dockerfile: Dockerfile
-      args:
-        VITE_API_BASE_URL: ${VITE_API_BASE_URL:-}
     restart: unless-stopped
     depends_on:
       backend:
         condition: service_healthy
     ports:
-      - '${WEB_PORT:-8080}:80'
+      - "${WEB_PORT:?Set WEB_PORT in .env}:80"
+    networks:
+      - food-khaan-network
+
+networks:
+  food-khaan-network:
+    name: food-khaan-network
 
 volumes:
   khaan_postgres_data:
