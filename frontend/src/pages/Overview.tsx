@@ -7,6 +7,7 @@ import { classifyEmployeeDeadline, findOrder, isElapsedDeadlineDay, isOpenDeadli
 import { addDays, isSameDate, JALALI_MONTHS, weekdayName, type JalaliDate, type JalaliDateTime } from '../shared/lib/jalali'
 import { fa, cn } from '../shared/lib/persian-text'
 import { useRecentAudit } from '../features/audit/hooks/useRecentAudit'
+import { describeAuditEvent } from '../features/audit/lib/audit-copy'
 import { useGuestMonthCount } from '../features/guests/hooks/useGuestMonthCount'
 import { usePublishedMenu } from '../features/menus/hooks/usePublishedMenu'
 import { combinedActiveCount, managementOpenDaysMetric, metricValue, openDaysMetric, retryManagementOverview } from '../features/overview/lib/overview-metrics'
@@ -300,12 +301,15 @@ function LiveOpsOverview({ variant }: { variant: 'support' | 'management' | 'adm
         <Panel title={variant === 'support' ? 'فعالیت عملیاتی اخیر' : 'فعالیت اخیر'} action={<button className="min-h-11 px-2 text-xs text-link" onClick={() => app.setPage('activity')}>{variant === 'support' ? 'تاریخچه' : 'تاریخچه کامل'}</button>}>
           {recent.status === 'loading' ? <p className="text-sm text-muted">در حال خواندن تاریخچه…</p> : recent.status !== 'ready' ? <p className="text-sm text-danger">{recent.message || 'تاریخچه خوانده نشد.'}</p> : recent.items.length === 0 ? <p className="text-sm text-muted">رویدادی ثبت نشده است.</p> : (
             <ul className="divide-y divide-line text-sm">
-              {recent.items.map((item) => (
-                <li key={item.id} className="py-2">
-                  <p>{item.actorUsername || 'سامانه'} · {item.action}</p>
-                  <p className="text-xs text-muted">{item.entityType} · {item.createdAt}</p>
-                </li>
-              ))}
+              {recent.items.map((item) => {
+                const view = describeAuditEvent(item)
+                return (
+                  <li key={item.id} className="py-2">
+                    <p>{item.actorUsername || 'سامانه'} · {view.action}</p>
+                    <p className="text-xs text-muted">{view.target} · {view.at}</p>
+                  </li>
+                )
+              })}
             </ul>
           )}
         </Panel>

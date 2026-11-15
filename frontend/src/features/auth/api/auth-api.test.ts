@@ -53,6 +53,17 @@ describe('authRequest', () => {
     expect(init.body).toBe(JSON.stringify({ username: 'e2e.order.employee', password: 'secret' }))
   })
 
+  it('maps HTML 401 login failures to a short credentials message', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => new Response('<!DOCTYPE html><html lang="en"><title>Upstream Error - Unauthorized</title></html>', { status: 401 })),
+    )
+    await expect(authApi.login('x', 'y')).rejects.toMatchObject({
+      kind: 'credentials',
+      message: 'نام کاربری یا رمز عبور صحیح نیست.',
+    })
+  })
+
   it('maps 401 on login without treating it as a boot-time logout', async () => {
     const onUnauthorized = vi.fn()
     setUnauthorizedHandler(onUnauthorized)

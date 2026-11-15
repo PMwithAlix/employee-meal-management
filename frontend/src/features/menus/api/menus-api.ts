@@ -63,6 +63,7 @@ function parsePreview(value: unknown): ImportPreview {
     optionCount: typeof body.optionCount === 'number' ? body.optionCount : 0,
     errors: Array.isArray(body.errors) ? (body.errors as ImportPreview['errors']) : [],
     warnings: Array.isArray(body.warnings) ? (body.warnings as ImportPreview['warnings']) : [],
+    meals: parseMeals(body.meals),
     existing: (body.existing as ImportPreview['existing']) ?? null,
     impact: (body.impact as ImportPreview['impact']) ?? null,
     expiresAt: typeof body.expiresAt === 'string' ? body.expiresAt : null,
@@ -186,6 +187,14 @@ export const menuApi = {
       ...session,
       method: 'POST',
       body: data,
+    }).then(parsePreview)
+  },
+
+  patchImportMeal(importId: string, patch: MealPatch) {
+    return authRequest<unknown>(MENU_ENDPOINTS.patchImport(importId), {
+      ...session,
+      method: 'PATCH',
+      body: patch,
     }).then(parsePreview)
   },
 

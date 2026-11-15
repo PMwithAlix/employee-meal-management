@@ -72,5 +72,6 @@ describe('contracts', () => {
     expect(MENU_ENDPOINTS.published(1405, 8)).toBe('/published-menus/1405/8')
     expect(MENU_ENDPOINTS.list).toBe('/menus')
     expect(MENU_ENDPOINTS.preview).toBe('/menus/imports/preview')
+    expect(MENU_ENDPOINTS.patchImport('import-1')).toBe('/menus/imports/import-1')
   })
 })

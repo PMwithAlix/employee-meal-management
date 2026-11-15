@@ -87,6 +87,7 @@ export type ImportPreview = {
   optionCount: number
   errors: ImportIssue[]
   warnings: ImportIssue[]
+  meals: BackendMeal[]
   existing: {
     menuId: string
     publishedVersionId: string | null
@@ -121,6 +122,7 @@ export const MENU_ENDPOINTS = {
   version: (id: string, versionId: string) => `/menus/${id}/versions/${versionId}`,
   publish: (id: string, versionId: string) => `/menus/${id}/versions/${versionId}/publish`,
   preview: '/menus/imports/preview',
+  patchImport: (importId: string) => `/menus/imports/${importId}`,
   confirm: (importId: string) => `/menus/imports/${importId}/confirm`,
 } as const
 

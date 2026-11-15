@@ -75,6 +75,22 @@ export class ImportPreviewStore {
     return this.items.get(id) ?? null;
   }
 
+  replaceMeals(id: string, actorId: string, meals: ConfiguredMeal[]) {
+    const stored = this.peek(id);
+    if (!stored || stored.actorId !== actorId || stored.expiresAt < Date.now()) {
+      return null;
+    }
+    stored.meals = meals;
+    stored.parsed = {
+      ...stored.parsed,
+      meals,
+      lunchMealCount: meals.filter((meal) => meal.mealType === 'LUNCH').length,
+      dinnerMealCount: meals.filter((meal) => meal.mealType === 'DINNER').length,
+      optionCount: meals.reduce((sum, meal) => sum + meal.options.length, 0),
+    };
+    return stored;
+  }
+
   private purge() {
     const now = Date.now();
     for (const [id, item] of this.items) {

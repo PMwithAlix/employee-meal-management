@@ -5,8 +5,9 @@ import { StaffOrdersPanel } from '../features/orders/ui/StaffOrdersPanel'
 import { Badge, Button, Dialog, Empty, controlClass } from '../shared/ui/primitives'
 import { AuthRequestError } from '../features/auth/lib/auth-errors'
 import { menuApi } from '../features/menus/api/menus-api'
-import { localOption } from '../features/menus/lib/menu-mapper'
+import { localOption, patchOptions, toBackendMeal } from '../features/menus/lib/menu-mapper'
 import type { ImportPreview, MenuOption } from '../features/menus/model/menu-types'
+import { ImportPreviewBoard } from '../features/menus/ui/ImportPreviewBoard'
 import { useManagedMenu } from '../features/menus/hooks/useManagedMenu'
 import { useApp } from '../app/providers/app-store'
 import { isPastDate, JALALI_MONTHS } from '../shared/lib/jalali'
@@ -226,13 +227,36 @@ function ImportPanel({ managed }: { managed: ReturnType<typeof useManagedMenu> }
                 سفارش فعال در معرض تغییر: {fa(preview.impact?.atRiskOrderCount ?? 0)} از {fa(preview.impact?.activeOrderCount ?? 0)}
               </p>
               {sameMonth ? (
-                <Button className="mt-3" onClick={() => setWizard(true)}>بررسی جایگزینی منو</Button>
+                <Button className="mt-3" onClick={() => setWizard(true)}>تأیید و اعمال پیش‌نمایش</Button>
               ) : (
                 <p className="mt-3 text-sm text-danger">این فایل برای {fileMonth} است و ماه انتخاب‌شده {app.monthTitle} است. تا یکی شدن ماه، چیزی اعمال نمی‌شود.</p>
               )}
             </>
           )}
         </div>
+      )}
+      {preview?.valid && preview.importId && (
+        <ImportPreviewBoard
+          preview={preview}
+          disabled={reading}
+          onSaveMeal={async (mealDate, meal, options) => {
+            setError('')
+            setReading(true)
+            try {
+              const next = await menuApi.patchImportMeal(preview.importId!, {
+                mealDate,
+                mealType: toBackendMeal(meal),
+                options: patchOptions(options),
+              })
+              setPreview(next)
+            } catch (failure: unknown) {
+              setError(failure instanceof AuthRequestError ? failure.message : 'ذخیره ویرایش پیش‌نمایش انجام نشد.')
+              throw failure
+            } finally {
+              setReading(false)
+            }
+          }}
+        />
       )}
       {wizard && sameMonth && preview?.importId && (
         <ReplaceWizard

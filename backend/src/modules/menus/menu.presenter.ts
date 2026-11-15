@@ -4,6 +4,7 @@ import {
   formatJalali,
   jalaliFromUtcDate,
 } from '../../common/calendar/jalali';
+import type { ConfiguredMeal } from './menu.types';
 import { groupItemsAsMeals } from './menu.validation';
 
 export function presentOption(option: {
@@ -64,6 +65,23 @@ export function presentVersion(version: {
     createdAt: version.createdAt,
     meals,
   };
+}
+
+export function presentConfiguredMeals(meals: ConfiguredMeal[]) {
+  return meals.map((meal) => {
+    const jalali = jalaliFromUtcDate(meal.mealDate);
+    const mealDate = formatDateOnly(meal.mealDate);
+    return {
+      mealDate,
+      jalaliDate: jalali ? formatJalali(jalali) : null,
+      mealType: meal.mealType,
+      options: meal.options.map((option, index) => ({
+        id: option.id ?? `preview:${mealDate}:${meal.mealType}:${index + 1}`,
+        title: option.title,
+        displayOrder: option.displayOrder,
+      })),
+    };
+  });
 }
 
 export function presentMenu(menu: {

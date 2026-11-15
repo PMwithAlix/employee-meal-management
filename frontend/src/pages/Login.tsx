@@ -44,13 +44,11 @@ export function Login() {
           void auth
             .login(username.trim(), password)
             .catch((failure: unknown) => {
-              const message =
-                failure instanceof AuthRequestError
-                  ? failure.message
-                  : failure instanceof Error && failure.message.trim()
-                    ? failure.message
-                    : 'ورود انجام نشد. دوباره تلاش کنید.'
-              setError(message)
+              if (failure instanceof AuthRequestError) {
+                setError(failure.message)
+                return
+              }
+              setError('ورود انجام نشد. نام کاربری یا رمز عبور را بررسی کنید.')
             })
             .finally(() => setBusy(false))
         }}

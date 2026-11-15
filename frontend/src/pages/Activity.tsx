@@ -2,21 +2,13 @@ import { useEffect, useState } from 'react'
 import { Button, Empty } from '../shared/ui/primitives'
 import { AuthRequestError } from '../features/auth/lib/auth-errors'
 import { auditApi, type AuditLogItem } from '../features/audit/api/audit-api'
+import { AUDIT_ACTION_FILTERS, describeAuditEvent, formatActivityTime } from '../features/audit/lib/audit-copy'
 import { usesLiveOrganizationData } from '../shared/config/permissions'
+import { JalaliDateField } from '../shared/ui/JalaliDateField'
 import { useApp } from '../app/providers/app-store'
 
 function normalize(value: string) {
   return value.replace(/\s+/g, ' ').trim()
-}
-
-function formatJson(value: unknown) {
-  if (value == null) return '—'
-  if (typeof value === 'string') return value
-  try {
-    return JSON.stringify(value)
-  } catch {
-    return '—'
-  }
 }
 
 export function ActivityPage() {
@@ -37,7 +29,7 @@ function SeedActivityPage() {
     <div className="space-y-3">
       <p className="text-sm text-muted">سابقه عملیات فقط خواندنی است. این فهرست اعلان نیست.</p>
       <input value={q} onChange={(event) => setQ(event.target.value)} placeholder="جستجو در کاربر، عملیات، موضوع یا مقدار" aria-label="جستجوی تاریخچه" className="h-11 w-full rounded-md border border-line bg-surface px-3 text-base" />
-      {rows.length === 0 ? <Empty title={q.trim() ? 'نتیجه‌ای برای این جستجو نیست' : 'رویدادی ثبت نشده'} body={q.trim() ? 'عبارت را کوتاه‌تر کنید یا فاصله‌های اضافه را بردارید.' : 'عملیات موفق اینجا دیده می‌شود. جابه‌جایی بین صفحه‌ها ثبت نمی‌شود.'} /> : <ActivityTable rows={rows.map((item) => ({ id: item.id, at: item.at, actor: item.actor, action: item.action, target: item.target, before: item.before, after: item.after, result: item.result }))} />}
+      {rows.length === 0 ? <Empty title={q.trim() ? 'نتیجه‌ای برای این جستجو نیست' : 'رویدادی ثبت نشده'} body={q.trim() ? 'عبارت را کوتاه‌تر کنید یا فاصله‌های اضافه را بردارید.' : 'عملیات موفق اینجا دیده می‌شود. جابه‌جایی بین صفحه‌ها ثبت نمی‌شود.'} /> : <ActivityTable rows={rows.map((item) => ({ id: item.id, at: formatActivityTime(item.at), actor: item.actor, action: item.action, target: item.target, detail: item.after && item.after !== item.before ? `${item.before} ← ${item.after}` : item.after || item.before || 'جزئیات بیشتری ثبت نشده است.', result: item.result }))} />}
     </div>
   )
 }
@@ -82,9 +74,16 @@ function AuditActivityPage() {
     <div className="space-y-3">
       <p className="text-sm text-muted">سابقه عملیات فقط خواندنی است و از سامانه خوانده می‌شود.</p>
       <div className="grid gap-2 rounded-md border border-line bg-surface p-3 md:grid-cols-3">
-        <label className="text-xs text-muted">نوع عملیات<input className="mt-1 h-11 w-full rounded-md border border-line bg-bg px-2 text-base" value={action} onChange={(event) => { setAction(event.target.value); setPage(1) }} /></label>
-        <label className="text-xs text-muted">از تاریخ<input className="mt-1 h-11 w-full rounded-md border border-line bg-bg px-2 text-base" type="date" value={from} onChange={(event) => { setFrom(event.target.value); setPage(1) }} /></label>
-        <label className="text-xs text-muted">تا تاریخ<input className="mt-1 h-11 w-full rounded-md border border-line bg-bg px-2 text-base" type="date" value={to} onChange={(event) => { setTo(event.target.value); setPage(1) }} /></label>
+        <label className="text-xs text-muted">
+          نوع عملیات
+          <select className="mt-1 h-11 w-full rounded-md border border-line bg-bg px-2 text-base text-ink" value={action} onChange={(event) => { setAction(event.target.value); setPage(1) }}>
+            {AUDIT_ACTION_FILTERS.map((item) => (
+              <option key={item.value || 'all'} value={item.value}>{item.label}</option>
+            ))}
+          </select>
+        </label>
+        <JalaliDateField label="از تاریخ" value={from} onChange={(next) => { setFrom(next); setPage(1) }} />
+        <JalaliDateField label="تا تاریخ" value={to} onChange={(next) => { setTo(next); setPage(1) }} />
       </div>
       {status === 'loading' && <p className="text-sm text-muted">در حال بارگذاری تاریخچه…</p>}
       {status === 'error' && (
@@ -96,16 +95,18 @@ function AuditActivityPage() {
       {status === 'ready' && items.length === 0 && <Empty title="رویدادی ثبت نشده" body="با فیلترهای فعلی موردی از سامانه برنگشت." />}
       {status === 'ready' && items.length > 0 && (
         <>
-          <ActivityTable rows={items.map((item) => ({
-            id: item.id,
-            at: item.createdAt,
-            actor: item.actorUsername || '—',
-            action: item.action,
-            target: `${item.entityType} · ${item.entityId}`,
-            before: formatJson(item.beforeData),
-            after: formatJson(item.afterData),
-            result: 'ثبت‌شده',
-          }))} />
+          <ActivityTable rows={items.map((item) => {
+            const view = describeAuditEvent(item)
+            return {
+              id: item.id,
+              at: view.at,
+              actor: item.actorUsername || 'سامانه',
+              action: view.action,
+              target: view.target,
+              detail: view.detail,
+              result: 'ثبت‌شده',
+            }
+          })} />
           {pageCount > 1 && (
             <div className="flex items-center justify-between text-sm">
               <Button variant="secondary" disabled={page <= 1} onClick={() => setPage((value) => value - 1)}>قبلی</Button>
@@ -119,14 +120,14 @@ function AuditActivityPage() {
   )
 }
 
-function ActivityTable({ rows }: { rows: Array<{ id: string; at: string; actor: string; action: string; target: string; before: string; after: string; result: string }> }) {
+function ActivityTable({ rows }: { rows: Array<{ id: string; at: string; actor: string; action: string; target: string; detail: string; result: string }> }) {
   return (
     <>
       <div className="hidden overflow-hidden rounded-md border border-line bg-surface lg:block">
         <table className="w-full text-sm">
           <thead className="bg-elevated text-xs text-muted">
             <tr>
-              {['زمان', 'کاربر', 'عملیات', 'موضوع', 'مقدار قبلی', 'مقدار جدید', 'نتیجه'].map((head) => <th key={head} className="px-3 py-2 text-start font-medium">{head}</th>)}
+              {['زمان', 'کاربر', 'عملیات', 'موضوع', 'جزئیات', 'نتیجه'].map((head) => <th key={head} className="px-3 py-2 text-start font-medium">{head}</th>)}
             </tr>
           </thead>
           <tbody>
@@ -136,8 +137,7 @@ function ActivityTable({ rows }: { rows: Array<{ id: string; at: string; actor: 
                 <td className="px-3 py-2">{item.actor}</td>
                 <td className="px-3 py-2">{item.action}</td>
                 <td className="px-3 py-2 break-words">{item.target}</td>
-                <td className="px-3 py-2 break-words">{item.before}</td>
-                <td className="px-3 py-2 break-words">{item.after}</td>
+                <td className="px-3 py-2 break-words">{item.detail}</td>
                 <td className="px-3 py-2">{item.result}</td>
               </tr>
             ))}
@@ -150,8 +150,7 @@ function ActivityTable({ rows }: { rows: Array<{ id: string; at: string; actor: 
             <p className="font-medium">{item.action}</p>
             <p className="text-xs text-muted">{item.at} · {item.actor}</p>
             <p className="mt-2 break-words">{item.target}</p>
-            <p className="break-words text-xs text-muted">قبلی: {item.before}</p>
-            <p className="break-words text-xs text-muted">جدید: {item.after}</p>
+            <p className="break-words text-xs text-muted">{item.detail}</p>
             <p className="text-xs">نتیجه: {item.result}</p>
           </article>
         ))}

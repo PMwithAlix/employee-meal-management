@@ -134,4 +134,23 @@ describe('menuApi', () => {
     expect(init.body).toBeInstanceOf(FormData)
     expect(init.credentials).toBe('include')
   })
+
+  it('parses preview meals so the import board can render Excel options', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => new Response(JSON.stringify({
+        valid: true,
+        importId: 'import-1',
+        jalaliYear: 1405,
+        jalaliMonth: 8,
+        meals: [{ mealDate: '2026-11-15', mealType: 'LUNCH', options: [{ id: 'p1', title: 'قورمه', displayOrder: 1 }] }],
+        errors: [],
+        warnings: [],
+      }), { status: 200 })),
+    )
+    const file = new File(['xlsx'], 'menu.xlsx', { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
+    const preview = await menuApi.previewImport(file)
+    expect(preview.meals[0]?.options[0]?.title).toBe('قورمه')
+    await menuApi.patchImportMeal('import-1', { mealDate: '2026-11-15', mealType: 'LUNCH', options: [{ title: 'قیمه', displayOrder: 1 }] })
+  })
 })

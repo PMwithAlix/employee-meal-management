@@ -22,13 +22,29 @@ export class AuthRequestError extends Error {
   }
 }
 
+function looksLikeHtml(value: string) {
+  const sample = value.trim().slice(0, 240).toLowerCase()
+  return (
+    sample.startsWith('<!doctype') ||
+    sample.startsWith('<html') ||
+    sample.includes('<body') ||
+    sample.includes('upstream error')
+  )
+}
+
+function usableMessage(value: string, fallback: string) {
+  const text = value.replace(/\s+/g, ' ').trim()
+  if (!text || looksLikeHtml(text) || text.length > 220) return fallback
+  return text
+}
+
 function messageFromBody(body: unknown, fallback: string) {
   if (!body || typeof body !== 'object') return fallback
   const raw = (body as { message?: unknown }).message
-  if (typeof raw === 'string' && raw.trim()) return raw
+  if (typeof raw === 'string' && raw.trim()) return usableMessage(raw, fallback)
   if (Array.isArray(raw)) {
     const parts = raw.filter((item): item is string => typeof item === 'string' && item.trim().length > 0)
-    if (parts.length) return parts.join(' ')
+    if (parts.length) return usableMessage(parts.join(' '), fallback)
   }
   return fallback
 }

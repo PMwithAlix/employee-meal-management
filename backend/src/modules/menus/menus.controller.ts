@@ -30,6 +30,7 @@ import { AuthGuard } from '../../common/guards/auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import type { AuthUser } from '../../common/types/auth-user';
 import { ConfirmImportDto } from './dto/confirm-import.dto';
+import { UpdateImportMealDto } from './dto/update-import-meal.dto';
 import { CreateMenuDto } from './dto/create-menu.dto';
 import { CreateVersionDto } from './dto/create-version.dto';
 import { ListMenusQueryDto } from './dto/list-menus.query';
@@ -72,6 +73,16 @@ export class MenusController {
       throw new UnprocessableEntityException('فایل اکسل ارسال نشده است.');
     }
     return this.imports.preview(actor, file.buffer);
+  }
+
+  @Patch('imports/:importId')
+  @ApiOperation({ summary: 'ویرایش یک وعده در پیش‌نمایش واردسازی اکسل' })
+  updatePreviewMeal(
+    @CurrentUser() actor: AuthUser,
+    @Param('importId', ParseUUIDPipe) importId: string,
+    @Body() dto: UpdateImportMealDto,
+  ) {
+    return this.imports.updateMeal(actor, importId, dto);
   }
 
   @Post('imports/:importId/confirm')

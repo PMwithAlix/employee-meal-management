@@ -8,6 +8,15 @@ describe('errorFromResponse', () => {
     expect(error.message).toBe('نام کاربری یا رمز عبور صحیح نیست.')
   })
 
+  it('does not surface HTML gateway pages as the login error', () => {
+    const error = errorFromResponse(401, {
+      message: '<!DOCTYPE html><html><title>Upstream Error - Unauthorized</title></html>',
+    })
+    expect(error.kind).toBe('credentials')
+    expect(error.message).toBe('نام کاربری یا رمز عبور صحیح نیست.')
+    expect(error.message).not.toContain('<!DOCTYPE')
+  })
+
   it('uses the backend 403 message for inactive accounts', () => {
     const error = errorFromResponse(403, {
       message: 'حساب کاربری شما غیرفعال است. برای پیگیری با واحد منابع انسانی تماس بگیرید.',

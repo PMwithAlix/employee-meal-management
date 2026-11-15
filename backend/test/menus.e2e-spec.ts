@@ -317,7 +317,25 @@ describe('Menus (e2e)', () => {
     expect(preview.status).toBe(200);
     expect(preview.body.valid).toBe(true);
     expect(preview.body.importId).toBeTruthy();
+    expect(Array.isArray(preview.body.meals)).toBe(true);
+    expect(preview.body.meals.length).toBeGreaterThan(0);
     expect(JSON.stringify(preview.body)).not.toContain('workbook');
+
+    const firstMeal = preview.body.meals[0] as {
+      mealDate: string;
+      mealType: string;
+      options: Array<{ title: string; displayOrder: number }>;
+    };
+    const patched = await request(app.getHttpServer())
+      .patch(`/api/v1/menus/imports/${preview.body.importId as string}`)
+      .set('Cookie', adminCookie)
+      .send({
+        mealDate: firstMeal.mealDate,
+        mealType: firstMeal.mealType,
+        options: [{ title: 'خوراک ویرایش‌شده', displayOrder: 1 }],
+      });
+    expect(patched.status).toBe(200);
+    expect(JSON.stringify(patched.body.meals)).toContain('خوراک ویرایش‌شده');
 
     const confirmed = await request(app.getHttpServer())
       .post(`/api/v1/menus/imports/${preview.body.importId as string}/confirm`)
