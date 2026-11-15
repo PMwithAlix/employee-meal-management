@@ -23,8 +23,8 @@ jobs:
           cache-dependency-path: backend/package-lock.json
       - run: npm ci
       - run: npm test
-      - run: npx prisma validate
-      - run: npm run build
+      - run: DATABASE_URL="postgresql://dummy:dummy@localhost:5432/dummy" npx prisma validate
+      - run: DATABASE_URL="postgresql://dummy:dummy@localhost:5432/dummy" npm run build
 
   frontend:
     runs-on: ubuntu-latest
