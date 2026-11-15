@@ -1,17 +1,24 @@
 name: khaan
 
 services:
-  postgres:
+  food-khaan-postgres:
     image: postgres:16-alpine
+    container_name: food-khaan-postgres
     restart: unless-stopped
     environment:
-      POSTGRES_USER: ${POSTGRES_USER:-khaan}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-khaan}
-      POSTGRES_DB: ${POSTGRES_DB:-khaan}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
     volumes:
       - khaan_postgres_data:/var/lib/postgresql/data
+    networks:
+      - food-khaan-network
     healthcheck:
-      test: ['CMD-SHELL', 'pg_isready -U ${POSTGRES_USER:-khaan} -d ${POSTGRES_DB:-khaan}']
+      test:
+        [
+          "CMD-SHELL",
+          "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"
+        ]
       interval: 5s
       timeout: 5s
       retries: 10
@@ -19,6 +26,7 @@ services:
 
   backend:
     image: ${KHAAN_BACKEND_IMAGE:-khaan-backend:local}
+    container_name: food-khaan-backend
     build:
       context: ./backend
       dockerfile: Dockerfile
@@ -45,6 +53,8 @@ services:
       BOOTSTRAP_ADMIN_ENABLED: ${BOOTSTRAP_ADMIN_ENABLED:-true}
       BOOTSTRAP_ADMIN_USERNAME: ${BOOTSTRAP_ADMIN_USERNAME:-khaan.admin}
       BOOTSTRAP_ADMIN_PASSWORD: ${BOOTSTRAP_ADMIN_PASSWORD:-Nakhoda-Khaan1405}
+    networks:
+      - food-khaan-network
     healthcheck:
       test:
         [
@@ -60,6 +70,7 @@ services:
 
   frontend:
     image: ${KHAAN_WEB_IMAGE:-khaan-web:local}
+    container_name: food-khaan-frontend
     build:
       context: ./frontend
       dockerfile: Dockerfile
