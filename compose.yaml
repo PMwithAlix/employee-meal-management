@@ -2,7 +2,7 @@ name: khaan
 
 services:
   food-khaan-postgres:
-    image: postgres:15-alpine
+    image: postgres:16-alpine
     container_name: food-khaan-postgres
     restart: unless-stopped
     environment:
@@ -48,6 +48,8 @@ services:
       BOOTSTRAP_ADMIN_PASSWORD: ${BOOTSTRAP_ADMIN_PASSWORD:?Set BOOTSTRAP_ADMIN_PASSWORD in .env}
     networks:
       - food-khaan-network
+    ports:
+      - "127.0.0.1:8986:3000"
     healthcheck:
       test:
         - CMD
