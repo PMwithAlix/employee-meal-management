@@ -1,10 +1,11 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Badge, Button, Dialog, Empty, Field, controlClass } from '../../../shared/ui/primitives'
+import { MealPicker } from '../../../shared/ui/MealPicker'
 import { AuthRequestError } from '../../auth/lib/auth-errors'
 import { buildingApi, type BuildingSummary } from '../../buildings/api/buildings-api'
 import { formatGregorianDate } from '../../menus/lib/menu-mapper'
 import { usePublishedMenu } from '../../menus/hooks/usePublishedMenu'
-import { fa } from '../../../shared/lib/persian-text'
+import { cn, fa } from '../../../shared/lib/persian-text'
 import { jalaliMonthLength, JALALI_MONTHS } from '../../../shared/lib/jalali'
 import { useApp } from '../../../app/providers/app-store'
 import { userApi, type DirectoryUser } from '../../users/api/users-api'
@@ -43,6 +44,8 @@ export function StaffOrdersPanel() {
   const [jd, setJd] = useState(1)
   const [meal, setMeal] = useState<'lunch' | 'dinner'>('lunch')
   const [menuItemId, setMenuItemId] = useState('')
+  const [foodOpen, setFoodOpen] = useState(false)
+  const foodTriggerRef = useRef<HTMLDivElement>(null)
   const [formBusy, setFormBusy] = useState(false)
   const [formError, setFormError] = useState('')
   const [notice, setNotice] = useState('')
@@ -53,12 +56,13 @@ export function StaffOrdersPanel() {
     const controller = new AbortController()
     void Promise.all([
       buildingApi.list(controller.signal),
-      userApi.listAll({ role: 'EMPLOYEE', isActive: true }, controller.signal),
+      userApi.listAll({ isActive: true }, controller.signal),
     ]).then(([listedBuildings, listedUsers]) => {
       if (controller.signal.aborted) return
       setBuildings(listedBuildings)
-      setUsers(listedUsers.items)
-      setUserId((current) => current || listedUsers.items[0]?.id || '')
+      const orderable = listedUsers.items.filter((item) => item.role === 'EMPLOYEE' || item.role === 'HR' || item.role === 'SUPPORT')
+      setUsers(orderable)
+      setUserId((current) => current || orderable[0]?.id || '')
     }).catch((error: unknown) => {
       if (controller.signal.aborted) return
       setFormError(error instanceof AuthRequestError ? error.message : 'بارگذاری کارکنان انجام نشد.')
@@ -260,10 +264,12 @@ export function StaffOrdersPanel() {
         </div>
       </div>
       <form className="space-y-3 rounded-md border border-line bg-surface p-3" onSubmit={(event) => { event.preventDefault(); void createOrder() }}>
-        <p className="text-xs text-muted">پشتیبان می‌تواند برای کارمند سفارش ثبت کند. نام غذا و ساختمان از Snapshot سفارش خوانده می‌شود.</p>
-        <Field label="کارمند">
+        <p className="text-xs text-muted">سفارش فعال همه نقش‌ها — کارمند، منابع انسانی و پشتیبان — در همین فهرست است. فرم ثبت فقط برای کسانی است که ساختمان و سفارش شخصی دارند.</p>
+        <Field label="کاربر">
           <select className={controlClass} value={userId} onChange={(event) => setUserId(event.target.value)}>
-            {users.map((item) => <option key={item.id} value={item.id}>{item.username}</option>)}
+            {users.map((item) => (
+              <option key={item.id} value={item.id}>{item.username}{item.role === 'EMPLOYEE' ? '' : ` · ${item.role === 'HR' ? 'منابع انسانی' : 'پشتیبان'}`}</option>
+            ))}
           </select>
         </Field>
         <Field label="تاریخ">
@@ -277,11 +283,35 @@ export function StaffOrdersPanel() {
             <option value="dinner">شام</option>
           </select>
         </Field>
-        <Field label="آیتم غذا">
-          <select className={controlClass} value={menuItemId} onChange={(event) => setMenuItemId(event.target.value)}>
-            {(!choices || choices.length === 0) && <option value="">گزینه منتشرشده‌ای نیست</option>}
-            {choices?.map((option) => <option key={option.id} value={option.id}>{option.title}</option>)}
-          </select>
+        <Field label="غذا">
+          <div ref={foodTriggerRef}>
+            <button
+              type="button"
+              className="min-h-11 w-full rounded-md border border-line bg-surface px-3 text-start text-sm"
+              aria-haspopup="listbox"
+              aria-expanded={foodOpen}
+              disabled={!choices?.length}
+              onClick={() => setFoodOpen((value) => !value)}
+            >
+              {choices?.find((option) => option.id === menuItemId)?.title ?? 'انتخاب غذا'}
+            </button>
+          </div>
+          {choices && choices.length > 0 && (
+            <MealPicker
+              open={foodOpen}
+              trigger={foodTriggerRef.current}
+              kind={meal}
+              options={choices}
+              currentId={menuItemId || null}
+              locked={false}
+              ops
+              onClose={() => setFoodOpen(false)}
+              onSave={(next) => {
+                setMenuItemId(next ?? '')
+                return true
+              }}
+            />
+          )}
         </Field>
         {formError && <p className="text-sm text-danger">{formError}</p>}
         <Button type="submit" className="w-full" disabled={formBusy}>{formBusy ? 'در حال ثبت...' : 'ثبت سفارش کارمند'}</Button>
@@ -306,11 +336,26 @@ export function StaffOrdersPanel() {
               </ul>
             )}
             {detail.status === 'ACTIVE' && editChoices.length > 0 && (
-              <Field label="تغییر غذا">
-                <select className={controlClass} defaultValue={detail.currentCycle?.menuItemId ?? ''} onChange={(event) => void changeMeal(detail, event.target.value)}>
-                  {editChoices.map((option) => <option key={option.id} value={option.id}>{option.title}</option>)}
-                </select>
-              </Field>
+              <div className="overflow-hidden rounded-md border border-line">
+                <p className="border-b border-line bg-elevated px-3 py-2 text-xs text-muted">تغییر غذا</p>
+                {editChoices.map((option) => {
+                  const active = detail.currentCycle?.menuItemId === option.id
+                  return (
+                    <button
+                      key={option.id}
+                      type="button"
+                      className={cn(
+                        'flex min-h-11 w-full items-center gap-2 px-3 text-start text-sm',
+                        active ? 'bg-brandsubtle font-medium' : 'hover:bg-surface2',
+                      )}
+                      onClick={() => { if (!active) void changeMeal(detail, option.id) }}
+                    >
+                      <span className="min-w-0 flex-1 break-words">{option.title}</span>
+                      {active && <span className="shrink-0 text-[11px] text-muted">ثبت‌شده</span>}
+                    </button>
+                  )
+                })}
+              </div>
             )}
           </div>
         )}

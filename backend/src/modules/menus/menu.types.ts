@@ -5,12 +5,13 @@ export type MenuOptionInput = {
   id?: string;
   title: string;
   displayOrder?: number;
+  isRice?: boolean;
 };
 
 export type ConfiguredMeal = {
   mealDate: Date;
   mealType: MealType;
-  options: { id?: string; title: string; displayOrder: number }[];
+  options: { id?: string; title: string; displayOrder: number; isRice?: boolean }[];
 };
 
 export type MenuValidationIssue = {

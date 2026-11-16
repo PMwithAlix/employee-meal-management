@@ -6,6 +6,7 @@ import {
   ArrayMinSize,
   IsArray,
   IsDateString,
+  IsBoolean,
   IsEnum,
   IsInt,
   IsOptional,
@@ -35,6 +36,11 @@ export class MealOptionDto {
   @Min(1)
   @Max(3)
   displayOrder?: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsBoolean()
+  isRice?: boolean;
 }
 
 export class UpsertMealDto {

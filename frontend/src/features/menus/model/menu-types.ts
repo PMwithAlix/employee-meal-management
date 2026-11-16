@@ -7,6 +7,7 @@ export type MenuOption = {
   id: string
   title: string
   displayOrder: number
+  isRice: boolean
 }
 
 export type MenuDay = {
@@ -135,7 +136,7 @@ export const MENU_ENDPOINTS = {
 export type MealPatch = {
   mealDate: string
   mealType: BackendMealType
-  options: Array<{ id?: string; title: string; displayOrder: number }>
+  options: Array<{ id?: string; title: string; displayOrder: number; isRice?: boolean }>
 }
 
 export type { MealKind }

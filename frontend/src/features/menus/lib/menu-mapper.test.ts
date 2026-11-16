@@ -19,14 +19,14 @@ describe('overlayMeals', () => {
         mealDate,
         jalaliDate: null,
         mealType: 'LUNCH',
-        options: [{ id: 'opt-1', title: 'چلوکباب', displayOrder: 1 }],
+        options: [{ id: 'opt-1', title: 'چلوکباب', displayOrder: 1, isRice: false }],
       },
     ])
-    expect(days[2]?.lunch).toEqual([{ id: 'opt-1', title: 'چلوکباب', displayOrder: 1 }])
+    expect(days[2]?.lunch).toEqual([{ id: 'opt-1', title: 'چلوکباب', displayOrder: 1, isRice: false }])
     expect(days[2]?.dinner).toBeNull()
     expect(days[0]?.lunch).toBeNull()
     expect(toPickerDay(days[2]!).lunch).toEqual(['چلوکباب'])
-    expect(toPickerDay(days[2]!).lunchChoices).toEqual([{ id: 'opt-1', title: 'چلوکباب', displayOrder: 1 }])
+    expect(toPickerDay(days[2]!).lunchChoices).toEqual([{ id: 'opt-1', title: 'چلوکباب', displayOrder: 1, isRice: false }])
   })
 
   it('does not invent seed titles when there are no meals', () => {
@@ -40,7 +40,7 @@ describe('overlayMeals', () => {
         mealDate: formatGregorianDate(1405, 9, 1),
         jalaliDate: null,
         mealType: 'LUNCH',
-        options: [{ id: 'x', title: 'نباید', displayOrder: 1 }],
+        options: [{ id: 'x', title: 'نباید', displayOrder: 1, isRice: false }],
       },
     ])
     expect(days.some((day) => day.lunch?.some((option) => option.title === 'نباید'))).toBe(false)
@@ -51,11 +51,11 @@ describe('patchOptions', () => {
   it('keeps stable ids and omits local new: ids', () => {
     expect(
       patchOptions([
-        { id: '11111111-1111-1111-1111-111111111111', title: 'اول', displayOrder: 9 },
-        { id: 'new:2:دوم', title: 'دوم', displayOrder: 2 },
+        { id: '11111111-1111-1111-1111-111111111111', title: 'اول', displayOrder: 9, isRice: true },
+        { id: 'new:2:دوم', title: 'دوم', displayOrder: 2, isRice: false },
       ]),
     ).toEqual([
-      { id: '11111111-1111-1111-1111-111111111111', title: 'اول', displayOrder: 1 },
+      { id: '11111111-1111-1111-1111-111111111111', title: 'اول', displayOrder: 1, isRice: true },
       { title: 'دوم', displayOrder: 2 },
     ])
   })
@@ -79,8 +79,9 @@ describe('contracts', () => {
 
 describe('sameOptions', () => {
   it('skips identical auto-save payloads', () => {
-    const options = [{ id: 'a', title: 'سوپ', displayOrder: 1 }]
+    const options = [{ id: 'a', title: 'سوپ', displayOrder: 1, isRice: false }]
     expect(sameOptions(options, [{ ...options[0]! }])).toBe(true)
-    expect(sameOptions(options, [{ id: 'a', title: 'آش', displayOrder: 1 }])).toBe(false)
+    expect(sameOptions(options, [{ id: 'a', title: 'آش', displayOrder: 1, isRice: false }])).toBe(false)
+    expect(sameOptions(options, [{ id: 'a', title: 'سوپ', displayOrder: 1, isRice: true }])).toBe(false)
   })
 })

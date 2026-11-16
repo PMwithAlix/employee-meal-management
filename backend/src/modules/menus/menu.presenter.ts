@@ -11,11 +11,13 @@ export function presentOption(option: {
   id: string;
   title: string;
   displayOrder: number;
+  isRice?: boolean;
 }) {
   return {
     id: option.id,
     title: option.title,
     displayOrder: option.displayOrder,
+    isRice: option.isRice === true,
   };
 }
 
@@ -33,6 +35,7 @@ export function presentVersion(version: {
     mealType: MealType;
     title: string;
     displayOrder: number;
+    isRice?: boolean;
   }[];
 }) {
   const meals = version.items
@@ -49,6 +52,7 @@ export function presentVersion(version: {
                 id: option.id as string,
                 title: option.title,
                 displayOrder: option.displayOrder,
+                isRice: option.isRice,
               }),
             ),
         };
@@ -79,6 +83,7 @@ export function presentConfiguredMeals(meals: ConfiguredMeal[]) {
         id: option.id ?? `preview:${mealDate}:${meal.mealType}:${index + 1}`,
         title: option.title,
         displayOrder: option.displayOrder,
+        isRice: option.isRice === true,
       })),
     };
   });

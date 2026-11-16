@@ -39,6 +39,19 @@ describe('errorFromResponse', () => {
     expect(errorFromResponse(422, { message: 'پیکربندی وعده نامعتبر است.', errors: [{ message: 'حداکثر سه گزینه' }] }).issues).toEqual([
       'حداکثر سه گزینه',
     ])
+    expect(
+      errorFromResponse(422, {
+        message: '<!DOCTYPE html><html><title>Unprocessable</title></html>',
+      }).message,
+    ).toContain('سفارش کارکنان')
+    expect(
+      errorFromResponse(422, {
+        message: {
+          message: 'این غذا هنوز سفارش فعال دارد و حذف نمی‌شود. نمونه: منابع انسانی «hr.one» · ناهار ۱۶ آذر.',
+          errors: ['منابع انسانی «hr.one» · ناهار ۱۶ آذر'],
+        },
+      }).message,
+    ).toContain('منابع انسانی')
   })
 
   it('does not treat a network failure as a logout', () => {

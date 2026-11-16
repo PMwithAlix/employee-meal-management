@@ -128,8 +128,8 @@ function DailyMenu({ managed }: { managed: ReturnType<typeof useManagedMenu> }) 
           </div>
           {!day.lunch && !day.dinner && <p className="mb-2 text-sm text-muted">برای این روز هنوز گزینه‌ای نیست. جمعه و تعطیل مانع تعریف منو نیست.</p>}
           <div className="grid gap-3 md:grid-cols-2">
-            <OptionEditor meal="lunch" options={day.lunch ?? []} disabled={managed.busy} onSave={(next) => managed.saveMeal(day, 'lunch', next)} />
-            <OptionEditor meal="dinner" options={day.dinner ?? []} disabled={managed.busy} onSave={(next) => managed.saveMeal(day, 'dinner', next)} />
+            <OptionEditor meal="lunch" options={day.lunch ?? []} disabled={managed.saveStatus === 'saving'} onSave={(next) => managed.saveMeal(day, 'lunch', next)} />
+            <OptionEditor meal="dinner" options={day.dinner ?? []} disabled={managed.saveStatus === 'saving'} onSave={(next) => managed.saveMeal(day, 'dinner', next)} />
           </div>
         </article>
       ))}
@@ -198,6 +198,7 @@ function OptionEditor({
   const [items, setItems] = useState(options)
   const [editingId, setEditingId] = useState<string | null>(null)
   const [removing, setRemoving] = useState<MenuOption | null>(null)
+  const [removeError, setRemoveError] = useState('')
   const debounce = useRef<number | null>(null)
   const label = meal === 'lunch' ? 'ناهار' : 'شام'
 
@@ -228,7 +229,7 @@ function OptionEditor({
       {items.length === 0 && <p className="text-xs text-muted">گزینه‌ای ثبت نشده</p>}
       <div className="space-y-1">
         {items.map((option, index) => (
-          <div key={option.id} className="flex min-h-11 items-center gap-1 rounded border border-line px-1">
+          <div key={option.id} className="flex min-h-11 flex-wrap items-center gap-1 rounded border border-line px-1 py-1 sm:flex-nowrap">
             <div className="flex flex-col">
               <button
                 type="button"
@@ -289,7 +290,17 @@ function OptionEditor({
                 {option.title}
               </button>
             )}
-            <button type="button" className="grid h-9 w-9 place-items-center text-sm text-danger" disabled={disabled} aria-label={`حذف ${option.title}`} onClick={() => setRemoving(option)}>×</button>
+            <button
+              type="button"
+              className={`h-8 shrink-0 rounded-md px-2 text-[11px] ${option.isRice ? 'bg-okbg text-ok' : 'border border-line bg-surface text-muted'}`}
+              disabled={disabled}
+              aria-pressed={option.isRice}
+              aria-label={option.isRice ? `${option.title} برنجی است` : `${option.title} غیر برنجی است`}
+              onClick={() => persist(items.map((item) => item.id === option.id ? { ...item, isRice: !item.isRice } : item))}
+            >
+              {option.isRice ? 'برنجی' : 'غیر برنجی'}
+            </button>
+            <button type="button" className="grid h-9 w-9 place-items-center text-sm text-danger" disabled={disabled} aria-label={`حذف ${option.title}`} onClick={() => { setRemoveError(''); setRemoving(option) }}>×</button>
           </div>
         ))}
       </div>
@@ -307,7 +318,8 @@ function OptionEditor({
         <Button type="submit" variant="secondary" disabled={disabled || items.length >= 3}>افزودن</Button>
       </form>
       <Dialog open={Boolean(removing)} title={`حذف از ${label}`} onClose={() => setRemoving(null)}>
-        <p className="text-sm">«{removing?.title}» از {label} این روز حذف شود؟ اگر سفارش فعال روی این غذا باشد حذف انجام نمی‌شود. سفارش‌های لغوشده با نام ثبت‌شدهٔ قبلی می‌مانند.</p>
+        <p className="text-sm">«{removing?.title}» از {label} این روز حذف شود؟ اگر کسی — از جمله منابع انسانی یا پشتیبان — سفارش فعال روی این غذا داشته باشد حذف انجام نمی‌شود. آن سفارش را از تب «سفارش کارکنان» لغو کنید؛ آنجا همه نقش‌ها دیده می‌شوند نه فقط کارمند.</p>
+        {removeError && <p className="mt-3 rounded-md bg-dangerbg px-3 py-2 text-sm text-danger" role="alert">{removeError}</p>}
         <div className="mt-3 flex justify-end gap-2">
           <Button variant="secondary" onClick={() => setRemoving(null)}>انصراف</Button>
           <Button
@@ -315,8 +327,15 @@ function OptionEditor({
             disabled={disabled}
             onClick={() => {
               if (!removing) return
-              persist(items.filter((item) => item.id !== removing.id))
-              setRemoving(null)
+              const next = items.filter((item) => item.id !== removing.id)
+              setItems(next)
+              setRemoveError('')
+              void onSave(next.map((item, index) => ({ ...item, displayOrder: index + 1 }))).then(() => {
+                setRemoving(null)
+              }).catch((error: unknown) => {
+                setItems(options)
+                setRemoveError(error instanceof Error ? error.message : 'حذف غذا انجام نشد.')
+              })
             }}
           >
             حذف

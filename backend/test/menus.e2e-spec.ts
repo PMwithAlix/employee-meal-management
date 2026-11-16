@@ -61,6 +61,9 @@ async function cleanupMenuFixtures() {
         },
       },
     });
+    await prisma.foodKnowledge.deleteMany({
+      where: { normalizedName: { startsWith: 'e2e ' } },
+    });
     await prisma.menu.updateMany({
       where: { year: { in: [1411, 1412] } },
       data: { publishedVersionId: null },
@@ -344,7 +347,12 @@ describe('Menus (e2e)', () => {
         options: [],
       });
     expect(blocked.status).toBe(422);
-    expect(String(blocked.body.message ?? '')).toContain('سفارش فعال');
+    const blockedMessage =
+      typeof blocked.body.message === 'string'
+        ? blocked.body.message
+        : JSON.stringify(blocked.body.message ?? blocked.body);
+    expect(blockedMessage).toContain('سفارش فعال');
+    expect(blockedMessage).toContain('سفارش کارکنان');
     expect(await prisma.menuItem.findUnique({ where: { id: lunch!.id } })).not.toBeNull();
 
     expect(
@@ -587,6 +595,163 @@ describe('Menus (e2e)', () => {
       where: { username: 'e2e.menu.hr' },
       data: { isActive: true },
     });
+  });
+
+  it('remembers rice classification by normalized food name without rewriting older menu items', async () => {
+    const riceName = 'e2e زرشک‌پلو با مرغ';
+    const first = await request(app.getHttpServer())
+      .patch(`/api/v1/menus/${menuId}/versions/${draftId}`)
+      .set('Cookie', supportCookie)
+      .send({
+        mealDate: mealDate(10),
+        mealType: MealType.LUNCH,
+        options: [{ title: riceName, displayOrder: 1 }],
+      });
+    expect(first.status).toBe(200);
+    const firstOption = first.body.meals
+      .find((meal: { mealDate: string; mealType: string }) => meal.mealDate === mealDate(10) && meal.mealType === 'LUNCH')
+      ?.options[0];
+    expect(firstOption.isRice).toBe(false);
+
+    const marked = await request(app.getHttpServer())
+      .patch(`/api/v1/menus/${menuId}/versions/${draftId}`)
+      .set('Cookie', supportCookie)
+      .send({
+        mealDate: mealDate(10),
+        mealType: MealType.LUNCH,
+        options: [{ id: firstOption.id, title: riceName, displayOrder: 1, isRice: true }],
+      });
+    expect(marked.status).toBe(200);
+    expect(
+      marked.body.meals
+        .find((meal: { mealDate: string }) => meal.mealDate === mealDate(10))
+        .options[0].isRice,
+    ).toBe(true);
+
+    const spaced = await request(app.getHttpServer())
+      .patch(`/api/v1/menus/${menuId}/versions/${draftId}`)
+      .set('Cookie', supportCookie)
+      .send({
+        mealDate: mealDate(11),
+        mealType: MealType.LUNCH,
+        options: [{ title: 'e2e زرشک پلو با مرغ', displayOrder: 1 }],
+      });
+    expect(spaced.status).toBe(200);
+    expect(
+      spaced.body.meals
+        .find((meal: { mealDate: string }) => meal.mealDate === mealDate(11))
+        .options[0].isRice,
+    ).toBe(true);
+
+    const laterId = spaced.body.meals
+      .find((meal: { mealDate: string }) => meal.mealDate === mealDate(11))
+      .options[0].id as string;
+    const cleared = await request(app.getHttpServer())
+      .patch(`/api/v1/menus/${menuId}/versions/${draftId}`)
+      .set('Cookie', supportCookie)
+      .send({
+        mealDate: mealDate(11),
+        mealType: MealType.LUNCH,
+        options: [{ id: laterId, title: 'e2e زرشک پلو با مرغ', displayOrder: 1, isRice: false }],
+      });
+    expect(cleared.status).toBe(200);
+
+    const reread = await request(app.getHttpServer())
+      .get(`/api/v1/menus/${menuId}/versions/${draftId}`)
+      .set('Cookie', supportCookie);
+    const day10 = reread.body.meals.find(
+      (meal: { mealDate: string }) => meal.mealDate === mealDate(10),
+    );
+    const day11 = reread.body.meals.find(
+      (meal: { mealDate: string }) => meal.mealDate === mealDate(11),
+    );
+    expect(day10.options[0].isRice).toBe(true);
+    expect(day11.options[0].isRice).toBe(false);
+
+    const next = await request(app.getHttpServer())
+      .patch(`/api/v1/menus/${menuId}/versions/${draftId}`)
+      .set('Cookie', supportCookie)
+      .send({
+        mealDate: mealDate(12),
+        mealType: MealType.DINNER,
+        options: [{ title: 'e2e زرشك‌پلو  با مرغ', displayOrder: 1 }],
+      });
+    expect(next.status).toBe(200);
+    expect(
+      next.body.meals
+        .find((meal: { mealDate: string }) => meal.mealDate === mealDate(12))
+        .options[0].isRice,
+    ).toBe(false);
+
+    const different = await request(app.getHttpServer())
+      .patch(`/api/v1/menus/${menuId}/versions/${draftId}`)
+      .set('Cookie', supportCookie)
+      .send({
+        mealDate: mealDate(13),
+        mealType: MealType.LUNCH,
+        options: [{ title: 'e2e جوجه کباب با برنج', displayOrder: 1 }],
+      });
+    expect(different.status).toBe(200);
+    expect(
+      different.body.meals
+        .find((meal: { mealDate: string }) => meal.mealDate === mealDate(13))
+        .options[0].isRice,
+    ).toBe(false);
+
+    const createdOrder = await request(app.getHttpServer())
+      .post('/api/v1/orders')
+      .set('Cookie', employeeCookie)
+      .send({
+        mealDate: mealDate(10),
+        mealType: MealType.LUNCH,
+        menuItemId: firstOption.id,
+      });
+    expect([200, 201]).toContain(createdOrder.status);
+
+    await request(app.getHttpServer())
+      .patch(`/api/v1/menus/${menuId}/versions/${draftId}`)
+      .set('Cookie', supportCookie)
+      .send({
+        mealDate: mealDate(11),
+        mealType: MealType.LUNCH,
+        options: [{ id: laterId, title: 'e2e زرشک پلو با مرغ', displayOrder: 1, isRice: true }],
+      });
+
+    const afterClassify = await prisma.menuItem.findUnique({
+      where: { id: firstOption.id as string },
+    });
+    expect(afterClassify?.isRice).toBe(true);
+    if (createdOrder.status === 201 || createdOrder.status === 200) {
+      expect(createdOrder.body.currentCycle?.menuItemId ?? createdOrder.body.menuItemId).toBe(
+        firstOption.id,
+      );
+    }
+
+    const [left, right] = await Promise.all([
+      request(app.getHttpServer())
+        .patch(`/api/v1/menus/${menuId}/versions/${draftId}`)
+        .set('Cookie', supportCookie)
+        .send({
+          mealDate: mealDate(14),
+          mealType: MealType.LUNCH,
+          options: [{ title: 'e2e خورش قیمه همزمان', displayOrder: 1, isRice: true }],
+        }),
+      request(app.getHttpServer())
+        .patch(`/api/v1/menus/${menuId}/versions/${draftId}`)
+        .set('Cookie', adminCookie)
+        .send({
+          mealDate: mealDate(15),
+          mealType: MealType.LUNCH,
+          options: [{ title: 'e2e خورش قیمه همزمان', displayOrder: 1, isRice: true }],
+        }),
+    ]);
+    expect(left.status).toBe(200);
+    expect(right.status).toBe(200);
+    expect(
+      await prisma.foodKnowledge.count({
+        where: { normalizedName: 'e2e خورش قیمه همزمان' },
+      }),
+    ).toBe(1);
   });
 
   it('writes menu audit rows from the session actor', async () => {

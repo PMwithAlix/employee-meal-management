@@ -34,7 +34,7 @@ function looksLikeHtml(value: string) {
 
 function usableMessage(value: string, fallback: string) {
   const text = value.replace(/\s+/g, ' ').trim()
-  if (!text || looksLikeHtml(text) || text.length > 220) return fallback
+  if (!text || looksLikeHtml(text) || text.length > 480) return fallback
   return text
 }
 
@@ -42,6 +42,9 @@ function messageFromBody(body: unknown, fallback: string) {
   if (!body || typeof body !== 'object') return fallback
   const raw = (body as { message?: unknown }).message
   if (typeof raw === 'string' && raw.trim()) return usableMessage(raw, fallback)
+  if (raw && typeof raw === 'object' && typeof (raw as { message?: unknown }).message === 'string') {
+    return usableMessage((raw as { message: string }).message, fallback)
+  }
   if (Array.isArray(raw)) {
     const parts = raw.filter((item): item is string => typeof item === 'string' && item.trim().length > 0)
     if (parts.length) return usableMessage(parts.join(' '), fallback)
@@ -70,7 +73,10 @@ export function errorFromResponse(status: number, body: unknown): AuthRequestErr
   if (status === 422) {
     return new AuthRequestError(
       'validation',
-      messageFromBody(body, 'اطلاعات ارسال‌شده معتبر نیست.'),
+      messageFromBody(
+        body,
+        'حذف غذا انجام نشد چون سفارش فعال روی آن وجود دارد. از تب «سفارش کارکنان» سفارش همه نقش‌ها از جمله منابع انسانی را لغو کنید.',
+      ),
       status,
       issuesFromBody(body),
     )
@@ -87,7 +93,9 @@ export function errorFromResponse(status: number, body: unknown): AuthRequestErr
 
 function issuesFromBody(body: unknown) {
   if (!body || typeof body !== 'object') return []
+  const nested = (body as { message?: unknown }).message
   const raw = (body as { errors?: unknown }).errors
+    ?? (nested && typeof nested === 'object' ? (nested as { errors?: unknown }).errors : undefined)
   if (!Array.isArray(raw)) return []
   return raw
     .map((item) => {

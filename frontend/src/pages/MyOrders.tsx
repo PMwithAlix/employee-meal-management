@@ -1,6 +1,6 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Button, Dialog, Empty, MonthBar } from '../shared/ui/primitives'
-import { SelectMealDialog } from '../shared/ui/SelectMealDialog'
+import { MealPicker } from '../shared/ui/MealPicker'
 import { StaffOrdersPanel } from '../features/orders/ui/StaffOrdersPanel'
 import { usePublishedMenu } from '../features/menus/hooks/usePublishedMenu'
 import { useApp } from '../app/providers/app-store'
@@ -11,12 +11,13 @@ import { can } from '../shared/config/permissions'
 import { fa } from '../shared/lib/persian-text'
 import { AuthRequestError } from '../features/auth/lib/auth-errors'
 import { orderApi } from '../features/orders/api/orders-api'
-import type { DayMenu, MealKind, Order } from '../shared/types/domain'
+import type { DayMenu, MealKind, MealOptionChoice, Order } from '../shared/types/domain'
 
 export function MyOrdersPage() {
   const app = useApp()
+  if (can(app.role, 'order.self')) return <EmployeeOrdersPage />
   if (can(app.role, 'order.ops')) return <StaffOrdersPanel />
-  return <EmployeeOrdersPage />
+  return <Empty title="سفارش شخصی ندارید" body="برای این نقش سفارش شخصی تعریف نشده است." />
 }
 
 function EmployeeOrdersPage() {
@@ -24,14 +25,10 @@ function EmployeeOrdersPage() {
   const published = usePublishedMenu(app.selectedMonth.jy, app.selectedMonth.jm)
   const id = app.role === 'admin' ? null : app.selfId
   const [editing, setEditing] = useState<Order | null>(null)
-  const [picking, setPicking] = useState<{ day: DayMenu; meal: MealKind } | null>(null)
   if (!id) return <Empty title="سفارش شخصی ندارید" body="نقش ادمین به ساختمان و سفارش شخصی متصل نیست." />
 
   const days = [...published.pickerDays].reverse().filter((day) => day.lunch || day.dinner)
   const past = app.myOrders.filter((item) => item.employeeId === id && (item.jy !== app.selectedMonth.jy || item.jm !== app.selectedMonth.jm))
-  const pickedDay = picking ? published.pickerDays.find((day) => day.jd === picking.day.jd && day.jm === picking.day.jm && day.jy === picking.day.jy) : undefined
-  const pickedOptions = pickedDay && picking ? mealChoices(pickedDay, picking.meal) : null
-  const pickedOrder = pickedDay && picking ? findOrder(app.myOrders, id, pickedDay, pickedDay.jd, picking.meal) : undefined
 
   return (
     <div className="space-y-4">
@@ -67,7 +64,7 @@ function EmployeeOrdersPage() {
                   <p className="text-xs text-muted">{day.weekday}{isSameDate(day, app.now) ? ' · امروز' : ''}</p>
                 </div>
                 <OrderLine
-                  label="ناهار"
+                  meal="lunch"
                   name={day.lunch ? lunch?.choice ?? null : undefined}
                   missing={!day.lunch}
                   order={lunch}
@@ -75,11 +72,15 @@ function EmployeeOrdersPage() {
                   status={day.lunch ? (isMealOpen(day, 'lunch', app.deadlines, app.now, app.mealDeadlineAt(day, 'lunch')) ? 'مهلت باز' : 'مهلت تمام') : undefined}
                   canEdit={canChange(app.role, day, 'lunch', app.deadlines, app.now, app.mealDeadlineAt(day, 'lunch'))}
                   canRate={app.mealServingsStatus === 'ready' && canGiveFeedback(lunch, app.now, app.mealServings)}
-                  onEdit={() => setPicking({ day, meal: 'lunch' })}
+                  options={mealChoices(day, 'lunch')}
+                  currentId={lunch?.menuItemId ?? null}
+                  locked={!isMealOpen(day, 'lunch', app.deadlines, app.now, app.mealDeadlineAt(day, 'lunch'))}
+                  ops={can(app.role, 'order.ops')}
+                  onSave={(menuItemId) => app.selectMeal(id, day.jd, 'lunch', null, 'self', menuItemId)}
                   onRate={() => lunch && setEditing(lunch)}
                 />
                 <OrderLine
-                  label="شام"
+                  meal="dinner"
                   name={day.dinner ? dinner?.choice ?? null : undefined}
                   missing={!day.dinner}
                   order={dinner}
@@ -87,7 +88,11 @@ function EmployeeOrdersPage() {
                   status={day.dinner ? (isMealOpen(day, 'dinner', app.deadlines, app.now, app.mealDeadlineAt(day, 'dinner')) ? 'مهلت باز' : 'مهلت تمام') : undefined}
                   canEdit={canChange(app.role, day, 'dinner', app.deadlines, app.now, app.mealDeadlineAt(day, 'dinner'))}
                   canRate={app.mealServingsStatus === 'ready' && canGiveFeedback(dinner, app.now, app.mealServings)}
-                  onEdit={() => setPicking({ day, meal: 'dinner' })}
+                  options={mealChoices(day, 'dinner')}
+                  currentId={dinner?.menuItemId ?? null}
+                  locked={!isMealOpen(day, 'dinner', app.deadlines, app.now, app.mealDeadlineAt(day, 'dinner'))}
+                  ops={can(app.role, 'order.ops')}
+                  onSave={(menuItemId) => app.selectMeal(id, day.jd, 'dinner', null, 'self', menuItemId)}
                   onRate={() => dinner && setEditing(dinner)}
                 />
               </div>
@@ -115,20 +120,6 @@ function EmployeeOrdersPage() {
         )}
       </section>
       {editing && <RatingDialog order={editing} onClose={() => setEditing(null)} />}
-      {picking && pickedDay && pickedOptions && (
-        <SelectMealDialog
-          kind={picking.meal}
-          jd={pickedDay.jd}
-          weekday={pickedDay.weekday}
-          monthName={JALALI_MONTHS[pickedDay.jm - 1]}
-          options={pickedOptions}
-          currentId={pickedOrder?.menuItemId ?? null}
-          locked={!isMealOpen(pickedDay, picking.meal, app.deadlines, app.now, app.mealDeadlineAt(pickedDay, picking.meal))}
-          ops={can(app.role, 'order.ops')}
-          onClose={() => setPicking(null)}
-          onSave={(menuItemId) => app.selectMeal(id, pickedDay.jd, picking.meal, null, 'self', menuItemId)}
-        />
-      )}
     </div>
   )
 }
@@ -139,31 +130,44 @@ function canChange(role: Parameters<typeof can>[0], day: DayMenu, meal: MealKind
 }
 
 function OrderLine({
-  label,
+  meal,
   name,
   missing,
   order,
   note,
   onRate,
-  onEdit,
   status,
   canRate,
   canEdit,
+  options,
+  currentId,
+  locked,
+  ops,
+  onSave,
 }: {
-  label: string
+  meal: MealKind
   name: string | null | undefined
   missing: boolean
   order?: Order
   note?: string
   onRate: () => void
-  onEdit: () => void
   status?: string
   canRate: boolean
   canEdit: boolean
+  options: MealOptionChoice[] | null
+  currentId: string | null
+  locked: boolean
+  ops: boolean
+  onSave: (menuItemId: string | null) => boolean | Promise<boolean>
 }) {
-  const lunch = label === 'ناهار'
+  const app = useApp()
+  const [open, setOpen] = useState(false)
+  const triggerRef = useRef<HTMLDivElement>(null)
+  const lunch = meal === 'lunch'
+  const label = lunch ? 'ناهار' : 'شام'
+  const busy = Boolean(app.orderingKey)
   return (
-    <div className={lunch ? 'rounded-md border border-lunchline bg-lunchbg px-3 py-3' : 'rounded-md border border-dinnerline bg-dinnerbg px-3 py-3'}>
+    <div ref={triggerRef} className={lunch ? 'rounded-md border border-lunchline bg-lunchbg px-3 py-3' : 'rounded-md border border-dinnerline bg-dinnerbg px-3 py-3'}>
       <p className={lunch ? 'text-xs font-medium text-lunch' : 'text-xs font-medium text-dinner'}>{label}</p>
       <p className="mt-1 break-words text-sm">{missing ? 'منو تعریف نشده' : name ?? 'انتخاب نشده'}</p>
       {note && <p className="mt-1 text-xs text-muted">{note}</p>}
@@ -171,7 +175,14 @@ function OrderLine({
       {(canEdit || (canRate && name && order)) && (
         <div className="mt-2 flex flex-col gap-2">
           {canEdit && (
-            <button type="button" className="min-h-11 rounded-md border border-line bg-surface px-3 text-sm" onClick={onEdit}>
+            <button
+              type="button"
+              className="min-h-11 rounded-md border border-line bg-surface px-3 text-sm"
+              aria-haspopup="listbox"
+              aria-expanded={open}
+              disabled={busy}
+              onClick={() => setOpen((value) => !value)}
+            >
               {name ? `تغییر یا حذف ${label}` : `انتخاب ${label}`}
             </button>
           )}
@@ -181,6 +192,19 @@ function OrderLine({
             </button>
           )}
         </div>
+      )}
+      {canEdit && options && (
+        <MealPicker
+          open={open}
+          trigger={triggerRef.current}
+          kind={meal}
+          options={options}
+          currentId={currentId}
+          locked={locked}
+          ops={ops}
+          onClose={() => setOpen(false)}
+          onSave={onSave}
+        />
       )}
     </div>
   )

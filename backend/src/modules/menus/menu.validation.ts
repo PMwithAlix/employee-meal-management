@@ -105,6 +105,7 @@ export function groupItemsAsMeals(
     mealType: MealType;
     title: string;
     displayOrder: number;
+    isRice?: boolean;
   }[],
 ): ConfiguredMeal[] {
   const grouped = new Map<string, ConfiguredMeal>();
@@ -115,6 +116,7 @@ export function groupItemsAsMeals(
       id: item.id,
       title: item.title,
       displayOrder: item.displayOrder,
+      isRice: item.isRice === true,
     };
     if (current) {
       current.options.push(option);

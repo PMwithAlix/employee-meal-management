@@ -188,6 +188,7 @@ model MenuItem {
   mealType      MealType
   title         String
   displayOrder  Int
+  isRice        Boolean  @default(false)
   createdAt     DateTime @default(now()) @db.Timestamptz(6)
 
   menuVersion MenuVersion  @relation(fields: [menuVersionId], references: [id], onDelete: Restrict, onUpdate: Restrict)
@@ -198,6 +199,19 @@ model MenuItem {
   @@index([menuVersionId])
   @@index([mealDate, mealType])
   @@map("menu_items")
+}
+
+/// Independent rice-classification memory keyed by normalized food title.
+/// Menu items store their own isRice snapshot and are not rewritten when this changes.
+model FoodKnowledge {
+  id             String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  title          String
+  normalizedName String   @unique
+  isRice         Boolean  @default(false)
+  createdAt      DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt      DateTime @updatedAt @db.Timestamptz(6)
+
+  @@map("food_knowledge")
 }
 
 model Order {

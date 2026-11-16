@@ -62,6 +62,7 @@ export function useManagedMenu(year: number, month: number) {
   const pending = useRef(new Map<string, PendingMeal>())
   const flushing = useRef<Promise<void> | null>(null)
   const failed = useRef<PendingMeal | null>(null)
+  const failedMessage = useRef('')
   menuRef.current = menu
   draftRef.current = draft
   daysRef.current = days
@@ -92,6 +93,7 @@ export function useManagedMenu(year: number, month: number) {
     setSaveMessage('')
     pending.current.clear()
     failed.current = null
+    failedMessage.current = ''
     flushing.current = null
     void ensureLive(year, month, controller.signal)
       .then((result) => {
@@ -144,10 +146,13 @@ export function useManagedMenu(year: number, month: number) {
           setDays(daysFromVersion(year, month, next))
         }
         failed.current = null
+        failedMessage.current = ''
       } catch (error) {
         failed.current = job
+        const message = error instanceof AuthRequestError ? error.message : 'ذخیره وعده انجام نشد.'
+        failedMessage.current = message
         setSaveStatus('error')
-        setSaveMessage(error instanceof AuthRequestError ? error.message : 'ذخیره وعده انجام نشد.')
+        setSaveMessage(message)
         setIssues(error instanceof AuthRequestError ? error.issues : [])
         return
       }
@@ -180,7 +185,7 @@ export function useManagedMenu(year: number, month: number) {
       setIssues([])
       await flushSaves()
       if (failed.current && `${failed.current.day.mealDate}:${failed.current.meal}` === key) {
-        throw new Error('save-failed')
+        throw new Error(failedMessage.current || 'ذخیره وعده انجام نشد.')
       }
     },
     [flushSaves],

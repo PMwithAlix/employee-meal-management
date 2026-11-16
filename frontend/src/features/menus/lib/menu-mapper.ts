@@ -29,7 +29,7 @@ export function parseOption(value: unknown): MenuOption | null {
   if (typeof item.id !== 'string' || typeof item.title !== 'string') return null
   const displayOrder = typeof item.displayOrder === 'number' ? item.displayOrder : Number(item.displayOrder)
   if (!Number.isInteger(displayOrder)) return null
-  return { id: item.id, title: item.title, displayOrder }
+  return { id: item.id, title: item.title, displayOrder, isRice: item.isRice === true }
 }
 
 export function parseMeals(value: unknown): BackendMeal[] {
@@ -107,14 +107,14 @@ export function optionTitles(options: MenuOption[] | null) {
 
 export function patchOptions(options: MenuOption[]) {
   return options.map((option, index) => ({
-    ...(option.id.startsWith('new:') ? {} : { id: option.id }),
+    ...(option.id.startsWith('new:') ? {} : { id: option.id, isRice: option.isRice }),
     title: option.title,
     displayOrder: index + 1,
   }))
 }
 
 export function localOption(title: string, displayOrder: number): MenuOption {
-  return { id: `new:${displayOrder}:${title}`, title, displayOrder }
+  return { id: `new:${displayOrder}:${title}`, title, displayOrder, isRice: false }
 }
 
 export function sameOptions(left: MenuOption[], right: MenuOption[]) {
@@ -123,6 +123,7 @@ export function sameOptions(left: MenuOption[], right: MenuOption[]) {
     (option, index) =>
       option.id === right[index]?.id &&
       option.title === right[index]?.title &&
-      option.displayOrder === right[index]?.displayOrder,
+      option.displayOrder === right[index]?.displayOrder &&
+      option.isRice === right[index]?.isRice,
   )
 }

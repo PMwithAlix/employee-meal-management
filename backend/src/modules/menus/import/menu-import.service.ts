@@ -15,6 +15,7 @@ import {
   gregorianToJalali,
   utcDateFromGregorian,
 } from '../../../common/calendar/jalali';
+import { classifyMenuItem } from '../food-knowledge';
 import type { ConfiguredMeal, ImportPolicy } from '../menu.types';
 import {
   presentConfiguredMeals,
@@ -321,17 +322,29 @@ export class MenuImportService {
             createdBy: actor.id,
           },
         });
-        await tx.menuItem.createMany({
-          data: stored.meals.flatMap((meal) =>
-            meal.options.map((option) => ({
+        const importedItems: Array<{
+          menuVersionId: string;
+          mealDate: Date;
+          mealType: MealType;
+          title: string;
+          displayOrder: number;
+          isRice: boolean;
+        }> = [];
+        for (const meal of stored.meals) {
+          for (const option of meal.options) {
+            importedItems.push({
               menuVersionId: created.id,
               mealDate: meal.mealDate,
               mealType: meal.mealType,
               title: option.title,
               displayOrder: option.displayOrder,
-            })),
-          ),
-        });
+              isRice: await classifyMenuItem(tx, { title: option.title }),
+            });
+          }
+        }
+        if (importedItems.length) {
+          await tx.menuItem.createMany({ data: importedItems });
+        }
         await this.audit.record(
           {
             actorId: actor.id,

@@ -45,14 +45,14 @@ export const NAV_ITEMS: Array<{ id: Page; label: string; group: string; icon: Lu
 
 export const PRIMARY_NAV: Record<Role, readonly Page[]> = {
   employee: ['menu', 'orders', 'overview'],
-  support: ['overview', 'orders', 'menuMgmt', 'reports'],
+  support: ['menu', 'orders', 'menuMgmt', 'reports'],
   hr: ['overview', 'employees', 'buildings', 'groups'],
   management: ['overview', 'reports', 'activity'],
   admin: ['overview', 'employees', 'menuMgmt', 'reports'],
 }
 
 export function pageTitle(page: Page, role: Role) {
-  if (page === 'orders' && role === 'support') return 'مدیریت سفارش‌ها'
+  if (page === 'orders' && role === 'admin') return 'مدیریت سفارش‌ها'
   return PAGE_TITLES[page]
 }
 

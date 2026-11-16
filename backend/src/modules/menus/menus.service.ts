@@ -25,6 +25,14 @@ import { CreateMenuDto } from './dto/create-menu.dto';
 import { CreateVersionDto } from './dto/create-version.dto';
 import { ListMenusQueryDto } from './dto/list-menus.query';
 import { UpsertMealDto } from './dto/upsert-meal.dto';
+import { classifyMenuItem } from './food-knowledge';
+import { normalizeFoodName } from './food-name';
+import {
+  describeBlockingEmployeeOrder,
+  describeBlockingGuestOrder,
+  MENU_ITEM_ACTIVE_ORDER_FALLBACK,
+  menuItemRemovalBlocked,
+} from './menu-item-removal';
 import { presentMenu, presentVersion } from './menu.presenter';
 import { MENU_PUBLISHED_NOTIFICATION } from './menu.types';
 import { normalizeOptionTitle, validateConfiguredMeals } from './menu.validation';
@@ -163,6 +171,7 @@ export class MenusService {
             mealType: item.mealType,
             title: item.title,
             displayOrder: item.displayOrder,
+            isRice: item.isRice,
           })),
         });
       }
@@ -219,6 +228,7 @@ export class MenusService {
       id: option.id,
       title: normalizeOptionTitle(option.title),
       displayOrder: option.displayOrder ?? index + 1,
+      isRice: option.isRice,
     }));
 
     if (options.length === 0) {
@@ -318,10 +328,22 @@ export class MenusService {
         id: string;
         title: string;
         displayOrder: number;
+        isRice: boolean;
         mealDate: Date;
         mealType: string;
       }[] = [];
       for (const option of options) {
+        const previous = option.id
+          ? before.find((item) => item.id === option.id)
+          : undefined;
+        const isRice = await classifyMenuItem(tx, {
+          title: option.title,
+          previousNormalized: previous
+            ? normalizeFoodName(previous.title)
+            : undefined,
+          previousIsRice: previous?.isRice,
+          requestedIsRice: option.isRice,
+        });
         if (option.id) {
           after.push(
             await tx.menuItem.update({
@@ -331,6 +353,7 @@ export class MenusService {
                 displayOrder: option.displayOrder,
                 mealDate,
                 mealType: dto.mealType,
+                isRice,
               },
             }),
           );
@@ -343,6 +366,7 @@ export class MenusService {
                 mealType: dto.mealType,
                 title: option.title,
                 displayOrder: option.displayOrder,
+                isRice,
               },
             }),
           );
@@ -442,25 +466,54 @@ export class MenusService {
     if (!itemIds.length) {
       return;
     }
-    const [activeOrders, activeGuests] = await Promise.all([
-      tx.orderCycle.count({
+    const [cycles, guests] = await Promise.all([
+      tx.orderCycle.findMany({
         where: {
           menuItemId: { in: itemIds },
           status: OrderCycleStatus.ACTIVE,
         },
+        take: 5,
+        select: {
+          usernameSnapshot: true,
+          mealDateSnapshot: true,
+          mealTypeSnapshot: true,
+          order: { select: { user: { select: { username: true, role: true } } } },
+        },
       }),
-      tx.guestOrder.count({
+      tx.guestOrder.findMany({
         where: {
           menuItemId: { in: itemIds },
           status: GuestOrderStatus.ACTIVE,
         },
+        take: 5,
+        select: {
+          mealDate: true,
+          mealType: true,
+          buildingNameSnapshot: true,
+        },
       }),
     ]);
-    if (activeOrders + activeGuests > 0) {
-      throw new UnprocessableEntityException(
-        'این غذا در سفارش فعال ثبت شده است و حذف نمی‌شود. ابتدا سفارش فعال این وعده را لغو کنید.',
-      );
+    if (!cycles.length && !guests.length) {
+      return;
     }
+    const samples = [
+      ...cycles.map((cycle) =>
+        describeBlockingEmployeeOrder({
+          username: cycle.order.user.username || cycle.usernameSnapshot,
+          role: cycle.order.user.role,
+          mealDate: cycle.mealDateSnapshot,
+          mealType: cycle.mealTypeSnapshot,
+        }),
+      ),
+      ...guests.map((guest) =>
+        describeBlockingGuestOrder({
+          buildingName: guest.buildingNameSnapshot,
+          mealDate: guest.mealDate,
+          mealType: guest.mealType,
+        }),
+      ),
+    ];
+    throw new UnprocessableEntityException(menuItemRemovalBlocked(samples));
   }
 
   private rethrowMenuMutationError(error: unknown): never {
@@ -487,9 +540,7 @@ export class MenusService {
         error.code === 'P2003') ||
       text.includes('cannot detach menu item from an active order cycle')
     ) {
-      throw new UnprocessableEntityException(
-        'این غذا در سفارش فعال ثبت شده است و حذف نمی‌شود. ابتدا سفارش فعال این وعده را لغو کنید.',
-      );
+      throw new UnprocessableEntityException(MENU_ITEM_ACTIVE_ORDER_FALLBACK);
     }
     throw error;
   }
