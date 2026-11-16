@@ -4,6 +4,7 @@ import { currentDateTime } from '../../../shared/lib/jalali'
 import { defaultMonthDeadlines } from '../../../shared/lib/deadlines'
 import type { DayMenu } from '../../../shared/types/domain'
 import { deadlineKey, isDeadlineOpen, mealDeadlineFromMap, mealServingsFromSettings, parseBackendOrder, parseDeadline, parseMealSetting, parseStaffRating, toDeadlineMap, toUiOrder } from './order-mapper'
+import { partitionMyOrders } from './my-orders'
 
 const payload = {
   id: 'order-1',
@@ -71,13 +72,20 @@ describe('parseBackendOrder', () => {
     expect(ui?.menuItemId).toBeNull()
   })
 
-  it('uses mealDate, not createdAt, and can recover Jalali from jalaliDate if mealDate is invalid', () => {
+  it('uses mealDate only and does not assign a month from jalaliDate', () => {
     const ui = toUiOrder(parseBackendOrder(payload)!)
-    expect(ui).toMatchObject({ jy: 1405, jm: 8, jd: 1 })
-    const recovered = toUiOrder(parseBackendOrder({ ...payload, mealDate: 'not-a-date', jalaliDate: '1405/08/01' })!)
-    expect(recovered).toMatchObject({ jy: 1405, jm: 8, jd: 1, meal: 'lunch' })
-    const invalid = toUiOrder(parseBackendOrder({ ...payload, mealDate: 'not-a-date', jalaliDate: 'nope' })!)
-    expect(invalid).toMatchObject({ id: 'order-1', jy: 0, jm: 0, jd: 0 })
+    expect(ui).toMatchObject({ jy: 1405, jm: 8, jd: 1, snapshotTitle: 'چلوکباب' })
+    const mismatched = toUiOrder(parseBackendOrder({ ...payload, jalaliDate: '1404/01/01' })!)
+    expect(mismatched).toMatchObject({ jy: 1405, jm: 8, jd: 1 })
+    const invalid = toUiOrder(parseBackendOrder({ ...payload, mealDate: 'not-a-date', jalaliDate: '1405/08/01' })!)
+    expect(invalid).toMatchObject({ id: 'order-1', jy: 0, jm: 0, jd: 0, snapshotTitle: 'چلوکباب', cycleStatus: 'ACTIVE' })
+    const emptyDate = toUiOrder(parseBackendOrder({ ...payload, mealDate: '', jalaliDate: '1405/08/01' })!)
+    expect(emptyDate).toMatchObject({ jy: 0, jm: 0, jd: 0, snapshotTitle: 'چلوکباب' })
+    const split = partitionMyOrders([invalid!], 'user-1', { jy: 1405, jm: 8 })
+    expect(split.invalid.map((item) => item.id)).toEqual(['order-1'])
+    expect(split.current).toEqual([])
+    expect(split.past).toEqual([])
+    expect(split.future).toEqual([])
   })
 })
 

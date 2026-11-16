@@ -29,6 +29,7 @@ import {
 import { membershipsValidAtWhere } from '../shared/membership-snapshot';
 import { requireCurrentMenuOption } from '../shared/order-option';
 import { orderCycleInclude, presentOrder } from '../shared/order.presenter';
+import { orderPageOrderBy } from './order-page-sort';
 
 const managers: Role[] = [Role.ADMIN, Role.SUPPORT];
 
@@ -200,7 +201,7 @@ export class OrdersService {
           cycles: { orderBy: { cycleNumber: 'asc' } },
           rating: true,
         },
-        orderBy: { createdAt: query.sortOrder },
+        orderBy: orderPageOrderBy(query.sortOrder),
         skip,
         take: query.pageSize,
       }),

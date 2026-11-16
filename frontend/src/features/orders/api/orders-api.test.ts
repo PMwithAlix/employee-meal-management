@@ -168,6 +168,32 @@ describe('orderApi', () => {
     })
   })
 
+  it('rejects a repeated order id across pages as an incomplete listing', async () => {
+    const fetchMock = vi.fn(async (url: string) => {
+      const page = Number(new URL(url, 'http://local.test').searchParams.get('page'))
+      if (page === 1) return jsonPage(1, 2, [backendOrder('dup')])
+      return jsonPage(2, 2, [backendOrder('dup')])
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    await expect(orderApi.listAllMine()).rejects.toMatchObject({
+      kind: 'http',
+      message: 'بارگذاری همه سفارش‌ها کامل نشد.',
+    })
+  })
+
+  it('loads a short last page without treating it as incomplete', async () => {
+    const fetchMock = vi.fn(async (url: string) => {
+      const page = Number(new URL(url, 'http://local.test').searchParams.get('page'))
+      if (page === 1) return jsonPage(1, 101, Array.from({ length: 100 }, (_, index) => backendOrder(`p1-${index}`)))
+      return jsonPage(2, 101, [backendOrder('last')])
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    const listed = await orderApi.listAllMine()
+    expect(fetchMock).toHaveBeenCalledTimes(2)
+    expect(listed.orders).toHaveLength(101)
+    expect(listed.orders[100]?.id).toBe('last')
+  })
+
   it('rejects when collected records exceed total', async () => {
     const fetchMock = vi.fn(async () => jsonPage(1, 1, [backendOrder('a'), backendOrder('b')]))
     vi.stubGlobal('fetch', fetchMock)

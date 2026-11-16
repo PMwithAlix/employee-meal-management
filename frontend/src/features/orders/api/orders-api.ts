@@ -38,6 +38,7 @@ export const orderApi = {
     const maxPages = 50
     const incomplete = () => new AuthRequestError('http', 'بارگذاری همه سفارش‌ها کامل نشد.')
     const orders: Order[] = []
+    const seen = new Set<string>()
     let received = 0
     let page = 1
     let total: number | null = null
@@ -54,6 +55,10 @@ export const orderApi = {
         break
       }
       if (listed.orders.length !== listed.items.length) throw incomplete()
+      for (const item of listed.orders) {
+        if (seen.has(item.id)) throw incomplete()
+        seen.add(item.id)
+      }
       received += listed.items.length
       if (received > total) throw incomplete()
       orders.push(...listed.orders)

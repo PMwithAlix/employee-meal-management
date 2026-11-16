@@ -1,4 +1,4 @@
-import { jalaliFromJalaliField, jalaliFromMealDate, toBackendMeal, toFrontendMeal } from '../../menus/lib/menu-mapper'
+import { jalaliFromMealDate, toBackendMeal, toFrontendMeal } from '../../menus/lib/menu-mapper'
 import { deadlineAtFromPattern, type MealDeadline } from '../../../shared/lib/deadlines'
 import type { MealDeadlineState } from '../../../shared/lib/order-rules'
 import type { MealKind, Order } from '../../../shared/types/domain'
@@ -85,7 +85,7 @@ export function parseBackendOrder(value: unknown): BackendOrder | null {
 export function toUiOrder(payload: BackendOrder): Order | null {
   const meal = toFrontendMeal(payload.mealType)
   if (!meal) return null
-  const date = jalaliFromMealDate(payload.mealDate) ?? jalaliFromJalaliField(payload.jalaliDate)
+  const date = jalaliFromMealDate(payload.mealDate)
   const active = payload.status === 'ACTIVE' && Boolean(payload.currentCycle)
   return {
     id: payload.id,

@@ -385,7 +385,7 @@ function mealFields(day: DayMenu, meal: MealKind, employeeId: string, app: Retur
     options,
     orderingOpen,
     canEdit,
-    busy: app.orderingKey === `${day.jd}-${meal}`,
+    busy: app.orderingKey === `${day.jy}-${day.jm}-${day.jd}-${meal}`,
   }
 }
 

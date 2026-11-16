@@ -161,7 +161,7 @@ textarea {
   }
 
   aside,
-  header,
+  header.sticky,
   nav[aria-label="ناوبری اصلی"],
   nav[aria-label="منوی اصلی"],
   [aria-label="صفحات بیشتر"],
@@ -195,6 +195,7 @@ textarea {
   }
 
   .report-heading {
+    display: block;
     break-after: avoid;
   }
 

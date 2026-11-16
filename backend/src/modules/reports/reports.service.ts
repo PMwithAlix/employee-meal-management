@@ -9,6 +9,7 @@ import { parseGregorianDateOnly } from '../../common/calendar/iso-date';
 import { PrismaService } from '../../database/prisma.service';
 import { buildDailyReport } from './daily-report';
 import { DailyReportQueryDto } from './dto/daily-report.query';
+import { itemsFromPublishedMenu } from './published-menu';
 
 @Injectable()
 export class ReportsService {
@@ -21,9 +22,7 @@ export class ReportsService {
       ? await this.prisma.menu.findUnique({
           where: { year_month: { year: jalali.year, month: jalali.month } },
           include: {
-            versions: {
-              orderBy: { versionNumber: 'desc' },
-              take: 1,
+            publishedVersion: {
               include: {
                 items: {
                   where: { mealDate },
@@ -34,7 +33,7 @@ export class ReportsService {
           },
         })
       : null;
-    const menuItems = menu?.versions[0]?.items ?? [];
+    const menuItems = itemsFromPublishedMenu(menu);
 
     const [staffOrders, guestOrders] = await Promise.all([
       this.prisma.order.findMany({

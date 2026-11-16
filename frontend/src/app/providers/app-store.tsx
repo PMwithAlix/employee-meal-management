@@ -221,6 +221,7 @@ export function StoreProvider({
   const [myOrdersBoot, setMyOrdersBoot] = useState(0)
   const myOrdersSessionRef = useRef(session.id)
   const [orderingKey, setOrderingKey] = useState<string | null>(null)
+  const orderingKeyRef = useRef<string | null>(null)
   const [deadlinePolicy, setDeadlinePolicy] = useState<StoredDeadlinePolicies>({})
   const [deadlineStatus, setDeadlineStatus] = useState<'loading' | 'ready' | 'unavailable' | 'error'>('loading')
   const [deadlineMessage, setDeadlineMessage] = useState('')
@@ -401,12 +402,16 @@ export function StoreProvider({
     if (scope === 'self') {
       if (!can(role, 'order.self') || employeeId !== session.id) return false
       if (locked && !can(role, 'order.ops')) return false
-      const key = `${jd}-${meal}`
-      if (orderingKey) return false
+      const key = `${selectedMonth.jy}-${selectedMonth.jm}-${jd}-${meal}`
+      if (orderingKeyRef.current) {
+        if (orderingKeyRef.current !== key) toast('ذخیره سفارش دیگری در جریان است.')
+        return false
+      }
       const current = myOrders.find((item) => item.employeeId === session.id && item.jy === selectedMonth.jy && item.jm === selectedMonth.jm && item.jd === jd && item.meal === meal && item.cycleStatus !== 'CANCELLED')
       if (menuItemId === undefined) return false
       if (!current && menuItemId === null) return false
       if (current && current.menuItemId === menuItemId) return true
+      orderingKeyRef.current = key
       setOrderingKey(key)
       try {
         let saved: Order
@@ -430,6 +435,7 @@ export function StoreProvider({
         toast(error instanceof AuthRequestError ? error.message : 'ذخیره سفارش انجام نشد.')
         return false
       } finally {
+        orderingKeyRef.current = null
         setOrderingKey(null)
       }
     }
