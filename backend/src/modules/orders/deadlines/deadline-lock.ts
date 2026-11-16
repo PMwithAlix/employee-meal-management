@@ -29,13 +29,12 @@ export async function lockDeadlineMonthForMealDate(
   await lockDeadlineMonth(tx, jalali.year, jalali.month);
 }
 
-export async function lockDeadlineRow(
+export async function lockDeadlinePolicy(
   tx: Prisma.TransactionClient,
-  mealDate: Date,
   mealType: MealType,
 ) {
   await tx.$queryRaw(
-    Prisma.sql`SELECT "id" FROM "order_deadlines" WHERE "mealDate" = ${mealDate} AND "mealType" = CAST(${mealType} AS "MealType") FOR UPDATE`,
+    Prisma.sql`SELECT "id" FROM "order_deadline_policies" WHERE "mealType" = CAST(${mealType} AS "MealType") FOR UPDATE`,
   );
 }
 

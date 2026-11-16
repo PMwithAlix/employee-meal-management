@@ -329,6 +329,10 @@ export class UsersService {
         where: { createdBy: id },
         data: { createdBy: actor.id },
       });
+      await tx.orderDeadlinePolicy.updateMany({
+        where: { updatedBy: id },
+        data: { updatedBy: actor.id },
+      });
       await tx.mealSetting.updateMany({
         where: { updatedBy: id },
         data: { updatedBy: actor.id },

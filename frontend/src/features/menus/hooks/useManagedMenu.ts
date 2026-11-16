@@ -14,7 +14,7 @@ type PendingMeal = {
   options: MenuOption[]
 }
 
-async function ensureDraft(year: number, month: number, signal?: AbortSignal) {
+async function ensureLive(year: number, month: number, signal?: AbortSignal) {
   const listed = await menuApi.list(year, month, signal)
   let menu: MenuSummary | null = listed.items[0] ?? null
   if (!menu) {
@@ -32,15 +32,13 @@ async function ensureDraft(year: number, month: number, signal?: AbortSignal) {
   if (!menu) throw new Error('منوی این ماه ایجاد نشد.')
 
   const versions = await menuApi.listVersions(menu.id, signal)
-  const draftSummary = versions.find((item) => item.status === 'DRAFT')
-  let draft: MenuVersionDetail
-  if (draftSummary) {
-    draft = await menuApi.getVersion(menu.id, draftSummary.id, signal)
-  } else if (menu.publishedVersionId) {
-    draft = await menuApi.createVersion(menu.id)
-  } else {
-    draft = await menuApi.createVersion(menu.id, null)
-  }
+  const latestSummary = versions.reduce<typeof versions[number] | undefined>(
+    (best, item) => !best || item.versionNumber > best.versionNumber ? item : best,
+    undefined,
+  )
+  const draft = latestSummary
+    ? await menuApi.getVersion(menu.id, latestSummary.id, signal)
+    : await menuApi.createVersion(menu.id, null)
   const latest = await menuApi.get(menu.id)
   return { menu: latest, draft }
 }
@@ -52,7 +50,7 @@ export function useManagedMenu(year: number, month: number) {
   const [menu, setMenu] = useState<MenuSummary | null>(null)
   const [draft, setDraft] = useState<MenuVersionDetail | null>(null)
   const [days, setDays] = useState<MenuDay[]>([])
-  const [busy, setBusy] = useState(false)
+  const busy = false
   const [saveStatus, setSaveStatus] = useState<MenuSaveStatus>('idle')
   const [saveMessage, setSaveMessage] = useState('')
   const [announceBusy, setAnnounceBusy] = useState(false)
@@ -95,7 +93,7 @@ export function useManagedMenu(year: number, month: number) {
     pending.current.clear()
     failed.current = null
     flushing.current = null
-    void ensureDraft(year, month, controller.signal)
+    void ensureLive(year, month, controller.signal)
       .then((result) => {
         if (controller.signal.aborted || id !== request.current) return
         applyDraft(result.menu, result.draft)
@@ -113,7 +111,7 @@ export function useManagedMenu(year: number, month: number) {
           return
         }
         setStatus('error')
-        setMessage(error instanceof AuthRequestError ? error.message : 'بارگذاری پیش‌نویس منو انجام نشد.')
+        setMessage(error instanceof AuthRequestError ? error.message : 'بارگذاری منو انجام نشد.')
         setIssues(error instanceof AuthRequestError ? error.issues : [])
       })
     return () => controller.abort()
@@ -129,10 +127,10 @@ export function useManagedMenu(year: number, month: number) {
       pending.current.delete(key)
       const currentMenu = menuRef.current
       const currentDraft = draftRef.current
-      if (!currentMenu || !currentDraft || currentDraft.status !== 'DRAFT') {
+      if (!currentMenu || !currentDraft) {
         failed.current = job
         setSaveStatus('error')
-        setSaveMessage('پیش‌نویس برای ذخیره در دسترس نیست.')
+        setSaveMessage('منوی جاری برای ذخیره در دسترس نیست.')
         return
       }
       try {
@@ -195,24 +193,6 @@ export function useManagedMenu(year: number, month: number) {
     await flushSaves()
   }, [flushSaves])
 
-  const publish = useCallback(async () => {
-    if (!menu || !draft || draft.status !== 'DRAFT' || busy || flushing.current) return
-    setBusy(true)
-    setMessage('')
-    setIssues([])
-    try {
-      await menuApi.publish(menu.id, draft.id)
-      const result = await ensureDraft(year, month)
-      applyDraft(result.menu, result.draft)
-    } catch (error) {
-      setMessage(error instanceof AuthRequestError ? error.message : 'انتشار منو انجام نشد.')
-      setIssues(error instanceof AuthRequestError ? error.issues : [])
-      throw error
-    } finally {
-      setBusy(false)
-    }
-  }, [applyDraft, busy, draft, menu, month, year])
-
   const announce = useCallback(
     async (payload: { title: string; body: string }) => {
       if (!menu || announceBusy) return null
@@ -232,7 +212,7 @@ export function useManagedMenu(year: number, month: number) {
         )
         return result
       } catch (error) {
-        setMessage(error instanceof AuthRequestError ? error.message : 'ارسال اعلام انتشار انجام نشد.')
+        setMessage(error instanceof AuthRequestError ? error.message : 'ارسال اعلام منو انجام نشد.')
         setIssues(error instanceof AuthRequestError ? error.issues : [])
         throw error
       } finally {
@@ -243,7 +223,7 @@ export function useManagedMenu(year: number, month: number) {
   )
 
   const reload = useCallback(async () => {
-    const result = await ensureDraft(year, month)
+    const result = await ensureLive(year, month)
     applyDraft(result.menu, result.draft)
   }, [applyDraft, month, year])
 
@@ -261,7 +241,6 @@ export function useManagedMenu(year: number, month: number) {
     retry,
     saveMeal,
     retrySave,
-    publish,
     announce,
     reload,
   }

@@ -18,6 +18,16 @@ describe('iso-date and deadlines', () => {
     ).toBe(true);
   });
 
+  it('closes at the exact computed Tehran instant for a previous-day policy', () => {
+    const mealDate = parseGregorianDateOnly('2026-11-17');
+    const deadline = new Date('2026-11-16T10:30:00.000Z');
+    expect(employeeDeadlineOpen(deadline, deadline)).toBe(false);
+    expect(
+      employeeDeadlineOpen(deadline, new Date('2026-11-16T10:29:59.999Z')),
+    ).toBe(true);
+    expect(mealDate.toISOString()).toBe('2026-11-17T00:00:00.000Z');
+  });
+
   it('lets SUPPORT and ADMIN bypass the employee deadline', () => {
     expect(canBypassEmployeeDeadline('SUPPORT')).toBe(true);
     expect(canBypassEmployeeDeadline('ADMIN')).toBe(true);

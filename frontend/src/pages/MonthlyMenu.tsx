@@ -5,7 +5,6 @@ import { MealPicker } from '../shared/ui/MealPicker'
 import { AppNavLink } from '../layouts/AppNavLink'
 import { Button, Empty, MonthBar, Segmented } from '../shared/ui/primitives'
 import { WEEKDAYS } from '../shared/fixtures/seed-data'
-import { formatGregorianDate } from '../features/menus/lib/menu-mapper'
 import { usePublishedMenu } from '../features/menus/hooks/usePublishedMenu'
 import { useApp } from '../app/providers/app-store'
 import { addDays, isSameDate, JALALI_MONTHS } from '../shared/lib/jalali'
@@ -33,7 +32,6 @@ export function MonthlyMenuPage() {
   }
 
   const days = published.pickerDays
-  const mealDates = (meal: MealKind) => days.filter((day) => day[meal]).map((day) => day.gregorianDate ?? formatGregorianDate(day.jy, day.jm, day.jd))
   const visible = days.filter((day) => rowMatches(day, app.myOrders, id, app.menuQuery, app.deadlines, app.now, app.mealDeadlineAt))
   const active = app.menuQuery.meal !== 'all' || app.menuQuery.status !== 'all' || app.menuQuery.q.trim()
 
@@ -42,7 +40,7 @@ export function MonthlyMenuPage() {
       <div className="space-y-2">
         <MonthBar icons />
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <p className="text-xs text-muted">ناهار و شام جدا انتخاب می‌شوند. ناهار: {app.mealDeadlineSummary('lunch', mealDates('lunch'))}. شام: {app.mealDeadlineSummary('dinner', mealDates('dinner'))}.</p>
+          <p className="text-xs text-muted">ناهار و شام جدا انتخاب می‌شوند. ناهار: {app.mealDeadlineSummary('lunch')}. شام: {app.mealDeadlineSummary('dinner')}.</p>
           <Segmented
             label="نمای منو"
             size="touch"
@@ -114,7 +112,7 @@ export function MonthlyMenuPage() {
         <Empty title="بارگذاری مهلت سفارش انجام نشد" body={app.deadlineMessage || 'تا خواندن مهلت، سفارش عادی باز نیست.'} />
       )}
       {published.status === 'loading' ? (
-        <Empty title="در حال بارگذاری منو" body="منوی منتشرشده این ماه از سامانه خوانده می‌شود." />
+        <Empty title="در حال بارگذاری منو" body="منوی این ماه از سامانه خوانده می‌شود." />
       ) : published.status === 'unavailable' ? (
         <Empty title="سامانه در دسترس نیست" body={published.message || 'ارتباط با سرور برقرار نشد. منوی نمایشی جایگزین نمی‌شود.'} />
       ) : published.status === 'forbidden' ? (
@@ -122,7 +120,7 @@ export function MonthlyMenuPage() {
       ) : published.status === 'error' ? (
         <Empty title="بارگذاری منو انجام نشد" body={published.message} />
       ) : published.status === 'empty' ? (
-        <Empty title="منوی منتشرشده‌ای برای این ماه نیست" body="تا وقتی نسخه‌ای منتشر نشود، گزینه‌ای نمایش داده نمی‌شود." />
+        <Empty title="منویی برای این ماه نیست" body="تا وقتی غذایی برای این ماه ذخیره شود، گزینه‌ای نمایش داده نمی‌شود." />
       ) : visible.length === 0 ? (
         <Empty title="روزی با این فیلتر پیدا نشد" body="فیلترها را پاک کنید یا ترکیب دیگری انتخاب کنید." />
       ) : app.menuView === 'list' ? (

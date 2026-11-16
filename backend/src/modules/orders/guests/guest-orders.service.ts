@@ -12,7 +12,7 @@ import { parseGregorianDateOnly } from '../../../common/calendar/iso-date';
 import { CreateGuestOrderDto } from './dto/create-guest-order.dto';
 import { ListGuestOrdersQueryDto } from './dto/list-guest-orders.query';
 import { UpdateGuestOrderDto } from './dto/update-guest-order.dto';
-import { requirePublishedOption } from '../shared/order-option';
+import { requireCurrentMenuOption } from '../shared/order-option';
 import { presentGuestOrder } from '../shared/order.presenter';
 
 const guestInclude = {
@@ -50,7 +50,7 @@ export class GuestOrdersService {
       const building = await tx.building.findUniqueOrThrow({
         where: { id: dto.buildingId },
       });
-      const item = await requirePublishedOption(
+      const item = await requireCurrentMenuOption(
         tx,
         dto.menuItemId,
         mealDate,
@@ -161,7 +161,7 @@ export class GuestOrdersService {
       let menuItemId = current.menuItemId;
       let mealTitleSnapshot = current.mealTitleSnapshot;
       if (dto.menuItemId) {
-        const item = await requirePublishedOption(
+        const item = await requireCurrentMenuOption(
           tx,
           dto.menuItemId,
           current.mealDate,

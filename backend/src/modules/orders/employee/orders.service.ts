@@ -19,14 +19,15 @@ import {
 import { CreateOrderDto } from './dto/create-order.dto';
 import { ListOrdersQueryDto } from './dto/list-orders.query';
 import { UpdateOrderDto } from './dto/update-order.dto';
+import { orderDeadlineInstantUtc } from '../../../common/calendar/tehran';
 import {
   deadlineTxOptions,
   lockDeadlineMonthForMealDate,
-  lockDeadlineRow,
+  lockDeadlinePolicy,
   lockOrderRow,
 } from '../deadlines/deadline-lock';
 import { membershipsValidAtWhere } from '../shared/membership-snapshot';
-import { requirePublishedOption } from '../shared/order-option';
+import { requireCurrentMenuOption } from '../shared/order-option';
 import { orderCycleInclude, presentOrder } from '../shared/order.presenter';
 
 const managers: Role[] = [Role.ADMIN, Role.SUPPORT];
@@ -241,7 +242,7 @@ export class OrdersService {
             'امکان ثبت سفارش برای کاربر غیرفعال وجود ندارد.',
           );
         }
-        const item = await requirePublishedOption(
+        const item = await requireCurrentMenuOption(
           tx,
           input.menuItemId,
           input.mealDate,
@@ -388,16 +389,25 @@ export class OrdersService {
     mealType: MealType,
     bypass: boolean,
   ) {
-    await lockDeadlineRow(tx, mealDate, mealType);
+    await lockDeadlinePolicy(tx, mealType);
     if (bypass) {
       return;
     }
-    const deadline = await tx.orderDeadline.findUnique({
-      where: { mealDate_mealType: { mealDate, mealType } },
+    const policy = await tx.orderDeadlinePolicy.findUnique({
+      where: { mealType },
     });
-    if (!deadline || !employeeDeadlineOpen(deadline.deadlineAt)) {
+    if (!policy) {
+      return;
+    }
+    const deadlineAt = orderDeadlineInstantUtc(
+      mealDate,
+      policy.relation,
+      policy.hour,
+      policy.minute,
+    );
+    if (!employeeDeadlineOpen(deadlineAt)) {
       throw new UnprocessableEntityException(
-        'مهلت ثبت یا تغییر این سفارش گذشته است.',
+        'مهلت ثبت یا تغییر این وعده غذایی به پایان رسیده است.',
       );
     }
   }

@@ -53,7 +53,7 @@ function EmployeeOrdersPage() {
             <Button className="mt-2" variant="secondary" onClick={app.retryMyOrders}>تلاش دوباره</Button>
           </div>
         )}
-        {published.status === 'empty' && <div className="p-4"><Empty title="منوی منتشرشده‌ای برای این ماه نیست" body="تا انتشار منو، سفارشی ثبت نمی‌شود." /></div>}
+        {published.status === 'empty' && <div className="p-4"><Empty title="منویی برای این ماه نیست" body="تا ذخیره غذا برای این ماه، سفارشی ثبت نمی‌شود." /></div>}
         <div className="divide-y divide-line">
           {days.map((day) => {
             const lunch = findOrder(app.myOrders, id, day, day.jd, 'lunch')

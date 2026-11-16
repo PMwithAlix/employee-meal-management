@@ -172,17 +172,6 @@ export const menuApi = {
     })
   },
 
-  publish(menuId: string, versionId: string) {
-    return authRequest<unknown>(MENU_ENDPOINTS.publish(menuId, versionId), {
-      ...session,
-      method: 'POST',
-    }).then((value) => {
-      const version = parseVersion(value)
-      if (!version) throw new Error('پاسخ انتشار نامعتبر است.')
-      return version
-    })
-  },
-
   announce(menuId: string, payload: { title: string; body: string }) {
     return authRequest<unknown>(MENU_ENDPOINTS.announce(menuId), {
       ...session,
@@ -192,7 +181,7 @@ export const menuApi = {
       const summary = parseSummary(value)
       const record = asRecord(value)
       if (!summary || typeof record?.recipientCount !== 'number') {
-        throw new Error('پاسخ اعلام انتشار نامعتبر است.')
+        throw new Error('پاسخ اعلام منو نامعتبر است.')
       }
       return { ...summary, recipientCount: record.recipientCount } satisfies MenuAnnouncementResult
     })

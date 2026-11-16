@@ -2,10 +2,10 @@ import {
   NotFoundException,
   UnprocessableEntityException,
 } from '@nestjs/common';
-import { MealType, MenuVersionStatus, Prisma } from '@prisma/client';
+import { MealType, Prisma } from '@prisma/client';
 import { formatDateOnly } from '../../../common/calendar/jalali';
 
-export async function requirePublishedOption(
+export async function requireCurrentMenuOption(
   tx: Prisma.TransactionClient,
   menuItemId: string,
   mealDate: Date,
@@ -20,14 +20,14 @@ export async function requirePublishedOption(
   if (!item) {
     throw new NotFoundException('گزینه منو پیدا نشد.');
   }
-  if (item.menuVersion.status !== MenuVersionStatus.PUBLISHED) {
+  const live = await tx.menuVersion.findFirst({
+    where: { menuId: item.menuVersion.menuId },
+    orderBy: { versionNumber: 'desc' },
+    select: { id: true },
+  });
+  if (!live || live.id !== item.menuVersionId) {
     throw new UnprocessableEntityException(
-      'امکان سفارش از نسخه پیش‌نویس منو وجود ندارد.',
-    );
-  }
-  if (item.menuVersion.menu.publishedVersionId !== item.menuVersionId) {
-    throw new UnprocessableEntityException(
-      'این گزینه مربوط به نسخه منتشرشدهٔ جاری نیست.',
+      'این گزینه مربوط به منوی جاری این ماه نیست.',
     );
   }
   if (

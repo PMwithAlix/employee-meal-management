@@ -5,7 +5,7 @@ export type DeadlinePanelView =
   | { kind: 'error'; message: string }
   | { kind: 'ready' }
 
-const EMPTY_MENU = 'برای این ماه منوی منتشرشده‌ای وجود ندارد.'
+const EMPTY_MENU = 'برای این ماه منویی وجود ندارد.'
 const EMPTY_OPEN = 'روز بازی با مهلت ذخیره‌شده نیست.'
 const FALLBACK_ERROR = 'مهلت‌ها از سامانه خوانده نشد.'
 

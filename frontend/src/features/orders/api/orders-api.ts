@@ -1,6 +1,6 @@
 import { authRequest } from '../../auth/api/auth-api'
 import { AuthRequestError } from '../../auth/lib/auth-errors'
-import { parseBackendOrder, parseDeadline, parseMealSetting, parseStaffRating, toUiOrder } from '../lib/order-mapper'
+import { parseBackendOrder, parseDeadline, parseDeadlinePolicy, parseMealSetting, parseStaffRating, toUiOrder } from '../lib/order-mapper'
 import { ORDER_ENDPOINTS, type BackendOrder, type CreateOrderBody, type ManagedOrderQuery, type UpsertRatingBody } from '../model/order-types'
 import type { Order } from '../../../shared/types/domain'
 
@@ -164,8 +164,15 @@ export const orderApi = {
     })
   },
 
-  replaceDeadlines(year: number, month: number, items: Array<{ mealDate: string; mealType: 'LUNCH' | 'DINNER'; deadlineAt: string }>) {
-    return authRequest<unknown>(ORDER_ENDPOINTS.deadlines(year, month), {
+  deadlinePolicy(signal?: AbortSignal) {
+    return authRequest<unknown>(ORDER_ENDPOINTS.deadlinePolicy, { ...session, signal }).then((body) => {
+      const rows = Array.isArray(body) ? body : []
+      return rows.map(parseDeadlinePolicy).filter((item): item is NonNullable<typeof item> => item !== null)
+    })
+  },
+
+  replaceDeadlinePolicy(items: Array<{ mealType: 'LUNCH' | 'DINNER'; relation: 'SAME_DAY' | 'PREVIOUS_DAY'; hour: number; minute: number }>) {
+    return authRequest<unknown>(ORDER_ENDPOINTS.deadlinePolicy, {
       ...session,
       method: 'PUT',
       body: { items },
@@ -173,8 +180,8 @@ export const orderApi = {
       if (!Array.isArray(body)) throw new AuthRequestError('http', 'پاسخ ذخیره مهلت نامعتبر است.')
       const rows = []
       for (const item of body) {
-        const parsed = parseDeadline(item)
-        if (!parsed || !parsed.deadlineAt) throw new AuthRequestError('http', 'پاسخ ذخیره مهلت نامعتبر است.')
+        const parsed = parseDeadlinePolicy(item)
+        if (!parsed) throw new AuthRequestError('http', 'پاسخ ذخیره مهلت نامعتبر است.')
         rows.push(parsed)
       }
       return rows

@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { ChevronDown, ChevronUp } from 'lucide-react'
 import { GuestsPanel } from '../features/guests/ui/GuestsPanel'
-import { DeadlineEditor } from '../features/orders/ui/DeadlineEditor'
 import { StaffOrdersPanel } from '../features/orders/ui/StaffOrdersPanel'
 import { Badge, Button, Dialog, Empty, controlClass } from '../shared/ui/primitives'
 import { AuthRequestError } from '../features/auth/lib/auth-errors'
@@ -33,7 +32,6 @@ export function MenuManagementPage() {
           <p className="text-sm font-medium">{app.monthTitle}</p>
           <p className="text-xs text-muted">ویرایش منو، سفارش‌های قبلی را خودبه‌خود عوض نمی‌کند.</p>
         </div>
-        <DeadlineEditor />
       </div>
       <div className="flex flex-wrap gap-1">
         {([['daily', 'منوی روزانه'], ['guests', 'سفارش مهمان'], ['staff', 'سفارش کارکنان']] as const).map(([id, label]) => (
@@ -63,7 +61,7 @@ function DailyMenu({ managed }: { managed: ReturnType<typeof useManagedMenu> }) 
   }, [app.selectedMonth.jy, app.selectedMonth.jm])
 
   if (managed.status === 'loading') {
-    return <Empty title="در حال آماده‌سازی پیش‌نویس" body="منوی این ماه از سامانه خوانده می‌شود. در صورت نبود منو، پیش‌نویس خالی ساخته می‌شود." />
+    return <Empty title="در حال آماده‌سازی منو" body="منوی این ماه از سامانه خوانده می‌شود. در صورت نبود منو، منوی خالی ساخته می‌شود." />
   }
   if (managed.status === 'unavailable') {
     return (
@@ -79,7 +77,7 @@ function DailyMenu({ managed }: { managed: ReturnType<typeof useManagedMenu> }) 
   if (managed.status === 'error') {
     return (
       <div className="space-y-2">
-        <Empty title="بارگذاری پیش‌نویس انجام نشد" body={managed.message} />
+        <Empty title="بارگذاری منو انجام نشد" body={managed.message} />
         <Button variant="secondary" onClick={managed.retry}>تلاش دوباره</Button>
       </div>
     )
@@ -88,25 +86,20 @@ function DailyMenu({ managed }: { managed: ReturnType<typeof useManagedMenu> }) 
     <div className="space-y-2">
       <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-line bg-surface p-3">
         <div className="min-w-0 space-y-1">
-          <p className="text-sm">
-            پیش‌نویس نسخه {managed.draft ? fa(managed.draft.versionNumber) : '—'}
-            {managed.menu?.publishedVersionId ? ' · نسخه منتشرشده فعلی حفظ می‌شود تا انتشار جدید' : ' · هنوز نسخه‌ای منتشر نشده'}
-          </p>
+          <p className="text-sm">تغییرات منو به‌صورت خودکار ذخیره می‌شوند و بلافاصله برای کاربران قابل مشاهده‌اند.</p>
           <p className="text-xs text-muted" aria-live="polite">
             {managed.saveStatus === 'saving' && 'در حال ذخیره‌سازی'}
             {managed.saveStatus === 'saved' && 'ذخیره شد'}
             {managed.saveStatus === 'error' && (managed.saveMessage || 'خطا در ذخیره‌سازی')}
-            {managed.saveStatus === 'idle' && 'تغییرات روزانه به‌صورت خودکار ذخیره می‌شوند و تا اعلام انتشار برای کاربران ارسال نمی‌شوند.'}
+            {managed.saveStatus === 'idle' && 'اعلام منو به کاربران جدا از ذخیره است و فقط با تأیید شما ارسال می‌شود.'}
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
           {managed.saveStatus === 'error' && (
             <Button variant="secondary" onClick={() => void managed.retrySave()}>تلاش دوباره ذخیره</Button>
           )}
-          <Button disabled={managed.busy || !managed.draft || managed.saveStatus === 'saving'} onClick={() => void managed.publish()}>انتشار پیش‌نویس</Button>
           <Button
-            variant="secondary"
-            disabled={managed.announceBusy || !managed.menu?.publishedVersionId}
+            disabled={managed.announceBusy || !managed.menu}
             onClick={() => {
               setAnnounceTitle(copy.title)
               setAnnounceBody(copy.body)
@@ -114,11 +107,8 @@ function DailyMenu({ managed }: { managed: ReturnType<typeof useManagedMenu> }) 
               setAnnounceOpen(true)
             }}
           >
-            اعلام انتشار به همه کاربران
+            اعلام منو به کاربران
           </Button>
-          {!managed.menu?.publishedVersionId && (
-            <p className="basis-full text-xs text-muted">برای اعلام به کاربران، ابتدا پیش‌نویس را منتشر کنید.</p>
-          )}
         </div>
       </div>
       {managed.message && <p className="rounded-md bg-dangerbg px-3 py-2 text-sm text-danger" role="alert">{managed.message}</p>}
@@ -141,7 +131,7 @@ function DailyMenu({ managed }: { managed: ReturnType<typeof useManagedMenu> }) 
       ))}
       <Dialog
         open={announceOpen}
-        title={`اعلام انتشار منوی ${app.monthTitle}`}
+        title={`اعلام منوی ${app.monthTitle}`}
         locked={managed.announceBusy}
         onClose={() => {
           if (!managed.announceBusy) setAnnounceOpen(false)
@@ -177,7 +167,7 @@ function DailyMenu({ managed }: { managed: ReturnType<typeof useManagedMenu> }) 
               void managed.announce({ title: announceTitle.trim(), body: announceBody.trim() }).then((result) => {
                 if (!result) return
                 setAnnounceOpen(false)
-                setAnnounceNotice(`اعلام انتشار برای ${fa(result.recipientCount)} کاربر فعال ارسال شد.`)
+                setAnnounceNotice(`اعلام منو برای ${fa(result.recipientCount)} کاربر فعال ارسال شد.`)
               }).catch(() => undefined)
             }}
           >

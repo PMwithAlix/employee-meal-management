@@ -108,3 +108,21 @@ export function mealServingHasEnded(
 ) {
   return now.getTime() > servingInstantUtc(mealDate, servingTime).getTime();
 }
+
+export type DeadlineDayRelation = 'SAME_DAY' | 'PREVIOUS_DAY';
+
+export function orderDeadlineInstantUtc(
+  mealDate: Date,
+  relation: DeadlineDayRelation,
+  hour: number,
+  minute: number,
+) {
+  const ymd = formatDateOnly(mealDate);
+  const [year, month, day] = ymd.split('-').map(Number);
+  const wall =
+    relation === 'PREVIOUS_DAY'
+      ? new Date(Date.UTC(year, month - 1, day - 1))
+      : new Date(Date.UTC(year, month - 1, day));
+  const wallYmd = `${wall.getUTCFullYear()}-${String(wall.getUTCMonth() + 1).padStart(2, '0')}-${String(wall.getUTCDate()).padStart(2, '0')}`;
+  return tehranWallToUtc(wallYmd, hour, minute);
+}

@@ -78,15 +78,10 @@ describe('menuApi', () => {
     expect(createVersion[1].body).toBe('{}')
   })
 
-  it('patches draft options, publishes through the backend, and confirms excel imports', async () => {
+  it('patches live menu options and confirms excel imports', async () => {
     const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
       const path = String(url)
-      if (path.includes('/publish')) {
-        return new Response(JSON.stringify({
-          id: 'ver-2', menuId: 'menu-1', versionNumber: 2, status: 'PUBLISHED', publishedAt: '2026-11-01T00:00:00.000Z', createdBy: 'u', createdAt: '2026-11-01T00:00:00.000Z', meals: [],
-        }), { status: 200 })
-      }
-      if (init?.method === 'PATCH') {
+      if (init?.method === 'PATCH' && path.includes('/versions/')) {
         return new Response(JSON.stringify({
           id: 'draft-1', menuId: 'menu-1', versionNumber: 2, status: 'DRAFT', publishedAt: null, createdBy: 'u', createdAt: '2026-11-01T00:00:00.000Z', meals: [],
         }), { status: 200 })
@@ -109,10 +104,8 @@ describe('menuApi', () => {
     })
     const calls = fetchMock.mock.calls as unknown as Array<[string, RequestInit]>
     expect(calls[0][1].method).toBe('PATCH')
-    await menuApi.publish('menu-1', 'draft-1')
-    expect(String(calls[1][0])).toContain('/publish')
     await menuApi.confirmImport('import-1', 'keep')
-    expect(calls[2][1].body).toBe(JSON.stringify({ policy: 'KEEP_EXISTING_ORDERS' }))
+    expect(calls[1][1].body).toBe(JSON.stringify({ policy: 'KEEP_EXISTING_ORDERS' }))
   })
 
   it('asks the user to preview again when an import is expired', async () => {

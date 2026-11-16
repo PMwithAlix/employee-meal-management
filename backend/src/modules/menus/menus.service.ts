@@ -22,11 +22,7 @@ import { ListMenusQueryDto } from './dto/list-menus.query';
 import { UpsertMealDto } from './dto/upsert-meal.dto';
 import { presentMenu, presentVersion } from './menu.presenter';
 import { MENU_PUBLISHED_NOTIFICATION } from './menu.types';
-import {
-  groupItemsAsMeals,
-  normalizeOptionTitle,
-  validateConfiguredMeals,
-} from './menu.validation';
+import { normalizeOptionTitle, validateConfiguredMeals } from './menu.validation';
 
 @Injectable()
 export class MenusService {
@@ -195,7 +191,7 @@ export class MenusService {
     versionId: string,
     dto: UpsertMealDto,
   ) {
-    const version = await this.requireDraft(menuId, versionId);
+    const version = await this.requireLiveVersion(menuId, versionId);
     const mealDate = this.parseMenuDate(
       dto.mealDate,
       version.menu.year,
@@ -346,89 +342,12 @@ export class MenusService {
     });
   }
 
-  async publish(actor: AuthUser, menuId: string, versionId: string) {
-    const menu = await this.requireMenu(menuId);
-    const version = await this.requireVersion(menuId, versionId);
-    if (version.status !== MenuVersionStatus.DRAFT) {
-      throw new UnprocessableEntityException(
-        'فقط نسخه پیش‌نویس قابل انتشار است.',
-      );
-    }
-    const meals = groupItemsAsMeals(version.items);
-    const issues = validateConfiguredMeals(meals, menu.year, menu.month);
-    if (issues.length) {
-      throw new UnprocessableEntityException({
-        message: 'نسخه برای انتشار معتبر نیست.',
-        errors: issues,
-      });
-    }
-    if (meals.length === 0) {
-      throw new UnprocessableEntityException({
-        message: 'نسخه برای انتشار معتبر نیست.',
-        errors: [{ message: 'نسخه خالی قابل انتشار نیست.' }],
-      });
-    }
-
-    try {
-      return await this.prisma.$transaction(async (tx) => {
-        const current = await tx.menuVersion.findUniqueOrThrow({
-          where: { id: versionId },
-        });
-        if (current.status !== MenuVersionStatus.DRAFT) {
-          throw new UnprocessableEntityException(
-            'فقط نسخه پیش‌نویس قابل انتشار است.',
-          );
-        }
-        const published = await tx.menuVersion.update({
-          where: { id: versionId },
-          data: {
-            status: MenuVersionStatus.PUBLISHED,
-            publishedAt: new Date(),
-          },
-          include: { items: true },
-        });
-        await tx.menu.update({
-          where: { id: menuId },
-          data: { publishedVersionId: versionId },
-        });
-        await this.audit.record(
-          {
-            actorId: actor.id,
-            action: AuditAction.MenuVersionPublished,
-            entityType: AuditEntity.MenuVersion,
-            entityId: versionId,
-            beforeData: {
-              previousPublishedVersionId: menu.publishedVersionId,
-              status: MenuVersionStatus.DRAFT,
-            },
-            afterData: {
-              status: published.status,
-              versionNumber: published.versionNumber,
-            },
-          },
-          tx,
-        );
-      return presentVersion(published);
-    });
-    } catch (error) {
-      if (error instanceof UnprocessableEntityException) {
-        throw error;
-      }
-      throw error;
-    }
-  }
-
   async announce(actor: AuthUser, menuId: string, dto: AnnounceMenuDto) {
     const menu = await this.requireMenu(menuId);
-    if (!menu.publishedVersionId) {
-      throw new UnprocessableEntityException(
-        'تا وقتی نسخه‌ای برای این ماه منتشر نشده، اعلام انتشار برای کاربران ممکن نیست.',
-      );
-    }
     const title = dto.title.replace(/\s+/g, ' ').trim();
     const body = dto.body.replace(/\s+/g, ' ').trim();
     if (!title || !body) {
-      throw new UnprocessableEntityException('عنوان و متن اعلام انتشار الزامی است.');
+      throw new UnprocessableEntityException('عنوان و متن اعلام الزامی است.');
     }
 
     return this.prisma.$transaction(async (tx) => {
@@ -511,10 +430,17 @@ export class MenusService {
     return version;
   }
 
-  async requireDraft(menuId: string, versionId: string) {
+  async requireLiveVersion(menuId: string, versionId: string) {
     const version = await this.requireVersion(menuId, versionId);
-    if (version.status !== MenuVersionStatus.DRAFT) {
-      throw new UnprocessableEntityException('نسخه منتشرشده قابل ویرایش نیست.');
+    const live = await this.prisma.menuVersion.findFirst({
+      where: { menuId },
+      orderBy: { versionNumber: 'desc' },
+      select: { id: true },
+    });
+    if (!live || live.id !== version.id) {
+      throw new UnprocessableEntityException(
+        'فقط نسخه جاری منو قابل ویرایش است.',
+      );
     }
     return version;
   }
@@ -523,7 +449,9 @@ export class MenusService {
     const menu = await this.prisma.menu.findUnique({
       where: { year_month: { year, month } },
       include: {
-        publishedVersion: {
+        versions: {
+          orderBy: { versionNumber: 'desc' },
+          take: 1,
           include: {
             items: {
               orderBy: [{ mealDate: 'asc' }, { displayOrder: 'asc' }],
@@ -532,12 +460,13 @@ export class MenusService {
         },
       },
     });
-    if (!menu?.publishedVersion) {
-      throw new NotFoundException('منوی منتشرشده‌ای برای این ماه وجود ندارد.');
+    const live = menu?.versions[0];
+    if (!menu || !live) {
+      throw new NotFoundException('منویی برای این ماه وجود ندارد.');
     }
     return {
       ...presentMenu(menu),
-      version: presentVersion(menu.publishedVersion),
+      version: presentVersion(live),
     };
   }
 

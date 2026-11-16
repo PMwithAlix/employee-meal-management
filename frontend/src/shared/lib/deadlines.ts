@@ -45,6 +45,16 @@ export function formatDeadline(deadline: MealDeadline) {
   return `${when}، ساعت ${hour}:${minute}`
 }
 
+export function formatOrderDeadlineSentence(deadline: MealDeadline) {
+  const meal = deadline.meal === 'lunch' ? 'ناهار' : 'شام'
+  const hour = fa(String(deadline.hour).padStart(2, '0'))
+  const minute = fa(String(deadline.minute).padStart(2, '0'))
+  if (deadline.relation === 'previous_day') {
+    return `مهلت ثبت سفارش ${meal}، ساعت ${hour}:${minute} روز قبل از تاریخ وعده است.`
+  }
+  return `مهلت ثبت سفارش ${meal}، ساعت ${hour}:${minute} در همان روز وعده است.`
+}
+
 const TEHRAN = 'Asia/Tehran'
 
 export function tehranDateTimeParts(iso: string) {

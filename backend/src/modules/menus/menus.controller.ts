@@ -141,7 +141,7 @@ export class MenusController {
   }
 
   @Patch(':id/versions/:versionId')
-  @ApiOperation({ summary: 'ویرایش وعده در نسخه پیش‌نویس' })
+  @ApiOperation({ summary: 'ویرایش وعده در نسخه جاری منو' })
   updateDraft(
     @CurrentUser() actor: AuthUser,
     @Param('id', ParseUUIDPipe) id: string,
@@ -151,20 +151,9 @@ export class MenusController {
     return this.menus.upsertMeal(actor, id, versionId, dto);
   }
 
-  @Post(':id/versions/:versionId/publish')
-  @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: 'انتشار اتمی نسخه پیش‌نویس' })
-  publish(
-    @CurrentUser() actor: AuthUser,
-    @Param('id', ParseUUIDPipe) id: string,
-    @Param('versionId', ParseUUIDPipe) versionId: string,
-  ) {
-    return this.menus.publish(actor, id, versionId);
-  }
-
   @Post(':id/announce')
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: 'اعلام انتشار منوی ماهانه به کاربران فعال' })
+  @ApiOperation({ summary: 'اعلام منوی ماهانه به کاربران فعال' })
   announce(
     @CurrentUser() actor: AuthUser,
     @Param('id', ParseUUIDPipe) id: string,

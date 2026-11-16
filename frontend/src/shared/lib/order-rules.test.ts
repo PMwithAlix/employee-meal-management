@@ -14,8 +14,8 @@ const day: DayMenu = {
 }
 
 describe('isEmployeeDeadlineOpen', () => {
-  it('keeps a regular order closed when no deadline exists or the lookup failed', () => {
-    expect(isEmployeeDeadlineOpen('absent')).toBe(false)
+  it('does not close a meal when no policy exists, and keeps lookup failures closed', () => {
+    expect(isEmployeeDeadlineOpen('absent')).toBe(true)
     expect(isEmployeeDeadlineOpen('unknown')).toBe(false)
   })
 
@@ -38,8 +38,8 @@ describe('isMealOpen', () => {
   const now = currentDateTime()
   const local = defaultMonthDeadlines()
 
-  it('does not fall back to the local default when a backend deadline is absent', () => {
-    expect(isMealOpen(day, 'lunch', local, now, 'absent')).toBe(false)
+  it('keeps ordering open when a backend policy is absent', () => {
+    expect(isMealOpen(day, 'lunch', local, now, 'absent')).toBe(true)
   })
 
   it('still uses local seed deadlines when no backend state is passed', () => {
@@ -53,7 +53,7 @@ describe('matchesStatus open filter', () => {
   const query = { meal: 'all', status: 'open', q: '' } as const
 
   it('uses the backend deadline state, not the local default', () => {
-    expect(matchesStatus(day, undefined, 'lunch', query.status, local, now, 'absent')).toBe(false)
+    expect(matchesStatus(day, undefined, 'lunch', query.status, local, now, 'absent')).toBe(true)
     expect(matchesStatus(day, undefined, 'lunch', query.status, local, now, 'unknown')).toBe(false)
     expect(matchesStatus(day, undefined, 'lunch', query.status, local, now, { at: '2000-01-01T00:00:00.000Z' })).toBe(false)
     expect(matchesStatus(day, undefined, 'dinner', query.status, local, now, { at: '2099-01-01T00:00:00.000Z' })).toBe(true)
@@ -69,7 +69,7 @@ describe('isElapsedDeadlineDay', () => {
     expect(isElapsedDeadlineDay(day, () => past)).toBe(true)
     expect(isElapsedDeadlineDay(day, (_d, meal) => (meal === 'lunch' ? future : past))).toBe(false)
     expect(isElapsedDeadlineDay(day, (_d, meal) => (meal === 'lunch' ? 'unknown' : past))).toBe(false)
-    expect(isElapsedDeadlineDay(day, (_d, meal) => (meal === 'lunch' ? 'absent' : past))).toBe(true)
+    expect(isElapsedDeadlineDay(day, (_d, meal) => (meal === 'lunch' ? 'absent' : past))).toBe(false)
     expect(isElapsedDeadlineDay(empty, () => past)).toBe(false)
   })
 

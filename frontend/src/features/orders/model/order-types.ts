@@ -15,6 +15,7 @@ export const ORDER_ENDPOINTS = {
   ratings: '/ratings',
   mealSettings: '/meal-settings',
   deadlines: (year: number, month: number) => `/order-deadlines/${year}/${month}`,
+  deadlinePolicy: '/order-deadline-policy',
 } as const
 
 export type BackendOrderCycle = {

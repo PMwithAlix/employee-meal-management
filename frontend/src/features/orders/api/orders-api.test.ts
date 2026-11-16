@@ -294,11 +294,11 @@ describe('orderApi', () => {
     } satisfies Partial<AuthRequestError>)
   })
 
-  it('loads monthly deadlines from /order-deadlines/:year/:month', async () => {
+  it('loads the global deadline policy from /order-deadline-policy', async () => {
     const fetchMock = vi.fn(async () => new Response(JSON.stringify([]), { status: 200 }))
     vi.stubGlobal('fetch', fetchMock)
-    await orderApi.deadlines(1405, 8)
-    expect(String((fetchMock.mock.calls as unknown as Array<[string, RequestInit]>)[0][0])).toBe('/api/v1/order-deadlines/1405/8')
+    await orderApi.deadlinePolicy()
+    expect(String((fetchMock.mock.calls as unknown as Array<[string, RequestInit]>)[0][0])).toBe('/api/v1/order-deadline-policy')
   })
 
   it('keeps an invalid deadline row instead of treating the meal as absent', async () => {

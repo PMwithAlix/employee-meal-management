@@ -7,6 +7,7 @@ import { Button, Segmented } from '../shared/ui/primitives'
 import { TimePicker } from '../shared/ui/TimePicker'
 import { SecretField } from '../shared/ui/SecretField'
 import { can } from '../shared/config/permissions'
+import { OrderDeadlinePolicyPanel } from '../features/orders/ui/OrderDeadlinePolicyPanel'
 
 export function SettingsPage() {
   const app = useApp()
@@ -77,22 +78,27 @@ export function SettingsPage() {
 
       <div className="space-y-3">
       {can(app.role, 'settings.meals') && (
-        <section className="h-fit rounded-md border border-line bg-surface p-4">
-          <h2 className="text-sm font-semibold">ساعت وعده‌های غذایی</h2>
-          <p className="mt-1 text-xs text-muted">نظرسنجی فقط پس از این ساعت در همان روز شمسی ثبت می‌شود. تغییر ساعت، دیدگاه‌های قبلی را عوض نمی‌کند.</p>
-          {app.mealServingsStatus === 'loading' ? <p className="mt-3 text-sm text-muted">در حال خواندن ساعت وعده از سامانه…</p> : null}
-          {app.mealServingsStatus === 'unavailable' || app.mealServingsStatus === 'error' ? (
-            <div className="mt-3">
-              <p className="text-sm text-danger">{app.mealServingsMessage || 'ساعت وعده از سامانه خوانده نشد.'}</p>
-              <Button className="mt-2" variant="secondary" onClick={app.retryMealServings}>تلاش دوباره</Button>
+        <div className="space-y-3">
+          <section className="h-fit rounded-md border border-line bg-surface p-4">
+            <h2 className="text-sm font-semibold">تنظیمات عملیاتی</h2>
+            <p className="mt-1 text-xs text-muted">ساعت سرو غذا و مهلت ثبت سفارش جداگانه تنظیم می‌شوند.</p>
+            <h3 className="mt-4 text-sm font-semibold">ساعت وعده‌های غذایی</h3>
+            <p className="mt-1 text-xs text-muted">نظرسنجی فقط پس از این ساعت در همان روز شمسی ثبت می‌شود. تغییر ساعت، دیدگاه‌های قبلی را عوض نمی‌کند.</p>
+            {app.mealServingsStatus === 'loading' ? <p className="mt-3 text-sm text-muted">در حال خواندن ساعت وعده از سامانه…</p> : null}
+            {app.mealServingsStatus === 'unavailable' || app.mealServingsStatus === 'error' ? (
+              <div className="mt-3">
+                <p className="text-sm text-danger">{app.mealServingsMessage || 'ساعت وعده از سامانه خوانده نشد.'}</p>
+                <Button className="mt-2" variant="secondary" onClick={app.retryMealServings}>تلاش دوباره</Button>
+              </div>
+            ) : (
+            <div className="mt-3 grid gap-3 sm:grid-cols-2">
+              <TimePicker label="ناهار" value={app.mealServings.lunch} ariaLabel="ساعت سرو ناهار" onChange={(clock) => void app.setMealServing('lunch', clock)} />
+              <TimePicker label="شام" value={app.mealServings.dinner} ariaLabel="ساعت سرو شام" onChange={(clock) => void app.setMealServing('dinner', clock)} />
             </div>
-          ) : (
-          <div className="mt-3 grid gap-3 sm:grid-cols-2">
-            <TimePicker label="ناهار" value={app.mealServings.lunch} ariaLabel="ساعت سرو ناهار" onChange={(clock) => void app.setMealServing('lunch', clock)} />
-            <TimePicker label="شام" value={app.mealServings.dinner} ariaLabel="ساعت سرو شام" onChange={(clock) => void app.setMealServing('dinner', clock)} />
-          </div>
-          )}
-        </section>
+            )}
+          </section>
+          <OrderDeadlinePolicyPanel />
+        </div>
       )}
       <section className="h-fit rounded-md border border-line bg-surface p-4">
         <h2 className="text-sm font-semibold">تنظیمات ظاهری</h2>

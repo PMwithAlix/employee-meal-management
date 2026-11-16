@@ -1,4 +1,5 @@
 import { jalaliFromMealDate, toBackendMeal, toFrontendMeal } from '../../menus/lib/menu-mapper'
+import { deadlineAtFromPattern, type MealDeadline } from '../../../shared/lib/deadlines'
 import type { MealDeadlineState } from '../../../shared/lib/order-rules'
 import type { MealKind, Order } from '../../../shared/types/domain'
 import type { BackendDeadline, BackendMealSetting, BackendOrder, BackendStaffRating, OrderCycleStatus } from '../model/order-types'
@@ -171,6 +172,58 @@ export function parseDeadline(value: unknown): BackendDeadline | null {
     deadlineAt,
     createdBy,
   }
+}
+
+export type BackendDeadlinePolicy = {
+  mealType: 'LUNCH' | 'DINNER'
+  relation: 'SAME_DAY' | 'PREVIOUS_DAY'
+  hour: number
+  minute: number
+}
+
+export function parseDeadlinePolicy(value: unknown): BackendDeadlinePolicy | null {
+  const body = asRecord(value)
+  if (!body) return null
+  if (body.mealType !== 'LUNCH' && body.mealType !== 'DINNER') return null
+  if (body.relation !== 'SAME_DAY' && body.relation !== 'PREVIOUS_DAY') return null
+  const hour = Number(body.hour)
+  const minute = Number(body.minute)
+  if (!Number.isInteger(hour) || hour < 0 || hour > 23) return null
+  if (!Number.isInteger(minute) || minute < 0 || minute > 59) return null
+  return {
+    mealType: body.mealType,
+    relation: body.relation,
+    hour,
+    minute,
+  }
+}
+
+export type StoredDeadlinePolicies = Partial<Record<MealKind, MealDeadline>>
+
+export function rowsToDeadlinePolicies(rows: BackendDeadlinePolicy[]): StoredDeadlinePolicies {
+  const next: StoredDeadlinePolicies = {}
+  for (const row of rows) {
+    const meal: MealKind = row.mealType === 'LUNCH' ? 'lunch' : 'dinner'
+    next[meal] = {
+      meal,
+      relation: row.relation === 'PREVIOUS_DAY' ? 'previous_day' : 'same_day',
+      hour: row.hour,
+      minute: row.minute,
+    }
+  }
+  return next
+}
+
+export function mealDeadlineFromPolicy(
+  policies: StoredDeadlinePolicies,
+  ready: boolean,
+  mealDate: string,
+  meal: MealKind,
+): MealDeadlineState {
+  if (!ready) return 'unknown'
+  const policy = policies[meal]
+  if (!policy) return 'absent'
+  return { at: deadlineAtFromPattern(mealDate, policy) }
 }
 
 export function toDeadlineMap(rows: BackendDeadline[]) {

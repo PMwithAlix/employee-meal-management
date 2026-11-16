@@ -28,7 +28,7 @@ describe('ADMIN overview deadline panel', () => {
     })
     expect(view).toEqual({
       kind: 'empty-menu',
-      message: 'برای این ماه منوی منتشرشده‌ای وجود ندارد.',
+      message: 'برای این ماه منویی وجود ندارد.',
     })
     expect(opsDeadlineFailed('empty', 'ready')).toBe(false)
   })

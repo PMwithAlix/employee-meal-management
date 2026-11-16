@@ -53,6 +53,7 @@ export function classifyEmployeeDeadline(state: MealDeadlineState, now = new Dat
 }
 
 export function isEmployeeDeadlineOpen(state: MealDeadlineState, now = new Date()) {
+  if (state === 'absent') return true
   return classifyEmployeeDeadline(state, now) === 'open'
 }
 
@@ -65,7 +66,7 @@ export function isOpenDeadlineDay(
   deadlineFor: (day: DayMenu, meal: MealKind) => MealDeadlineState,
   now = new Date(),
 ) {
-  return definedMeals(day).some((meal) => classifyEmployeeDeadline(deadlineFor(day, meal), now) === 'open')
+  return definedMeals(day).some((meal) => isEmployeeDeadlineOpen(deadlineFor(day, meal), now))
 }
 
 export function isElapsedDeadlineDay(
@@ -77,7 +78,7 @@ export function isElapsedDeadlineDay(
   if (meals.length === 0) return false
   const kinds = meals.map((meal) => classifyEmployeeDeadline(deadlineFor(day, meal), now))
   if (kinds.some((kind) => kind === 'unknown')) return false
-  return kinds.every((kind) => kind !== 'open')
+  return kinds.every((kind) => kind === 'elapsed')
 }
 
 export function isMealOpen(day: DayMenu, meal: MealKind, deadlines: MonthDeadlines, now: JalaliDateTime, deadline?: MealDeadlineState) {

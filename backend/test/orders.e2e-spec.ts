@@ -126,7 +126,6 @@ describe('Orders (e2e)', () => {
   let lunchB = '';
   let dinnerA = '';
   let day2Lunch = '';
-  let draftItem = '';
   let groupId = '';
 
   beforeAll(async () => {
@@ -273,32 +272,10 @@ describe('Orders (e2e)', () => {
     lunchB = createdItems[1].id;
     dinnerA = createdItems[2].id;
     day2Lunch = createdItems[3].id;
-    await prisma.menuVersion.update({
-      where: { id: version.id },
-      data: { status: MenuVersionStatus.PUBLISHED, publishedAt: new Date() },
-    });
     await prisma.menu.update({
       where: { id: menu.id },
       data: { publishedVersionId: version.id },
     });
-    const draft = await prisma.menuVersion.create({
-      data: {
-        menuId: menu.id,
-        versionNumber: 2,
-        status: MenuVersionStatus.DRAFT,
-        createdBy: admin.id,
-      },
-    });
-    const draftRow = await prisma.menuItem.create({
-      data: {
-        menuVersionId: draft.id,
-        mealDate: day1,
-        mealType: MealType.LUNCH,
-        title: 'پیش‌نویس',
-        displayOrder: 1,
-      },
-    });
-    draftItem = draftRow.id;
 
     const login = (username: string) =>
       request(app.getHttpServer())
@@ -318,45 +295,56 @@ describe('Orders (e2e)', () => {
     await prisma.$disconnect();
   });
 
-  it('configures independent lunch and dinner deadlines for a Jalali month', async () => {
-    const future = new Date(Date.now() + 86400000).toISOString();
-    const past = new Date(Date.now() - 60000).toISOString();
+  it('configures independent lunch and dinner deadline policies', async () => {
     const put = await request(app.getHttpServer())
-      .put(`/api/v1/order-deadlines/${YEAR}/${MONTH}`)
+      .put('/api/v1/order-deadline-policy')
       .set('Cookie', supportCookie)
       .send({
         items: [
           {
-            mealDate: mealDate(1),
             mealType: MealType.LUNCH,
-            deadlineAt: future,
+            relation: 'SAME_DAY',
+            hour: 23,
+            minute: 59,
           },
           {
-            mealDate: mealDate(1),
             mealType: MealType.DINNER,
-            deadlineAt: past,
-          },
-          {
-            mealDate: mealDate(2),
-            mealType: MealType.LUNCH,
-            deadlineAt: future,
+            relation: 'PREVIOUS_DAY',
+            hour: 14,
+            minute: 0,
           },
         ],
       });
     expect(put.status).toBe(200);
-    expect(put.body).toHaveLength(3);
+    expect(put.body).toHaveLength(2);
     expect(
       (
         await request(app.getHttpServer())
-          .put(`/api/v1/order-deadlines/${YEAR}/${MONTH}`)
+          .put('/api/v1/order-deadline-policy')
           .set('Cookie', employeeCookie)
           .send({ items: put.body })
       ).status,
     ).toBe(403);
     const listed = await request(app.getHttpServer())
-      .get(`/api/v1/order-deadlines/${YEAR}/${MONTH}`)
+      .get('/api/v1/order-deadline-policy')
       .set('Cookie', employeeCookie);
     expect(listed.status).toBe(200);
+    expect(listed.body).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          mealType: 'LUNCH',
+          relation: 'SAME_DAY',
+          hour: 23,
+          minute: 59,
+        }),
+        expect.objectContaining({
+          mealType: 'DINNER',
+          relation: 'PREVIOUS_DAY',
+          hour: 14,
+          minute: 0,
+        }),
+      ]),
+    );
   });
 
   it('enforces RBAC for org-wide and guest order APIs', async () => {
@@ -491,7 +479,7 @@ describe('Orders (e2e)', () => {
     expect(again.body.status).toBe('ACTIVE');
   });
 
-  it('rejects invalid options, draft items, elapsed dinner deadlines, and inactive users', async () => {
+  it('rejects invalid options, elapsed dinner deadlines, and inactive users', async () => {
     expect(
       (
         await request(app.getHttpServer())
@@ -500,7 +488,7 @@ describe('Orders (e2e)', () => {
           .send({
             mealDate: mealDate(1),
             mealType: MealType.LUNCH,
-            menuItemId: draftItem,
+            menuItemId: dinnerA,
           })
       ).status,
     ).toBe(422);
@@ -527,7 +515,7 @@ describe('Orders (e2e)', () => {
             menuItemId: dinnerA,
           })
       ).status,
-    ).toBe(422);
+    ).toBe(201);
 
     const supportDinner = await request(app.getHttpServer())
       .post('/api/v1/orders')
@@ -751,7 +739,7 @@ describe('Orders (e2e)', () => {
             buildingId,
             mealDate: mealDate(1),
             mealType: MealType.LUNCH,
-            menuItemId: draftItem,
+            menuItemId: dinnerA,
             quantity: 1,
           })
       ).status,
@@ -885,24 +873,21 @@ describe('Orders (e2e)', () => {
       data: { endedAt: new Date() },
     });
     const deadlineSwap = await request(app.getHttpServer())
-      .put(`/api/v1/order-deadlines/${YEAR}/${MONTH}`)
+      .put('/api/v1/order-deadline-policy')
       .set('Cookie', supportCookie)
       .send({
         items: [
           {
-            mealDate: mealDate(1),
             mealType: MealType.LUNCH,
-            deadlineAt: new Date(Date.now() + 2 * 86400000).toISOString(),
+            relation: 'SAME_DAY',
+            hour: 23,
+            minute: 59,
           },
           {
-            mealDate: mealDate(1),
             mealType: MealType.DINNER,
-            deadlineAt: new Date(Date.now() + 2 * 86400000).toISOString(),
-          },
-          {
-            mealDate: mealDate(2),
-            mealType: MealType.LUNCH,
-            deadlineAt: new Date(Date.now() + 2 * 86400000).toISOString(),
+            relation: 'SAME_DAY',
+            hour: 23,
+            minute: 59,
           },
         ],
       });
@@ -1066,7 +1051,7 @@ describe('Orders (e2e)', () => {
       .set('Cookie', managementCookie);
     expect(publishedMenu.status).toBe(200);
     const deadlines = await request(app.getHttpServer())
-      .get(`/api/v1/order-deadlines/${YEAR}/${MONTH}`)
+      .get('/api/v1/order-deadline-policy')
       .set('Cookie', managementCookie);
     expect(deadlines.status).toBe(200);
     expect(Array.isArray(deadlines.body)).toBe(true);
@@ -1122,7 +1107,7 @@ describe('Orders (e2e)', () => {
     expect(
       (
         await request(app.getHttpServer())
-          .put(`/api/v1/order-deadlines/${YEAR}/${MONTH}`)
+          .put('/api/v1/order-deadline-policy')
           .set('Cookie', managementCookie)
           .send({ items: [] })
       ).status,
@@ -1153,67 +1138,58 @@ describe('Orders (e2e)', () => {
     ).toBe(403);
   });
 
-  it('writes complete before/after deadline audits and rolls back on failure', async () => {
+  it('writes complete before/after deadline policy audits and rejects incomplete payloads', async () => {
     const support = await prisma.user.findUniqueOrThrow({
       where: { username: 'e2e.order.support' },
     });
     const beforeCount = await prisma.auditLog.count({
-      where: { action: 'ORDER_DEADLINES_UPDATED' },
+      where: { action: 'ORDER_DEADLINE_POLICY_UPDATED' },
     });
-    const future = new Date(Date.now() + 2 * 86400000).toISOString();
     const updated = await request(app.getHttpServer())
-      .put(`/api/v1/order-deadlines/${YEAR}/${MONTH}`)
+      .put('/api/v1/order-deadline-policy')
       .set('Cookie', supportCookie)
       .send({
         items: [
           {
-            mealDate: mealDate(1),
             mealType: MealType.LUNCH,
-            deadlineAt: future,
+            relation: 'SAME_DAY',
+            hour: 11,
+            minute: 30,
           },
           {
-            mealDate: mealDate(1),
             mealType: MealType.DINNER,
-            deadlineAt: future,
+            relation: 'PREVIOUS_DAY',
+            hour: 16,
+            minute: 0,
           },
         ],
       });
     expect(updated.status).toBe(200);
     const failed = await request(app.getHttpServer())
-      .put(`/api/v1/order-deadlines/${YEAR}/${MONTH}`)
+      .put('/api/v1/order-deadline-policy')
       .set('Cookie', supportCookie)
       .send({
         items: [
           {
-            mealDate: '2020-01-01',
             mealType: MealType.LUNCH,
-            deadlineAt: future,
+            relation: 'SAME_DAY',
+            hour: 11,
+            minute: 30,
           },
         ],
       });
-    expect(failed.status).toBe(422);
+    expect(failed.status).toBe(400);
     const audits = await prisma.auditLog.findMany({
-      where: { action: 'ORDER_DEADLINES_UPDATED' },
+      where: { action: 'ORDER_DEADLINE_POLICY_UPDATED' },
       orderBy: { createdAt: 'desc' },
     });
     expect(audits).toHaveLength(beforeCount + 1);
     const latest = audits[0];
     expect(latest.actorId).toBe(support.id);
-    const beforeState = latest.beforeData as {
-      deadlines: { mealDate: string; mealType: string }[];
-    };
     const afterState = latest.afterData as {
-      deadlines: { mealDate: string; mealType: string; deadlineAt: string }[];
+      policies: { mealType: string; relation: string; hour: number }[];
     };
-    expect(
-      beforeState.deadlines.some((row) => row.mealDate === mealDate(2)),
-    ).toBe(true);
-    expect(
-      afterState.deadlines.some((row) => row.mealDate === mealDate(2)),
-    ).toBe(false);
-    expect(
-      afterState.deadlines.filter((row) => row.mealDate === mealDate(1)),
-    ).toHaveLength(2);
+    expect(afterState.policies).toHaveLength(2);
     await expect(
       prisma.auditLog.update({
         where: { id: latest.id },
@@ -1221,42 +1197,10 @@ describe('Orders (e2e)', () => {
       }),
     ).rejects.toThrow();
 
-    const concurrentA = {
-      items: [
-        {
-          mealDate: mealDate(1),
-          mealType: MealType.LUNCH,
-          deadlineAt: future,
-        },
-      ],
-    };
-    const concurrentB = {
-      items: [
-        {
-          mealDate: mealDate(1),
-          mealType: MealType.DINNER,
-          deadlineAt: future,
-        },
-      ],
-    };
-    const [left, right] = await Promise.all([
-      request(app.getHttpServer())
-        .put(`/api/v1/order-deadlines/${YEAR}/${MONTH}`)
-        .set('Cookie', supportCookie)
-        .send(concurrentA),
-      request(app.getHttpServer())
-        .put(`/api/v1/order-deadlines/${YEAR}/${MONTH}`)
-        .set('Cookie', adminCookie)
-        .send(concurrentB),
-    ]);
-    expect([left.status, right.status].sort()).toEqual([200, 200]);
     const listed = await request(app.getHttpServer())
-      .get(`/api/v1/order-deadlines/${YEAR}/${MONTH}`)
+      .get('/api/v1/order-deadline-policy')
       .set('Cookie', supportCookie);
-    const types = listed.body.map((row: { mealType: string }) => row.mealType);
-    expect(listed.body).toHaveLength(1);
-    expect(['LUNCH', 'DINNER']).toContain(types[0]);
-    expect(listed.body[0].mealDate).toBe(mealDate(1));
+    expect(listed.body).toHaveLength(2);
   });
 
   it('keeps historical guest orders readable when the menu option cannot be resolved', async () => {

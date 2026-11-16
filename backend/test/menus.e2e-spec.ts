@@ -178,7 +178,7 @@ describe('Menus (e2e)', () => {
     }
   });
 
-  it('creates a monthly menu, draft, meals, and published version', async () => {
+  it('creates a monthly menu, saves meals, and exposes them without a publish step', async () => {
     expect(
       (
         await request(app.getHttpServer())
@@ -254,12 +254,7 @@ describe('Menus (e2e)', () => {
       ).status,
     ).toBe(422);
 
-    const published = await request(app.getHttpServer())
-      .post(`/api/v1/menus/${menuId}/versions/${draftId}/publish`)
-      .set('Cookie', adminCookie);
-    expect(published.status).toBe(200);
-    publishedId = published.body.id as string;
-    expect(published.body.status).toBe('PUBLISHED');
+    publishedId = draftId;
     expect(
       (
         await request(app.getHttpServer())
@@ -271,44 +266,29 @@ describe('Menus (e2e)', () => {
     expect(
       (
         await request(app.getHttpServer())
-          .patch(`/api/v1/menus/${menuId}/versions/${publishedId}`)
+          .patch(`/api/v1/menus/${menuId}/versions/${draftId}`)
           .set('Cookie', adminCookie)
           .send({
             mealDate: mealDate(1),
             mealType: MealType.LUNCH,
-            options: [{ title: 'نباید', displayOrder: 1 }],
+            options: [{ title: 'چلوکباب تازه', displayOrder: 1 }],
           })
       ).status,
-    ).toBe(422);
+    ).toBe(200);
+    const live = await request(app.getHttpServer())
+      .get('/api/v1/published-menus/1411/1')
+      .set('Cookie', employeeCookie);
+    expect(JSON.stringify(live.body)).toContain('چلوکباب تازه');
   });
 
-  it('keeps the current published version when a later draft fails to publish', async () => {
-    const next = await request(app.getHttpServer())
-      .post(`/api/v1/menus/${menuId}/versions`)
-      .set('Cookie', adminCookie)
-      .send({ sourceVersionId: publishedId });
-    expect(next.status).toBe(201);
-    const emptyDraft = await request(app.getHttpServer())
-      .post(`/api/v1/menus/${menuId}/versions`)
-      .set('Cookie', adminCookie)
-      .send({ sourceVersionId: null });
+  it('does not expose a publish endpoint', async () => {
     expect(
       (
         await request(app.getHttpServer())
-          .post(
-            `/api/v1/menus/${menuId}/versions/${emptyDraft.body.id as string}/publish`,
-          )
+          .post(`/api/v1/menus/${menuId}/versions/${draftId}/publish`)
           .set('Cookie', adminCookie)
       ).status,
-    ).toBe(422);
-    const menu = await request(app.getHttpServer())
-      .get(`/api/v1/menus/${menuId}`)
-      .set('Cookie', adminCookie);
-    expect(menu.body.publishedVersionId).toBe(publishedId);
-    const published = await prisma.menuItem.findMany({
-      where: { menuVersionId: publishedId },
-    });
-    expect(published.some((item) => item.title === 'چلوکباب')).toBe(true);
+    ).toBe(404);
   });
 
   it('imports Excel with keep-existing-orders and rejects stale confirm', async () => {
@@ -427,7 +407,7 @@ describe('Menus (e2e)', () => {
     ).toBe(item.title);
   });
 
-  it('announces a published month to every active user and keeps the month in notification data', async () => {
+  it('announces a month to every active user and keeps the month in notification data', async () => {
     await prisma.user.update({
       where: { username: 'e2e.menu.hr' },
       data: { isActive: false },
@@ -453,11 +433,11 @@ describe('Menus (e2e)', () => {
           .post(`/api/v1/menus/${unpublished.body.id as string}/announce`)
           .set('Cookie', adminCookie)
           .send({
-            title: 'منوی اردیبهشت منتشر شد 🍽️',
-            body: 'برای مشاهده منو و ثبت وعده‌های غذایی، وارد سامانه شوید.',
+            title: 'منوی اردیبهشت آماده است 🍽️',
+            body: 'برای مشاهده منو و ثبت وعده‌های غذایی وارد سامانه شوید.',
           })
       ).status,
-    ).toBe(422);
+    ).toBe(200);
 
     const announced = await request(app.getHttpServer())
       .post(`/api/v1/menus/${menuId}/announce`)
@@ -530,7 +510,6 @@ describe('Menus (e2e)', () => {
         action: {
           in: [
             'MENU_CREATED',
-            'MENU_VERSION_PUBLISHED',
             'MENU_PUBLICATION_ANNOUNCED',
             'EXCEL_IMPORT_CONFIRMED',
           ],

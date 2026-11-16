@@ -126,7 +126,6 @@ export const MENU_ENDPOINTS = {
   get: (id: string) => `/menus/${id}`,
   versions: (id: string) => `/menus/${id}/versions`,
   version: (id: string, versionId: string) => `/menus/${id}/versions/${versionId}`,
-  publish: (id: string, versionId: string) => `/menus/${id}/versions/${versionId}/publish`,
   announce: (id: string) => `/menus/${id}/announce`,
   preview: '/menus/imports/preview',
   patchImport: (importId: string) => `/menus/imports/${importId}`,

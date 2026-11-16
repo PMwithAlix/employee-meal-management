@@ -29,7 +29,8 @@ export const AUDIT_ACTION_LABELS: Record<string, string> = {
   MEAL_OPTION_REMOVED: 'حذف غذا از منو',
   MEAL_OPTIONS_REORDERED: 'تغییر ترتیب غذاها',
   MENU_VERSION_PUBLISHED: 'انتشار منو',
-  MENU_PUBLICATION_ANNOUNCED: 'اعلام انتشار منو به کاربران',
+  MENU_PUBLICATION_ANNOUNCED: 'اعلام منو به کاربران',
+  ORDER_DEADLINE_POLICY_UPDATED: 'به‌روزرسانی سیاست مهلت سفارش',
   EXCEL_IMPORT_PREVIEW_CREATED: 'بررسی فایل اکسل منو',
   EXCEL_IMPORT_CONFIRMED: 'تأیید واردسازی منو از اکسل',
   EXCEL_IMPORT_REJECTED: 'رد واردسازی منو از اکسل',
@@ -57,6 +58,7 @@ export const AUDIT_ENTITY_LABELS: Record<string, string> = {
   Order: 'سفارش',
   GuestOrder: 'سفارش مهمان',
   OrderDeadline: 'مهلت سفارش',
+  OrderDeadlinePolicy: 'سیاست مهلت سفارش',
   MealSetting: 'تنظیم وعده',
   Rating: 'امتیاز',
 }

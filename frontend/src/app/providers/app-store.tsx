@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { buildMonthMenu, createSnapshot, fullName, PERSONA_ID, ROLE_LABEL, SEED_MONTH } from '../../shared/fixtures/seed-data'
-import { defaultMonthDeadlines, formatDeadline, isOrderingOpen, summarizeBackendDeadlines, type MealDeadline, type MonthDeadlines } from '../../shared/lib/deadlines'
+import { defaultMonthDeadlines, formatDeadline, type MonthDeadlines } from '../../shared/lib/deadlines'
 import { addMonths, currentDateTime, isValidJalaliDate, JALALI_MONTHS, monthKey, type JalaliDate, type JalaliDateTime } from '../../shared/lib/jalali'
 import { canGiveFeedback, isEmployeeDeadlineOpen, type MealDeadlineState } from '../../shared/lib/order-rules'
 import { ADMIN_ACCOUNT_ID, normalizeUsername, passwordIssue, setSessionSecret, usernameIssue, verifySessionSecret } from '../../shared/lib/credentials'
@@ -9,7 +9,7 @@ import type { SessionUser } from '../../features/auth/lib/session-roles'
 import { AuthRequestError } from '../../features/auth/lib/auth-errors'
 import { formatGregorianDate } from '../../features/menus/lib/menu-mapper'
 import { orderApi } from '../../features/orders/api/orders-api'
-import { mealDeadlineFromMap, mealServingsFromSettings, toDeadlineMap, uiRatingFromStaff } from '../../features/orders/lib/order-mapper'
+import { mealDeadlineFromPolicy, mealServingsFromSettings, rowsToDeadlinePolicies, uiRatingFromStaff, type StoredDeadlinePolicies } from '../../features/orders/lib/order-mapper'
 import { buildAppUrl, resolveAppLocation, type RouteStatus } from '../../shared/config/app-routes'
 import { can, canAccess, LANDING_PAGE } from '../../shared/config/permissions'
 import type {
@@ -87,11 +87,10 @@ interface StoreValue {
   setMenuQuery: (query: Partial<MenuQuery>) => void
   clearMenuQuery: () => void
   shiftMonth: (delta: number) => void
-  setMealDeadline: (meal: MealKind, patch: Partial<Pick<MealDeadline, 'relation' | 'hour' | 'minute'>>) => void
   setMealServing: (meal: MealKind, clock: string) => Promise<boolean>
   selectMeal: (employeeId: string, jd: number, meal: MealKind, choice: string | null, scope: 'self' | 'ops', menuItemId?: string | null) => Promise<boolean>
   mealDeadlineAt: (day: Pick<DayMenu, 'jy' | 'jm' | 'jd' | 'gregorianDate'>, meal: MealKind) => MealDeadlineState
-  mealDeadlineSummary: (meal: MealKind, mealDates: string[]) => string
+  mealDeadlineSummary: (meal: MealKind) => string
   retryMyOrders: () => void
   retryDeadlines: () => void
   retryMealServings: () => void
@@ -204,7 +203,7 @@ export function StoreProvider({
     return () => window.removeEventListener('popstate', onPopState)
   }, [session.role])
   const [menus, setMenus] = useState<Record<string, DayMenu[]>>(() => ({ [monthKey(SEED_MONTH)]: initial.days }))
-  const [deadlinesByMonth, setDeadlinesByMonth] = useState<Record<string, MonthDeadlines>>({})
+  const [deadlinesByMonth] = useState<Record<string, MonthDeadlines>>({})
   const [now, setNow] = useState(() => currentDateTime())
   const [mealServings, setMealServings] = useState<MealServings>({ lunch: '', dinner: '' })
   const [mealServingsStatus, setMealServingsStatus] = useState<'loading' | 'ready' | 'unavailable' | 'error'>('loading')
@@ -220,7 +219,7 @@ export function StoreProvider({
   const [myOrdersMessage, setMyOrdersMessage] = useState('')
   const [myOrdersBoot, setMyOrdersBoot] = useState(0)
   const [orderingKey, setOrderingKey] = useState<string | null>(null)
-  const [deadlineMap, setDeadlineMap] = useState<Record<string, string | null>>({})
+  const [deadlinePolicy, setDeadlinePolicy] = useState<StoredDeadlinePolicies>({})
   const [deadlineStatus, setDeadlineStatus] = useState<'loading' | 'ready' | 'unavailable' | 'error'>('loading')
   const [deadlineMessage, setDeadlineMessage] = useState('')
   const [deadlineBoot, setDeadlineBoot] = useState(0)
@@ -268,19 +267,19 @@ export function StoreProvider({
     const controller = new AbortController()
     setDeadlineStatus('loading')
     setDeadlineMessage('')
-    void orderApi.deadlines(selectedMonth.jy, selectedMonth.jm, controller.signal).then((rows) => {
+    void orderApi.deadlinePolicy(controller.signal).then((rows) => {
       if (controller.signal.aborted) return
-      setDeadlineMap(toDeadlineMap(rows))
+      setDeadlinePolicy(rowsToDeadlinePolicies(rows))
       setDeadlineStatus('ready')
       setDeadlineMessage('')
     }).catch((error: unknown) => {
       if (controller.signal.aborted) return
-      setDeadlineMap({})
+      setDeadlinePolicy({})
       setDeadlineStatus(error instanceof AuthRequestError && error.kind === 'network' ? 'unavailable' : 'error')
       setDeadlineMessage(error instanceof AuthRequestError ? error.message : 'بارگذاری مهلت سفارش انجام نشد.')
     })
     return () => controller.abort()
-  }, [deadlineBoot, selectedMonth.jy, selectedMonth.jm, session.id])
+  }, [deadlineBoot, session.id])
 
   useEffect(() => {
     const controller = new AbortController()
@@ -373,13 +372,14 @@ export function StoreProvider({
 
   function mealDeadlineAt(day: Pick<DayMenu, 'jy' | 'jm' | 'jd' | 'gregorianDate'>, meal: MealKind): MealDeadlineState {
     const date = day.gregorianDate ?? formatGregorianDate(day.jy, day.jm, day.jd)
-    return mealDeadlineFromMap(deadlineMap, deadlineStatus === 'ready', date, meal)
+    return mealDeadlineFromPolicy(deadlinePolicy, deadlineStatus === 'ready', date, meal)
   }
 
-  function mealDeadlineSummary(meal: MealKind, mealDates: string[]) {
+  function mealDeadlineSummary(meal: MealKind) {
     if (deadlineStatus === 'loading') return 'در حال خواندن'
     if (deadlineStatus !== 'ready') return 'خوانده نشد'
-    return summarizeBackendDeadlines(deadlineMap, meal, mealDates)
+    const policy = deadlinePolicy[meal]
+    return policy ? formatDeadline(policy) : 'مهلت تعریف نشده'
   }
 
   function upsertMyOrder(next: Order) {
@@ -390,11 +390,8 @@ export function StoreProvider({
   }
 
   async function selectMeal(employeeId: string, jd: number, meal: MealKind, choice: string | null, scope: 'self' | 'ops', menuItemId?: string | null) {
-    const mealDate = { ...selectedMonth, jd }
     const gregorian = formatGregorianDate(selectedMonth.jy, selectedMonth.jm, jd)
-    const locked = scope === 'self'
-      ? !isEmployeeDeadlineOpen(mealDeadlineAt({ ...selectedMonth, jd, gregorianDate: gregorian }, meal))
-      : !isOrderingOpen(mealDate, deadlines[meal], now)
+    const locked = !isEmployeeDeadlineOpen(mealDeadlineAt({ ...selectedMonth, jd, gregorianDate: gregorian }, meal))
     if (scope === 'self') {
       if (!can(role, 'order.self') || employeeId !== session.id) return false
       if (locked && !can(role, 'order.ops')) return false
@@ -919,24 +916,6 @@ export function StoreProvider({
         setMealServingsMessage(error instanceof AuthRequestError ? error.message : 'ذخیره ساعت وعده انجام نشد.')
         return false
       }
-    },
-    setMealDeadline: (meal, patch) => {
-      if (!can(role, 'menu.edit')) return
-      const current = deadlines[meal]
-      const next = { ...current, ...patch, meal }
-      if (next.relation === current.relation && next.hour === current.hour && next.minute === current.minute) return
-      setDeadlinesByMonth((map) => {
-        const monthDeadlines = map[monthId] ?? defaultMonthDeadlines()
-        return { ...map, [monthId]: { ...monthDeadlines, [meal]: next } }
-      })
-      pushActivity({
-        actor: personaName,
-        action: meal === 'lunch' ? 'تغییر مهلت ناهار' : 'تغییر مهلت شام',
-        target: `${monthName} ${fa(selectedMonth.jy)}`,
-        at: 'همین حالا',
-        before: formatDeadline(current),
-        after: formatDeadline(next),
-      })
     },
     selectMeal,
     mealDeadlineAt,

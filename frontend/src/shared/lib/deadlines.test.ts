@@ -1,8 +1,19 @@
 import { describe, expect, it } from 'vitest'
-import { deadlineAtFromPattern, formatDeadlineFromInstant, summarizeBackendDeadlines, tehranWallToUtc } from './deadlines'
+import { deadlineAtFromPattern, formatDeadlineFromInstant, formatOrderDeadlineSentence, summarizeBackendDeadlines, tehranWallToUtc } from './deadlines'
 
 const noon = '2026-08-22T06:30:00.000Z'
 const later = '2026-08-22T07:00:00.000Z'
+
+describe('formatOrderDeadlineSentence', () => {
+  it('describes lunch and dinner policies in Persian', () => {
+    expect(formatOrderDeadlineSentence({ meal: 'lunch', relation: 'previous_day', hour: 10, minute: 0 })).toBe(
+      'مهلت ثبت سفارش ناهار، ساعت ۱۰:۰۰ روز قبل از تاریخ وعده است.',
+    )
+    expect(formatOrderDeadlineSentence({ meal: 'dinner', relation: 'same_day', hour: 12, minute: 0 })).toBe(
+      'مهلت ثبت سفارش شام، ساعت ۱۲:۰۰ در همان روز وعده است.',
+    )
+  })
+})
 
 describe('tehranWallToUtc', () => {
   it('converts a Tehran wall clock on the meal date to UTC', () => {

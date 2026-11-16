@@ -33,7 +33,7 @@ export const MENU_PUBLISHED_NOTIFICATION = 'MENU_PUBLISHED' as const;
 export function defaultMenuAnnouncementCopy(jalaliMonth: number) {
   const monthName = JALALI_MONTHS[jalaliMonth - 1];
   return {
-    title: `منوی ${monthName} منتشر شد 🍽️`,
-    body: 'برای مشاهده منو و ثبت وعده‌های غذایی، وارد سامانه شوید.',
+    title: `منوی ${monthName} آماده است 🍽️`,
+    body: 'برای مشاهده منو و ثبت وعده‌های غذایی وارد سامانه شوید.',
   };
 }

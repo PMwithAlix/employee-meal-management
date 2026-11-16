@@ -27,7 +27,7 @@ export function usePublishedMenu(year: number, month: number) {
         if (!payload || payload.jalaliYear !== year || payload.jalaliMonth !== month) {
           if (!payload) {
             setStatus('error')
-            setMessage('پاسخ منوی منتشرشده نامعتبر است.')
+            setMessage('پاسخ منوی این ماه نامعتبر است.')
             return
           }
           return
