@@ -1,8 +1,9 @@
+import { memo } from 'react'
 import { Check, Lock, Moon, Sun, Minus } from 'lucide-react'
 import { cn } from '../lib/persian-text'
 import type { MealKind } from '../types/domain'
 
-export function MealBlock({
+export const MealBlock = memo(function MealBlock({
   kind,
   choice,
   locked,
@@ -85,4 +86,4 @@ export function MealBlock({
       {inner}
     </button>
   )
-}
+})

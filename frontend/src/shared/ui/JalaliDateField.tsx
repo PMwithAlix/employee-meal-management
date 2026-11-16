@@ -8,10 +8,12 @@ export function JalaliDateField({
   label,
   value,
   onChange,
+  allowClear = true,
 }: {
   label: string
   value: string
   onChange: (next: string) => void
+  allowClear?: boolean
 }) {
   const selected = jalaliFromIsoDate(value)
   const [open, setOpen] = useState(false)
@@ -65,7 +67,7 @@ export function JalaliDateField({
               )
             })}
           </div>
-          {value && (
+          {allowClear && value && (
             <button type="button" className="mt-2 text-xs text-link" onClick={() => { onChange(''); setOpen(false) }}>
               پاک کردن تاریخ
             </button>

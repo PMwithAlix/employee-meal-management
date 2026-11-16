@@ -60,6 +60,25 @@ describe('parseBackendOrder', () => {
     expect(ui?.menuItemId).toBeNull()
     expect(ui?.cycleStatus).toBe('CANCELLED')
   })
+
+  it('keeps the snapshot when the menu item id is no longer present', () => {
+    const parsed = parseBackendOrder({ ...payload, currentCycle: { ...payload.currentCycle, menuItemId: null } })
+    expect(parsed?.currentCycle?.optionTitle).toBe('چلوکباب')
+    expect(parsed?.currentCycle?.menuItemId).toBeNull()
+    const ui = toUiOrder(parsed!)
+    expect(ui?.choice).toBe('چلوکباب')
+    expect(ui?.snapshotTitle).toBe('چلوکباب')
+    expect(ui?.menuItemId).toBeNull()
+  })
+
+  it('uses mealDate, not createdAt, and can recover Jalali from jalaliDate if mealDate is invalid', () => {
+    const ui = toUiOrder(parseBackendOrder(payload)!)
+    expect(ui).toMatchObject({ jy: 1405, jm: 8, jd: 1 })
+    const recovered = toUiOrder(parseBackendOrder({ ...payload, mealDate: 'not-a-date', jalaliDate: '1405/08/01' })!)
+    expect(recovered).toMatchObject({ jy: 1405, jm: 8, jd: 1, meal: 'lunch' })
+    const invalid = toUiOrder(parseBackendOrder({ ...payload, mealDate: 'not-a-date', jalaliDate: 'nope' })!)
+    expect(invalid).toMatchObject({ id: 'order-1', jy: 0, jm: 0, jd: 0 })
+  })
 })
 
 describe('deadlines', () => {

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { AuthRequestError } from '../../auth/lib/auth-errors'
 import { menuApi } from '../api/menus-api'
 import { daysFromVersion, toPickerDay } from '../lib/menu-mapper'
@@ -63,7 +63,7 @@ export function usePublishedMenu(year: number, month: number) {
 
   const retry = useCallback(() => setBoot((value) => value + 1), [])
 
-  const pickerDays: DayMenu[] = days.map(toPickerDay)
+  const pickerDays = useMemo((): DayMenu[] => days.map(toPickerDay), [days])
 
   return { status, message, menu, days, pickerDays, monthStamp: `${year}-${month}`, retry }
 }

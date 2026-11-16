@@ -1,4 +1,4 @@
-import { gregorianToJalali, jalaliMonthLength, jalaliToGregorian, weekdayName } from '../../../shared/lib/jalali'
+import { gregorianToJalali, isValidJalaliDate, jalaliMonthLength, jalaliToGregorian, weekdayName } from '../../../shared/lib/jalali'
 import type { DayMenu, MealKind } from '../../../shared/types/domain'
 import type { BackendMeal, BackendMealType, MenuDay, MenuOption, MenuVersionDetail } from '../model/menu-types'
 
@@ -18,9 +18,27 @@ export function formatGregorianDate(jy: number, jm: number, jd: number) {
 }
 
 export function jalaliFromMealDate(mealDate: string) {
-  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(mealDate)
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(mealDate.trim())
   if (!match) return null
-  return gregorianToJalali(Number(match[1]), Number(match[2]), Number(match[3]))
+  const gy = Number(match[1])
+  const gm = Number(match[2])
+  const gd = Number(match[3])
+  if (gm < 1 || gm > 12 || gd < 1 || gd > 31) return null
+  const jalali = gregorianToJalali(gy, gm, gd)
+  if (!isValidJalaliDate(jalali.jy, jalali.jm, jalali.jd)) return null
+  const back = jalaliToGregorian(jalali.jy, jalali.jm, jalali.jd)
+  if (back.gy !== gy || back.gm !== gm || back.gd !== gd) return null
+  return jalali
+}
+
+export function jalaliFromJalaliField(value: string | null | undefined) {
+  if (!value) return null
+  const match = /^(\d{3,4})[/-](\d{1,2})[/-](\d{1,2})$/.exec(value.trim())
+  if (!match) return null
+  const jy = Number(match[1])
+  const jm = Number(match[2])
+  const jd = Number(match[3])
+  return isValidJalaliDate(jy, jm, jd) ? { jy, jm, jd } : null
 }
 
 export function parseOption(value: unknown): MenuOption | null {

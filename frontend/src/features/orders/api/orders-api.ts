@@ -53,6 +53,7 @@ export const orderApi = {
         if (received !== total) throw incomplete()
         break
       }
+      if (listed.orders.length !== listed.items.length) throw incomplete()
       received += listed.items.length
       if (received > total) throw incomplete()
       orders.push(...listed.orders)

@@ -21,7 +21,7 @@ export const ORDER_ENDPOINTS = {
 export type BackendOrderCycle = {
   id: string
   cycleNumber: number
-  menuItemId: string
+  menuItemId: string | null
   menuVersionId: string
   optionTitle: string
   usernameSnapshot: string

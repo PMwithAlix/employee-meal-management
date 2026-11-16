@@ -219,6 +219,7 @@ export function StoreProvider({
   const [myOrdersStatus, setMyOrdersStatus] = useState<'loading' | 'ready' | 'unavailable' | 'error'>('loading')
   const [myOrdersMessage, setMyOrdersMessage] = useState('')
   const [myOrdersBoot, setMyOrdersBoot] = useState(0)
+  const myOrdersSessionRef = useRef(session.id)
   const [orderingKey, setOrderingKey] = useState<string | null>(null)
   const [deadlinePolicy, setDeadlinePolicy] = useState<StoredDeadlinePolicies>({})
   const [deadlineStatus, setDeadlineStatus] = useState<'loading' | 'ready' | 'unavailable' | 'error'>('loading')
@@ -244,6 +245,10 @@ export function StoreProvider({
 
   useEffect(() => {
     const controller = new AbortController()
+    if (myOrdersSessionRef.current !== session.id) {
+      myOrdersSessionRef.current = session.id
+      setMyOrders([])
+    }
     setMyOrdersStatus('loading')
     setMyOrdersMessage('')
     void orderApi.listAllMine(controller.signal).then((listed) => {
@@ -262,7 +267,7 @@ export function StoreProvider({
       }
     })
     return () => controller.abort()
-  }, [myOrdersBoot, selectedMonth.jy, selectedMonth.jm, session.id])
+  }, [myOrdersBoot, session.id])
 
   useEffect(() => {
     const controller = new AbortController()

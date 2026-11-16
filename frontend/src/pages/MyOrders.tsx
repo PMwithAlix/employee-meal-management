@@ -4,6 +4,7 @@ import { MealPicker } from '../shared/ui/MealPicker'
 import { StaffOrdersPanel } from '../features/orders/ui/StaffOrdersPanel'
 import { usePublishedMenu } from '../features/menus/hooks/usePublishedMenu'
 import { useApp } from '../app/providers/app-store'
+import { daysForMyOrders, mealDisplayName, partitionMyOrders } from '../features/orders/lib/my-orders'
 import { canGiveFeedback, findCancelledOrder, findOrder, isMealOpen, mealChoices, type MealDeadlineState } from '../shared/lib/order-rules'
 import type { MonthDeadlines } from '../shared/lib/deadlines'
 import { isSameDate, JALALI_MONTHS, type JalaliDateTime } from '../shared/lib/jalali'
@@ -27,8 +28,8 @@ function EmployeeOrdersPage() {
   const [editing, setEditing] = useState<Order | null>(null)
   if (!id) return <Empty title="سفارش شخصی ندارید" body="نقش ادمین به ساختمان و سفارش شخصی متصل نیست." />
 
-  const days = [...published.pickerDays].reverse().filter((day) => day.lunch || day.dinner)
-  const past = app.myOrders.filter((item) => item.employeeId === id && (item.jy !== app.selectedMonth.jy || item.jm !== app.selectedMonth.jm))
+  const split = partitionMyOrders(app.myOrders, id, app.selectedMonth)
+  const days = daysForMyOrders(published.pickerDays, split.current, app.selectedMonth)
 
   return (
     <div className="space-y-4">
@@ -50,23 +51,27 @@ function EmployeeOrdersPage() {
             <Button className="mt-2" variant="secondary" onClick={app.retryMyOrders}>تلاش دوباره</Button>
           </div>
         )}
-        {published.status === 'empty' && <div className="p-4"><Empty title="منویی برای این ماه نیست" body="تا ذخیره غذا برای این ماه، سفارشی ثبت نمی‌شود." /></div>}
+        {published.status === 'empty' && days.length === 0 && (
+          <div className="p-4"><Empty title="منویی برای این ماه نیست" body="سفارش ثبت‌شده‌ای هم برای این ماه پیدا نشد." /></div>
+        )}
         <div className="divide-y divide-line">
           {days.map((day) => {
             const lunch = findOrder(app.myOrders, id, day, day.jd, 'lunch')
             const dinner = findOrder(app.myOrders, id, day, day.jd, 'dinner')
             const lunchCancelled = lunch ? undefined : findCancelledOrder(app.myOrders, id, day, day.jd, 'lunch')
             const dinnerCancelled = dinner ? undefined : findCancelledOrder(app.myOrders, id, day, day.jd, 'dinner')
+            const lunchView = mealDisplayName(Boolean(day.lunch), lunch, lunchCancelled)
+            const dinnerView = mealDisplayName(Boolean(day.dinner), dinner, dinnerCancelled)
             return (
-              <div key={day.jd} className="grid gap-3 px-4 py-3 md:grid-cols-[8rem_1fr_1fr]">
+              <div key={`${day.jy}-${day.jm}-${day.jd}`} className="grid gap-3 px-4 py-3 md:grid-cols-[8rem_1fr_1fr]">
                 <div>
                   <p className="text-sm font-medium">{fa(day.jd)} {JALALI_MONTHS[day.jm - 1]}</p>
                   <p className="text-xs text-muted">{day.weekday}{isSameDate(day, app.now) ? ' · امروز' : ''}</p>
                 </div>
                 <OrderLine
                   meal="lunch"
-                  name={day.lunch ? lunch?.choice ?? null : undefined}
-                  missing={!day.lunch}
+                  name={lunchView.name}
+                  missing={lunchView.missing}
                   order={lunch}
                   note={lunchCancelled ? `${lunchCancelled.snapshotTitle ?? '—'} · لغو شده` : undefined}
                   status={day.lunch ? (isMealOpen(day, 'lunch', app.deadlines, app.now, app.mealDeadlineAt(day, 'lunch')) ? 'مهلت باز' : 'مهلت تمام') : undefined}
@@ -81,8 +86,8 @@ function EmployeeOrdersPage() {
                 />
                 <OrderLine
                   meal="dinner"
-                  name={day.dinner ? dinner?.choice ?? null : undefined}
-                  missing={!day.dinner}
+                  name={dinnerView.name}
+                  missing={dinnerView.missing}
                   order={dinner}
                   note={dinnerCancelled ? `${dinnerCancelled.snapshotTitle ?? '—'} · لغو شده` : undefined}
                   status={day.dinner ? (isMealOpen(day, 'dinner', app.deadlines, app.now, app.mealDeadlineAt(day, 'dinner')) ? 'مهلت باز' : 'مهلت تمام') : undefined}
@@ -100,27 +105,75 @@ function EmployeeOrdersPage() {
           })}
         </div>
       </section>
-      <section className="rounded-md border border-line bg-surface">
-        <header className="border-b border-line px-4 py-3">
-          <h2 className="text-sm font-semibold">سفارش‌های قبلی</h2>
-          <p className="text-xs text-muted">این فهرست جدا از ماه انتخاب‌شده است و نام غذا همان متن زمان ثبت است.</p>
-        </header>
-        {past.length === 0 ? (
-          <div className="p-4"><Empty title="سفارش قبلی برای این حساب نیست" body="سفارش‌های ماه انتخاب‌شده در بخش بالا قرار دارند." /></div>
-        ) : (
-          <ul className="divide-y divide-line">
-            {past.map((item) => (
-              <li key={item.id} className="flex flex-col gap-1 px-4 py-3 text-sm sm:flex-row sm:items-center sm:justify-between">
-                <span className="min-w-0 break-words">{fa(item.jd)} {JALALI_MONTHS[item.jm - 1]} {fa(item.jy)} · {item.meal === 'lunch' ? 'ناهار' : 'شام'}</span>
-                <span className="font-medium">{item.snapshotTitle ?? item.choice ?? '—'}</span>
-                <span className="text-xs text-muted">{item.cycleStatus === 'CANCELLED' ? 'لغو شده' : 'ثبت‌شده'}</span>
-              </li>
-            ))}
-          </ul>
-        )}
-      </section>
+      {(app.myOrdersStatus === 'ready' || app.myOrders.length > 0) && (
+        <>
+          <HistorySection
+            title="سفارش‌های آینده"
+            emptyTitle="سفارش آینده‌ای نسبت به این ماه نیست"
+            emptyBody="سفارش‌هایی که بعد از پایان این ماه هستند اینجا می‌آیند."
+            hint="این سفارش‌ها بعد از ماه انتخاب‌شده هستند و نام غذا همان متن زمان ثبت است."
+            items={split.future}
+          />
+          <HistorySection
+            title="سفارش‌های گذشته"
+            emptyTitle="سفارش گذشته‌ای نسبت به این ماه نیست"
+            emptyBody="سفارش‌های ماه انتخاب‌شده در بخش بالا قرار دارند."
+            hint="این سفارش‌ها پیش از شروع ماه انتخاب‌شده هستند و نام غذا همان متن زمان ثبت است."
+            items={split.past}
+          />
+          {split.invalid.length > 0 && (
+            <HistorySection
+              title="سفارش با تاریخ نامعتبر"
+              emptyTitle=""
+              emptyBody=""
+              hint="این سفارش‌ها حذف نشدند، اما به هیچ ماهی نسبت داده نشدند چون تاریخ وعده معتبر نبود."
+              items={split.invalid}
+            />
+          )}
+        </>
+      )}
       {editing && <RatingDialog order={editing} onClose={() => setEditing(null)} />}
     </div>
+  )
+}
+
+function HistorySection({
+  title,
+  hint,
+  emptyTitle,
+  emptyBody,
+  items,
+}: {
+  title: string
+  hint: string
+  emptyTitle: string
+  emptyBody: string
+  items: Order[]
+}) {
+  return (
+    <section className="rounded-md border border-line bg-surface">
+      <header className="border-b border-line px-4 py-3">
+        <h2 className="text-sm font-semibold">{title}</h2>
+        <p className="text-xs text-muted">{hint}</p>
+      </header>
+      {items.length === 0 ? (
+        emptyTitle ? <div className="p-4"><Empty title={emptyTitle} body={emptyBody} /></div> : null
+      ) : (
+        <ul className="divide-y divide-line">
+          {items.map((item) => (
+            <li key={item.id} className="flex flex-col gap-1 px-4 py-3 text-sm sm:flex-row sm:items-center sm:justify-between">
+              <span className="min-w-0 break-words">
+                {item.jy && item.jm && item.jd ? `${fa(item.jd)} ${JALALI_MONTHS[item.jm - 1] ?? ''} ${fa(item.jy)}` : 'تاریخ نامعتبر'}
+                {' · '}
+                {item.meal === 'lunch' ? 'ناهار' : 'شام'}
+              </span>
+              <span className="font-medium">{item.snapshotTitle ?? item.choice ?? '—'}</span>
+              <span className="text-xs text-muted">{item.cycleStatus === 'CANCELLED' ? 'لغو شده' : 'ثبت‌شده'}</span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
   )
 }
 

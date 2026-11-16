@@ -126,3 +126,114 @@ textarea {
   scrollbar-width: thin;
   scrollbar-color: var(--line) transparent;
 }
+
+.report-table {
+  border-collapse: collapse;
+}
+
+.report-table th,
+.report-table td {
+  border: 1px solid var(--line-strong);
+  padding: 0.5rem 0.75rem;
+  text-align: start;
+}
+
+.report-table thead th,
+.report-table tfoot th,
+.report-table tfoot td {
+  background: var(--elevated);
+  font-weight: 600;
+}
+
+@media print {
+  @page {
+    size: A4 portrait;
+    margin: 12mm;
+  }
+
+  html {
+    background: #fff;
+  }
+
+  body {
+    background: #fff;
+    color: #111;
+  }
+
+  aside,
+  header,
+  nav[aria-label="ناوبری اصلی"],
+  nav[aria-label="منوی اصلی"],
+  [aria-label="صفحات بیشتر"],
+  [aria-label="بستن صفحات بیشتر"],
+  .print-hide,
+  .fixed {
+    display: none !important;
+  }
+
+  main {
+    margin: 0 !important;
+    max-width: none !important;
+    padding: 0 !important;
+  }
+
+  html[data-print-report="restaurant"] .report-buildings,
+  html[data-print-report="buildings"] .report-restaurant {
+    display: none !important;
+  }
+
+  html[data-print-report="restaurant"] .report-restaurant,
+  html[data-print-report="buildings"] .report-buildings {
+    display: block !important;
+  }
+
+  .report-sheet {
+    border: 0;
+    padding: 0;
+    box-shadow: none;
+    background: #fff;
+  }
+
+  .report-heading {
+    break-after: avoid;
+  }
+
+  .building-section {
+    break-inside: avoid;
+  }
+
+  .building-title {
+    break-after: avoid;
+  }
+
+  .report-table {
+    width: 100%;
+  }
+
+  .report-table thead {
+    display: table-header-group;
+  }
+
+  .report-table tfoot {
+    display: table-footer-group;
+  }
+
+  .report-table tr {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  .report-table th,
+  .report-table td {
+    background: #fff !important;
+    border-color: #444;
+    color: #111;
+  }
+
+  .report-table thead th,
+  .report-table tfoot th,
+  .report-table tfoot td {
+    background: #f3f3f3 !important;
+    color: #111;
+  }
+}

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { memo, useCallback, useEffect, useRef, useState } from 'react'
 import { Check, Lock, Minus, Search, X } from 'lucide-react'
 import { MealBlock } from '../shared/ui/MealBlock'
 import { MealPicker } from '../shared/ui/MealPicker'
@@ -11,13 +11,20 @@ import { addDays, isSameDate, JALALI_MONTHS } from '../shared/lib/jalali'
 import { findOrder, isMealOpen, mealChoices, rowMatches } from '../shared/lib/order-rules'
 import { can } from '../shared/config/permissions'
 import { cn, fa } from '../shared/lib/persian-text'
-import type { DayMenu, MealKind } from '../shared/types/domain'
+import type { DayMenu, MealKind, MealOptionChoice } from '../shared/types/domain'
+
+type SaveMeal = (employeeId: string, jd: number, meal: MealKind, menuItemId: string | null) => boolean | Promise<boolean>
 
 export function MonthlyMenuPage() {
   const app = useApp()
   const published = usePublishedMenu(app.selectedMonth.jy, app.selectedMonth.jm)
   const [filtersOpen, setFiltersOpen] = useState(false)
   const id = app.role === 'admin' ? null : app.selfId
+  const selectMealRef = useRef(app.selectMeal)
+  selectMealRef.current = app.selectMeal
+  const saveMeal = useCallback((employeeId: string, jd: number, meal: MealKind, menuItemId: string | null) => (
+    selectMealRef.current(employeeId, jd, meal, null, 'self', menuItemId)
+  ), [])
 
   if (!id) {
     return (
@@ -124,9 +131,9 @@ export function MonthlyMenuPage() {
       ) : visible.length === 0 ? (
         <Empty title="روزی با این فیلتر پیدا نشد" body="فیلترها را پاک کنید یا ترکیب دیگری انتخاب کنید." />
       ) : app.menuView === 'list' ? (
-        <DayList days={visible} employeeId={id} />
+        <DayList days={visible} employeeId={id} onSaveMeal={saveMeal} />
       ) : (
-        <Calendar days={days} visible={new Set(visible.map((item) => item.jd))} employeeId={id} />
+        <Calendar days={days} visible={new Set(visible.map((item) => item.jd))} employeeId={id} onSaveMeal={saveMeal} />
       )}
       {(published.status === 'unavailable' || published.status === 'error' || published.status === 'forbidden') && (
         <Button variant="secondary" onClick={published.retry}>تلاش دوباره</Button>
@@ -138,8 +145,9 @@ export function MonthlyMenuPage() {
   )
 }
 
-function DayList({ days, employeeId: id }: { days: DayMenu[]; employeeId: string }) {
+function DayList({ days, employeeId: id, onSaveMeal }: { days: DayMenu[]; employeeId: string; onSaveMeal: SaveMeal }) {
   const app = useApp()
+  const ops = can(app.role, 'order.ops')
   return (
     <>
       <div className="hidden overflow-hidden rounded-md border border-line md:block">
@@ -168,8 +176,8 @@ function DayList({ days, employeeId: id }: { days: DayMenu[]; employeeId: string
                 <tr key={day.jd} className={cn('border-t border-divider align-top', isSameDate(day, app.now) && 'bg-brandsubtle')}>
                   <td className="px-3 py-3 font-medium">{fa(day.jd)} {JALALI_MONTHS[day.jm - 1]}</td>
                   <td className="px-3 py-3 text-muted">{day.weekday}</td>
-                  <td className="min-w-0 px-3 py-3"><Cell day={day} meal="lunch" choice={lunch?.choice ?? null} /></td>
-                  <td className="min-w-0 px-3 py-3"><Cell day={day} meal="dinner" choice={dinner?.choice ?? null} /></td>
+                  <td className="min-w-0 px-3 py-3"><MealCell day={day} meal="lunch" employeeId={id} ops={ops} onSaveMeal={onSaveMeal} {...mealFields(day, 'lunch', id, app)} /></td>
+                  <td className="min-w-0 px-3 py-3"><MealCell day={day} meal="dinner" employeeId={id} ops={ops} onSaveMeal={onSaveMeal} {...mealFields(day, 'dinner', id, app)} /></td>
                   <td className="px-3 py-3 text-xs leading-5 text-muted">{summary(day, lunch?.choice ?? null, dinner?.choice ?? null, app)}</td>
                 </tr>
               )
@@ -188,8 +196,8 @@ function DayList({ days, employeeId: id }: { days: DayMenu[]; employeeId: string
                 <span className="text-muted">{day.weekday}{isSameDate(day, app.now) ? ' · امروز' : ''}</span>
               </div>
               <div className="space-y-2">
-                <Cell day={day} meal="lunch" choice={lunch?.choice ?? null} />
-                <Cell day={day} meal="dinner" choice={dinner?.choice ?? null} />
+                <MealCell day={day} meal="lunch" employeeId={id} ops={ops} onSaveMeal={onSaveMeal} {...mealFields(day, 'lunch', id, app)} />
+                <MealCell day={day} meal="dinner" employeeId={id} ops={ops} onSaveMeal={onSaveMeal} {...mealFields(day, 'dinner', id, app)} />
               </div>
               <p className="mt-2 text-xs text-muted">{summary(day, lunch?.choice ?? null, dinner?.choice ?? null, app)}</p>
             </article>
@@ -200,8 +208,9 @@ function DayList({ days, employeeId: id }: { days: DayMenu[]; employeeId: string
   )
 }
 
-function Calendar({ days, visible, employeeId: id }: { days: DayMenu[]; visible: Set<number>; employeeId: string }) {
+function Calendar({ days, visible, employeeId: id, onSaveMeal }: { days: DayMenu[]; visible: Set<number>; employeeId: string; onSaveMeal: SaveMeal }) {
   const app = useApp()
+  const ops = can(app.role, 'order.ops')
   const lead = WEEKDAYS.indexOf(days[0]?.weekday as (typeof WEEKDAYS)[number])
   return (
     <>
@@ -218,14 +227,14 @@ function Calendar({ days, visible, employeeId: id }: { days: DayMenu[]; visible:
                 {!visible.has(day.jd) && <span className="text-[10px] text-muted">خارج از فیلتر</span>}
               </div>
               <div className="space-y-1">
-                <Cell day={day} meal="lunch" choice={findOrder(app.myOrders, id, day, day.jd, 'lunch')?.choice ?? null} dense />
-                <Cell day={day} meal="dinner" choice={findOrder(app.myOrders, id, day, day.jd, 'dinner')?.choice ?? null} dense />
+                <MealCell day={day} meal="lunch" dense employeeId={id} ops={ops} onSaveMeal={onSaveMeal} {...mealFields(day, 'lunch', id, app)} />
+                <MealCell day={day} meal="dinner" dense employeeId={id} ops={ops} onSaveMeal={onSaveMeal} {...mealFields(day, 'dinner', id, app)} />
               </div>
             </div>
           ))}
         </div>
       </div>
-      <MobileCalendar days={days} visible={visible} employeeId={id} />
+      <MobileCalendar days={days} visible={visible} employeeId={id} onSaveMeal={onSaveMeal} />
     </>
   )
 }
@@ -267,8 +276,9 @@ function MealMark({ kind, defined, selected, closed }: { kind: MealKind; defined
   )
 }
 
-function MobileCalendar({ days, visible, employeeId: id }: { days: DayMenu[]; visible: Set<number>; employeeId: string }) {
+function MobileCalendar({ days, visible, employeeId: id, onSaveMeal }: { days: DayMenu[]; visible: Set<number>; employeeId: string; onSaveMeal: SaveMeal }) {
   const app = useApp()
+  const ops = can(app.role, 'order.ops')
   const lead = Math.max(0, WEEKDAYS.indexOf(days[0]?.weekday as (typeof WEEKDAYS)[number]))
   const trail = (7 - ((lead + days.length) % 7)) % 7
   const leading = days[0] ? Array.from({ length: lead }, (_, index) => addDays(days[0], index - lead)) : []
@@ -281,8 +291,6 @@ function MobileCalendar({ days, visible, employeeId: id }: { days: DayMenu[]; vi
   }, [monthStamp])
 
   const selected = days.find((day) => day.jd === selectedJd) ?? days[0]
-  const lunch = selected ? findOrder(app.myOrders, id, selected, selected.jd, 'lunch') : undefined
-  const dinner = selected ? findOrder(app.myOrders, id, selected, selected.jd, 'dinner') : undefined
 
   return (
     <div className="lg:hidden">
@@ -357,8 +365,8 @@ function MobileCalendar({ days, visible, employeeId: id }: { days: DayMenu[]; vi
             {!visible.has(selected.jd) && <span className="text-[11px] text-muted">خارج از فیلتر</span>}
           </div>
           <div className="space-y-2 bg-surface p-3">
-            <Cell key={`${selected.jd}-lunch`} day={selected} meal="lunch" choice={lunch?.choice ?? null} />
-            <Cell key={`${selected.jd}-dinner`} day={selected} meal="dinner" choice={dinner?.choice ?? null} />
+            <MealCell key={`${selected.jd}-lunch`} day={selected} meal="lunch" employeeId={id} ops={ops} onSaveMeal={onSaveMeal} {...mealFields(selected, 'lunch', id, app)} />
+            <MealCell key={`${selected.jd}-dinner`} day={selected} meal="dinner" employeeId={id} ops={ops} onSaveMeal={onSaveMeal} {...mealFields(selected, 'dinner', id, app)} />
           </div>
         </section>
       )}
@@ -366,18 +374,58 @@ function MobileCalendar({ days, visible, employeeId: id }: { days: DayMenu[]; vi
   )
 }
 
-function Cell({ day, meal, choice, dense }: { day: DayMenu; meal: MealKind; choice: string | null; dense?: boolean }) {
-  const app = useApp()
-  const id = app.role === 'admin' ? null : app.selfId
+function mealFields(day: DayMenu, meal: MealKind, employeeId: string, app: ReturnType<typeof useApp>) {
+  const order = findOrder(app.myOrders, employeeId, day, day.jd, meal)
   const options = mealChoices(day, meal)
+  const orderingOpen = isMealOpen(day, meal, app.deadlines, app.now, app.mealDeadlineAt(day, meal))
+  const canEdit = Boolean(employeeId && options?.length) && (orderingOpen ? can(app.role, 'order.self') : can(app.role, 'order.ops'))
+  return {
+    choice: order?.choice ?? null,
+    currentId: order?.menuItemId ?? null,
+    options,
+    orderingOpen,
+    canEdit,
+    busy: app.orderingKey === `${day.jd}-${meal}`,
+  }
+}
+
+const MealCell = memo(function MealCell({
+  day,
+  meal,
+  choice,
+  currentId,
+  options,
+  orderingOpen,
+  canEdit,
+  busy,
+  ops,
+  employeeId,
+  onSaveMeal,
+  dense,
+}: {
+  day: DayMenu
+  meal: MealKind
+  choice: string | null
+  currentId: string | null
+  options: MealOptionChoice[] | null
+  orderingOpen: boolean
+  canEdit: boolean
+  busy: boolean
+  ops: boolean
+  employeeId: string
+  onSaveMeal: SaveMeal
+  dense?: boolean
+}) {
   const titles = day[meal]
   const [open, setOpen] = useState(false)
   const triggerRef = useRef<HTMLDivElement>(null)
-  const current = id ? findOrder(app.myOrders, id, day, day.jd, meal) : undefined
   const orphan = Boolean(choice && titles && !titles.includes(choice))
-  const orderingOpen = isMealOpen(day, meal, app.deadlines, app.now, app.mealDeadlineAt(day, meal))
-  const canEdit = Boolean(id && options?.length) && (orderingOpen ? can(app.role, 'order.self') : can(app.role, 'order.ops'))
-  const busy = Boolean(app.orderingKey)
+  const onClose = useCallback(() => setOpen(false), [])
+  const onSave = useCallback((next: string | null) => onSaveMeal(employeeId, day.jd, meal, next), [onSaveMeal, employeeId, day.jd, meal])
+  const onSelect = useCallback(() => {
+    if (busy) return
+    setOpen((value) => !value)
+  }, [busy])
   return (
     <div ref={triggerRef} className="min-w-0">
       <MealBlock
@@ -388,24 +436,24 @@ function Cell({ day, meal, choice, dense }: { day: DayMenu; meal: MealKind; choi
         orphan={orphan}
         dense={dense}
         expanded={open}
-        onSelect={canEdit && !busy ? () => setOpen((value) => !value) : undefined}
+        onSelect={canEdit ? onSelect : undefined}
       />
-      {canEdit && options && id && (
+      {canEdit && options && (
         <MealPicker
           open={open}
           trigger={triggerRef.current}
           kind={meal}
           options={options}
-          currentId={current?.menuItemId ?? null}
+          currentId={currentId}
           locked={!orderingOpen}
-          ops={can(app.role, 'order.ops')}
-          onClose={() => setOpen(false)}
-          onSave={(next) => app.selectMeal(id, day.jd, meal, null, 'self', next)}
+          ops={ops}
+          onClose={onClose}
+          onSave={onSave}
         />
       )}
     </div>
   )
-}
+})
 
 function summary(day: DayMenu, lunch: string | null, dinner: string | null, app: ReturnType<typeof useApp>) {
   if (!day.lunch && !day.dinner) return 'منو تعریف نشده'

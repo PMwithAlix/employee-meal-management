@@ -1,4 +1,4 @@
-import { jalaliFromMealDate, toBackendMeal, toFrontendMeal } from '../../menus/lib/menu-mapper'
+import { jalaliFromJalaliField, jalaliFromMealDate, toBackendMeal, toFrontendMeal } from '../../menus/lib/menu-mapper'
 import { deadlineAtFromPattern, type MealDeadline } from '../../../shared/lib/deadlines'
 import type { MealDeadlineState } from '../../../shared/lib/order-rules'
 import type { MealKind, Order } from '../../../shared/types/domain'
@@ -30,11 +30,12 @@ export function parseBackendOrder(value: unknown): BackendOrder | null {
     createdAt: typeof body.createdAt === 'string' ? body.createdAt : '',
     updatedAt: typeof body.updatedAt === 'string' ? body.updatedAt : '',
     status: parseCycleStatus(body.status),
-    currentCycle: cycle && typeof cycle.id === 'string' && typeof cycle.menuItemId === 'string' && typeof cycle.optionTitle === 'string'
+    currentCycle: cycle && typeof cycle.id === 'string' && typeof cycle.optionTitle === 'string'
+      && (cycle.menuItemId == null || typeof cycle.menuItemId === 'string')
       ? {
           id: cycle.id,
           cycleNumber: typeof cycle.cycleNumber === 'number' ? cycle.cycleNumber : 1,
-          menuItemId: cycle.menuItemId,
+          menuItemId: typeof cycle.menuItemId === 'string' ? cycle.menuItemId : null,
           menuVersionId: typeof cycle.menuVersionId === 'string' ? cycle.menuVersionId : '',
           optionTitle: cycle.optionTitle,
           usernameSnapshot: typeof cycle.usernameSnapshot === 'string' ? cycle.usernameSnapshot : '',
@@ -82,17 +83,17 @@ export function parseBackendOrder(value: unknown): BackendOrder | null {
 }
 
 export function toUiOrder(payload: BackendOrder): Order | null {
-  const date = jalaliFromMealDate(payload.mealDate)
   const meal = toFrontendMeal(payload.mealType)
-  if (!date || !meal) return null
-  const active = payload.status === 'ACTIVE' && payload.currentCycle
+  if (!meal) return null
+  const date = jalaliFromMealDate(payload.mealDate) ?? jalaliFromJalaliField(payload.jalaliDate)
+  const active = payload.status === 'ACTIVE' && Boolean(payload.currentCycle)
   return {
     id: payload.id,
     employeeId: payload.userId,
     buildingId: payload.currentCycle?.buildingIdSnapshot ?? '',
-    jy: date.jy,
-    jm: date.jm,
-    jd: date.jd,
+    jy: date?.jy ?? 0,
+    jm: date?.jm ?? 0,
+    jd: date?.jd ?? 0,
     meal,
     choice: active ? payload.currentCycle!.optionTitle : null,
     snapshotTitle: payload.currentCycle?.optionTitle ?? null,

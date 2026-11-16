@@ -10,6 +10,7 @@ import { HealthModule } from './health/health.module';
 import { MenusModule } from './modules/menus/menus.module';
 import { OrdersModule } from './modules/orders/orders.module';
 import { NotificationsModule } from './modules/notifications/notifications.module';
+import { ReportsModule } from './modules/reports/reports.module';
 import { UsersModule } from './modules/users/users.module';
 
 @Module({
@@ -29,6 +30,7 @@ import { UsersModule } from './modules/users/users.module';
     UsersModule,
     MenusModule,
     OrdersModule,
+    ReportsModule,
     NotificationsModule,
   ],
 })
