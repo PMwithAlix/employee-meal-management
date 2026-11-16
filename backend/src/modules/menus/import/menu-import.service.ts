@@ -534,13 +534,18 @@ export class MenuImportService {
             },
           });
 
-    const atRiskOrders = cycles
-      .filter((cycle) => unmatchedIds.has(cycle.menuItemId))
-      .map((cycle) => ({
-        orderCycleId: cycle.id,
-        menuItemId: cycle.menuItemId,
-        title: cycle.mealTitleSnapshot,
-      }));
+    const atRiskOrders = cycles.flatMap((cycle) => {
+      if (!cycle.menuItemId || !unmatchedIds.has(cycle.menuItemId)) {
+        return [];
+      }
+      return [
+        {
+          orderCycleId: cycle.id,
+          menuItemId: cycle.menuItemId,
+          title: cycle.mealTitleSnapshot,
+        },
+      ];
+    });
 
     return {
       matches,
