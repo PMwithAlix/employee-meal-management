@@ -6,7 +6,8 @@ import {
   History,
   Layers,
   LayoutDashboard,
-  Settings,
+  SlidersHorizontal,
+  UserRound,
   Users,
   UtensilsCrossed,
   type LucideIcon,
@@ -25,6 +26,7 @@ export const PAGE_TITLES: Record<Page, string> = {
   reports: 'گزارش‌ها',
   activity: 'تاریخچه فعالیت‌ها',
   settings: 'حساب کاربری',
+  systemSettings: 'تنظیمات سامانه',
 }
 
 export const NAV_ITEMS: Array<{ id: Page; label: string; group: string; icon: LucideIcon }> = [
@@ -37,7 +39,8 @@ export const NAV_ITEMS: Array<{ id: Page; label: string; group: string; icon: Lu
   { id: 'groups', label: PAGE_TITLES.groups, group: 'سازمان', icon: Layers },
   { id: 'reports', label: PAGE_TITLES.reports, group: 'نظارت', icon: BarChart3 },
   { id: 'activity', label: PAGE_TITLES.activity, group: 'نظارت', icon: History },
-  { id: 'settings', label: PAGE_TITLES.settings, group: 'سیستم', icon: Settings },
+  { id: 'settings', label: PAGE_TITLES.settings, group: 'تنظیمات', icon: UserRound },
+  { id: 'systemSettings', label: PAGE_TITLES.systemSettings, group: 'تنظیمات', icon: SlidersHorizontal },
 ]
 
 export const PRIMARY_NAV: Record<Role, readonly Page[]> = {

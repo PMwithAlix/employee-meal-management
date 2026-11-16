@@ -47,6 +47,7 @@ import { GroupsPage } from '../pages/Groups'
 import { ReportsPage } from '../pages/Reports'
 import { ActivityPage } from '../pages/Activity'
 import { SettingsPage } from '../pages/Settings'
+import { SystemSettingsPage } from '../pages/SystemSettings'
 import { BrandIcon, BrandWordmark, BRAND_NAME } from '../shared/ui/Brand'
 
 function useIsDesktop() {
@@ -73,6 +74,7 @@ const PAGES = {
   reports: ReportsPage,
   activity: ActivityPage,
   settings: SettingsPage,
+  systemSettings: SystemSettingsPage,
 }
 
 export function Shell() {

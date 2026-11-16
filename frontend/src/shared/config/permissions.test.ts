@@ -43,9 +43,9 @@ describe('management observer access', () => {
     const pages: Record<Role, Page[]> = {
       employee: ['overview', 'menu', 'orders', 'settings'],
       hr: ['overview', 'menu', 'orders', 'employees', 'buildings', 'groups', 'settings'],
-      support: ['overview', 'menu', 'orders', 'menuMgmt', 'reports', 'activity', 'settings'],
+      support: ['overview', 'menu', 'orders', 'menuMgmt', 'reports', 'activity', 'settings', 'systemSettings'],
       management: ['overview', 'reports', 'activity', 'settings'],
-      admin: ['overview', 'menuMgmt', 'reports', 'activity', 'employees', 'buildings', 'groups', 'settings'],
+      admin: ['overview', 'menuMgmt', 'reports', 'activity', 'employees', 'buildings', 'groups', 'settings', 'systemSettings'],
     }
     for (const role of Object.keys(pages) as Role[]) {
       for (const page of pages[role]) {
@@ -65,5 +65,10 @@ describe('management observer access', () => {
     expect(can('employee', 'group.edit')).toBe(false)
     expect(can('support', 'order.ops')).toBe(true)
     expect(can('admin', 'menu.edit')).toBe(true)
+    expect(canAccess('employee', 'systemSettings')).toBe(false)
+    expect(canAccess('hr', 'systemSettings')).toBe(false)
+    expect(canAccess('management', 'systemSettings')).toBe(false)
+    expect(canAccess('support', 'systemSettings')).toBe(true)
+    expect(canAccess('admin', 'systemSettings')).toBe(true)
   })
 })

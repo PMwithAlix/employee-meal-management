@@ -1,8 +1,9 @@
-import { useEffect, useId, useRef, useState, type ReactNode, type RefObject } from 'react'
+import { useEffect, useId, useLayoutEffect, useRef, useState, type ReactNode, type RefObject } from 'react'
 import { ChevronDown, ChevronUp, Clock } from 'lucide-react'
 import { CLOCK_PRESETS, clockMinutes, formatClock, parseClock } from '../lib/clock-time'
+import { placeTimePopup } from '../lib/time-picker-position'
 import { cn, fa } from '../lib/persian-text'
-import { controlClass } from './primitives'
+import { Button, controlClass } from './primitives'
 
 const HOURS = Array.from({ length: 24 }, (_, hour) => hour)
 
@@ -10,6 +11,10 @@ function centerActive(list: HTMLDivElement | null) {
   const active = list?.querySelector<HTMLElement>('[data-active="true"]')
   if (!list || !active) return
   list.scrollTop = active.offsetTop - list.clientHeight / 2 + active.offsetHeight / 2
+}
+
+function fallbackParts(value: string) {
+  return parseClock(value) ?? { hour: 12, minute: 0 }
 }
 
 export function TimePicker({
@@ -28,22 +33,66 @@ export function TimePicker({
   minuteStep?: number
 }) {
   const parsed = parseClock(value)
-  const shown = parsed ?? { hour: 12, minute: 0 }
+  const committed = fallbackParts(value)
   const [open, setOpen] = useState(false)
+  const [draft, setDraft] = useState(committed)
+  const [box, setBox] = useState({ top: 0, left: 0, width: 288 })
   const root = useRef<HTMLDivElement>(null)
+  const popup = useRef<HTMLDivElement>(null)
   const hourList = useRef<HTMLDivElement>(null)
   const minuteList = useRef<HTMLDivElement>(null)
   const labelId = useId()
-  const minutes = clockMinutes(minuteStep, shown.minute)
+  const minutes = clockMinutes(minuteStep, draft.minute)
   const display = parsed ? fa(formatClock(parsed.hour, parsed.minute) ?? value) : 'انتخاب ساعت'
+  const draftClock = formatClock(draft.hour, draft.minute) ?? ''
+
+  function close() {
+    setOpen(false)
+    setDraft(fallbackParts(value))
+  }
+
+  function confirm() {
+    const next = formatClock(draft.hour, draft.minute)
+    if (next && next !== value) onChange(next)
+    setOpen(false)
+  }
+
+  useEffect(() => {
+    if (!open) setDraft(fallbackParts(value))
+  }, [open, value])
+
+  useLayoutEffect(() => {
+    if (!open) return
+    function place() {
+      const trigger = root.current?.querySelector('button')
+      const panel = popup.current
+      if (!trigger || !panel) return
+      const next = placeTimePopup(
+        trigger.getBoundingClientRect(),
+        { width: 288, height: panel.offsetHeight },
+        { width: window.innerWidth, height: window.innerHeight },
+      )
+      setBox(next)
+    }
+    place()
+    window.addEventListener('resize', place)
+    window.addEventListener('scroll', place, true)
+    return () => {
+      window.removeEventListener('resize', place)
+      window.removeEventListener('scroll', place, true)
+    }
+  }, [open, draft.hour, draft.minute])
 
   useEffect(() => {
     if (!open) return
     function onPointer(event: MouseEvent) {
-      if (!root.current?.contains(event.target as Node)) setOpen(false)
+      if (!root.current?.contains(event.target as Node)) close()
     }
     function onKey(event: KeyboardEvent) {
-      if (event.key === 'Escape') setOpen(false)
+      if (event.key === 'Escape') {
+        event.preventDefault()
+        close()
+      }
     }
     document.addEventListener('mousedown', onPointer)
     document.addEventListener('keydown', onKey)
@@ -51,31 +100,23 @@ export function TimePicker({
       document.removeEventListener('mousedown', onPointer)
       document.removeEventListener('keydown', onKey)
     }
-  }, [open])
+  }, [open, value])
 
   useEffect(() => {
     if (!open) return
     centerActive(hourList.current)
     centerActive(minuteList.current)
-  }, [open, shown.hour, shown.minute])
-
-  function commit(hour: number, minute: number) {
-    const next = formatClock(hour, minute)
-    if (!next || next === value) return
-    onChange(next)
-  }
+  }, [open, draft.hour, draft.minute])
 
   function nudge(part: 'hour' | 'minute', delta: number) {
-    const hour = parsed?.hour ?? 12
-    const minute = parsed?.minute ?? 0
     if (part === 'hour') {
-      commit((hour + delta + 24) % 24, minute)
+      setDraft((current) => ({ ...current, hour: (current.hour + delta + 24) % 24 }))
       return
     }
-    const index = minutes.indexOf(minute)
+    const index = minutes.indexOf(draft.minute)
     const fallback = index < 0 ? 0 : index
     const nextIndex = (fallback + delta + minutes.length) % minutes.length
-    commit(hour, minutes[nextIndex] ?? minute)
+    setDraft((current) => ({ ...current, minute: minutes[nextIndex] ?? current.minute }))
   }
 
   return (
@@ -91,17 +132,30 @@ export function TimePicker({
         className={cn(controlClass, 'flex items-center justify-between gap-2 bg-bg text-start disabled:cursor-not-allowed disabled:opacity-50')}
         onClick={() => {
           if (disabled) return
-          setOpen((current) => !current)
+          setOpen((current) => {
+            if (current) {
+              setDraft(fallbackParts(value))
+              return false
+            }
+            setDraft(fallbackParts(value))
+            return true
+          })
         }}
       >
         <span className={cn('font-medium tracking-wide', parsed ? 'text-ink' : 'text-muted')} dir="ltr">{display}</span>
         <Clock size={16} className="shrink-0 text-muted" />
       </button>
       {open && (
-        <div className="absolute z-30 mt-1 w-72 rounded-md border border-line bg-surface p-3 shadow-[0_12px_40px_rgba(15,23,42,0.16)]" role="dialog">
-          <div className="mb-2 flex items-center justify-between">
+        <div
+          ref={popup}
+          role="dialog"
+          aria-label="انتخاب ساعت"
+          className="fixed z-40 max-h-[min(28rem,calc(100dvh-1rem))] overflow-auto rounded-md border border-line bg-surface p-3 shadow-[0_12px_40px_rgba(15,23,42,0.16)]"
+          style={{ top: box.top, left: box.left, width: box.width }}
+        >
+          <div className="mb-2 flex items-center justify-between gap-2">
             <p className="text-sm font-medium text-ink">انتخاب ساعت</p>
-            <span className="rounded-md bg-brandsubtle px-2 py-1 text-sm font-semibold text-ink" dir="ltr">{fa(formatClock(shown.hour, shown.minute) ?? '')}</span>
+            <span className="rounded-md bg-brandsubtle px-2 py-1 text-sm font-semibold text-ink" dir="ltr">{fa(draftClock)}</span>
           </div>
           <div className="grid grid-cols-[2.5rem_1fr_1fr_2.5rem] items-center gap-1">
             <div className="flex flex-col gap-1">
@@ -112,8 +166,8 @@ export function TimePicker({
               {HOURS.map((hour) => (
                 <WheelOption
                   key={hour}
-                  active={shown.hour === hour}
-                  onClick={() => commit(hour, shown.minute)}
+                  active={draft.hour === hour}
+                  onClick={() => setDraft((current) => ({ ...current, hour }))}
                 >
                   {fa(String(hour).padStart(2, '0'))}
                 </WheelOption>
@@ -123,8 +177,8 @@ export function TimePicker({
               {minutes.map((minute) => (
                 <WheelOption
                   key={minute}
-                  active={shown.minute === minute}
-                  onClick={() => commit(shown.hour, minute)}
+                  active={draft.minute === minute}
+                  onClick={() => setDraft((current) => ({ ...current, minute }))}
                 >
                   {fa(String(minute).padStart(2, '0'))}
                 </WheelOption>
@@ -140,18 +194,19 @@ export function TimePicker({
               <button
                 key={preset}
                 type="button"
-                className={cn('h-8 rounded-md border px-2 text-xs', value === preset ? 'border-primary bg-brandsubtle text-ink' : 'border-line text-muted hover:bg-surface2')}
+                className={cn('h-8 rounded-md border px-2 text-xs', draftClock === preset ? 'border-primary bg-brandsubtle text-ink' : 'border-line text-muted hover:bg-surface2')}
                 onClick={() => {
-                  onChange(preset)
-                  setOpen(false)
+                  const next = parseClock(preset)
+                  if (next) setDraft(next)
                 }}
               >
                 {fa(preset)}
               </button>
             ))}
           </div>
-          <div className="mt-2 flex justify-end">
-            <button type="button" className="h-9 rounded-md px-3 text-sm text-link" onClick={() => setOpen(false)}>بستن</button>
+          <div className="mt-3 flex justify-end gap-2">
+            <Button type="button" variant="secondary" onClick={close}>لغو</Button>
+            <Button type="button" onClick={confirm}>تأیید</Button>
           </div>
         </div>
       )}

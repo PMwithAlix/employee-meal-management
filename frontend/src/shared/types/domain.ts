@@ -11,6 +11,7 @@ export type Page =
   | 'reports'
   | 'activity'
   | 'settings'
+  | 'systemSettings'
 
 export type MealKind = 'lunch' | 'dinner'
 

@@ -7,6 +7,8 @@ describe('app routes', () => {
     expect(pageFromPathname('/menu-management')).toBe('menuMgmt')
     expect(pageFromPathname('/menu-management/')).toBe('menuMgmt')
     expect(pageFromPathname('/reports')).toBe('reports')
+    expect(pageFromPathname('/settings')).toBe('settings')
+    expect(pageFromPathname('/settings/system')).toBe('systemSettings')
     expect(pageFromPathname('/unknown')).toBeNull()
   })
 
@@ -26,6 +28,11 @@ describe('app routes', () => {
       status: 'ok',
       month: { jy: 1405, jm: 8 },
     })
+    expect(resolveAppLocation('/settings/system', '', 'employee', { jy: 1405, jm: 1 })).toMatchObject({
+      page: 'systemSettings',
+      status: 'forbidden',
+    })
+    expect(resolveAppLocation('/settings/system', '', 'admin', { jy: 1405, jm: 1 }).status).toBe('ok')
   })
 
   it('serializes a shareable URL for a page and month', () => {

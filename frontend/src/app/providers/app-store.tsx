@@ -88,6 +88,7 @@ interface StoreValue {
   clearMenuQuery: () => void
   shiftMonth: (delta: number) => void
   setMealServing: (meal: MealKind, clock: string) => Promise<boolean>
+  saveMealServings: (next: MealServings) => Promise<boolean>
   selectMeal: (employeeId: string, jd: number, meal: MealKind, choice: string | null, scope: 'self' | 'ops', menuItemId?: string | null) => Promise<boolean>
   mealDeadlineAt: (day: Pick<DayMenu, 'jy' | 'jm' | 'jd' | 'gregorianDate'>, meal: MealKind) => MealDeadlineState
   mealDeadlineSummary: (meal: MealKind) => string
@@ -842,6 +843,26 @@ export function StoreProvider({
     return result
   }
 
+  async function saveMealServings(next: MealServings) {
+    if (!can(role, 'settings.meals')) return false
+    if (!/^([01]\d|2[0-3]):([0-5]\d)$/.test(next.lunch) || !/^([01]\d|2[0-3]):([0-5]\d)$/.test(next.dinner)) return false
+    setMealServingsMessage('')
+    try {
+      const rows = await orderApi.replaceMealSettings({
+        items: [
+          { mealType: 'LUNCH', servingTime: next.lunch },
+          { mealType: 'DINNER', servingTime: next.dinner },
+        ],
+      })
+      setMealServings(mealServingsFromSettings(rows))
+      setMealServingsStatus('ready')
+      return true
+    } catch (error: unknown) {
+      setMealServingsMessage(error instanceof AuthRequestError ? error.message : 'ذخیره ساعت وعده انجام نشد.')
+      return false
+    }
+  }
+
   const value: StoreValue = {
     role,
     theme,
@@ -897,25 +918,10 @@ export function StoreProvider({
       if (routeStatusRef.current === 'ok') writeHistory(pageRef.current, next, 'push')
       return next
     }),
+    saveMealServings,
     setMealServing: async (meal, clock) => {
-      if (!can(role, 'settings.meals')) return false
       if (!/^([01]\d|2[0-3]):([0-5]\d)$/.test(clock)) return false
-      const next = { ...mealServings, [meal]: clock }
-      if (!/^([01]\d|2[0-3]):([0-5]\d)$/.test(next.lunch) || !/^([01]\d|2[0-3]):([0-5]\d)$/.test(next.dinner)) return false
-      try {
-        const rows = await orderApi.replaceMealSettings({
-          items: [
-            { mealType: 'LUNCH', servingTime: next.lunch },
-            { mealType: 'DINNER', servingTime: next.dinner },
-          ],
-        })
-        setMealServings(mealServingsFromSettings(rows))
-        setMealServingsStatus('ready')
-        return true
-      } catch (error: unknown) {
-        setMealServingsMessage(error instanceof AuthRequestError ? error.message : 'ذخیره ساعت وعده انجام نشد.')
-        return false
-      }
+      return saveMealServings({ ...mealServings, [meal]: clock })
     },
     selectMeal,
     mealDeadlineAt,

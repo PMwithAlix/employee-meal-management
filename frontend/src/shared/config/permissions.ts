@@ -5,9 +5,9 @@ export const ROLES: readonly Role[] = ['employee', 'hr', 'support', 'management'
 export const PAGE_ACCESS: Record<Role, readonly Page[]> = {
   employee: ['overview', 'menu', 'orders', 'settings'],
   hr: ['overview', 'menu', 'orders', 'employees', 'buildings', 'groups', 'settings'],
-  support: ['overview', 'menu', 'orders', 'menuMgmt', 'reports', 'activity', 'settings'],
+  support: ['overview', 'menu', 'orders', 'menuMgmt', 'reports', 'activity', 'settings', 'systemSettings'],
   management: ['overview', 'reports', 'activity', 'settings'],
-  admin: ['overview', 'menuMgmt', 'reports', 'activity', 'employees', 'buildings', 'groups', 'settings'],
+  admin: ['overview', 'menuMgmt', 'reports', 'activity', 'employees', 'buildings', 'groups', 'settings', 'systemSettings'],
 }
 
 export type Capability =

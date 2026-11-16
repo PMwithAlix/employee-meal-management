@@ -13,6 +13,7 @@ export const PAGE_PATHS: Record<Page, string> = {
   reports: '/reports',
   activity: '/activity',
   settings: '/settings',
+  systemSettings: '/settings/system',
 }
 
 const PATH_PAGES = Object.fromEntries(
