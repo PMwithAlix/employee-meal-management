@@ -10,6 +10,8 @@ import { PasswordService } from '../src/modules/auth/password.service';
 import { EnvironmentVariables } from '../src/config/env.validation';
 import {
   formatDateOnly,
+  formatJalali,
+  jalaliFromUtcDate,
   jalaliToGregorian,
   utcDateFromGregorian,
 } from '../src/common/calendar/jalali';
@@ -197,6 +199,7 @@ describe('Menus (e2e)', () => {
       .send({ year: 1411, month: 1 });
     expect(created.status).toBe(201);
     menuId = created.body.id as string;
+    expect(created.body.currentVersionId ?? created.body.publishedVersionId).toBeTruthy();
 
     const draft = await request(app.getHttpServer())
       .post(`/api/v1/menus/${menuId}/versions`)
@@ -204,6 +207,14 @@ describe('Menus (e2e)', () => {
       .send({});
     expect(draft.status).toBe(201);
     draftId = draft.body.id as string;
+    const again = await request(app.getHttpServer())
+      .post(`/api/v1/menus/${menuId}/versions`)
+      .set('Cookie', adminCookie)
+      .send({});
+    expect(again.body.id).toBe(draftId);
+    expect(
+      await prisma.menuVersion.count({ where: { menuId } }),
+    ).toBe(1);
 
     const lunch = await request(app.getHttpServer())
       .patch(`/api/v1/menus/${menuId}/versions/${draftId}`)
@@ -419,17 +430,22 @@ describe('Menus (e2e)', () => {
       .set('Cookie', adminCookie)
       .send({ policy: ImportPolicy.KeepExistingOrders });
     expect(confirmed.status).toBe(200);
-    expect(confirmed.body.version.status).toBe('DRAFT');
+    expect(confirmed.body.version.status).toBe('PUBLISHED');
     const importedMenuId = confirmed.body.menu.id as string;
+    const importedVersionId = confirmed.body.version.id as string;
 
     const preview2 = await request(app.getHttpServer())
       .post('/api/v1/menus/imports/preview')
       .set('Cookie', adminCookie)
       .attach('file', buffer, 'menu.xlsx');
     await request(app.getHttpServer())
-      .post(`/api/v1/menus/${importedMenuId}/versions`)
+      .patch(`/api/v1/menus/${importedMenuId}/versions/${importedVersionId}`)
       .set('Cookie', adminCookie)
-      .send({});
+      .send({
+        mealDate: firstMeal.mealDate,
+        mealType: firstMeal.mealType,
+        options: [{ title: 'خوراک ذخیره‌شده بعد از پیش‌نمایش', displayOrder: 1 }],
+      });
     expect(
       (
         await request(app.getHttpServer())
@@ -480,7 +496,12 @@ describe('Menus (e2e)', () => {
       },
     });
 
-    const buffer = await buildMenuWorkbook({ year: 1411, month: 1 });
+    const jalali = jalaliFromUtcDate(item.mealDate);
+    const buffer = await buildMenuWorkbook({
+      year: 1411,
+      month: 1,
+      emptyNonFriday: jalali ? formatJalali(jalali) : undefined,
+    });
     const preview = await request(app.getHttpServer())
       .post('/api/v1/menus/imports/preview')
       .set('Cookie', adminCookie)
@@ -752,6 +773,91 @@ describe('Menus (e2e)', () => {
         where: { normalizedName: 'e2e خورش قیمه همزمان' },
       }),
     ).toBe(1);
+  });
+
+  it('keeps menu item identity after a title edit and reports the order without announcement', async () => {
+    const day = mealDate(20);
+    const created = await request(app.getHttpServer())
+      .patch(`/api/v1/menus/${menuId}/versions/${draftId}`)
+      .set('Cookie', adminCookie)
+      .send({
+        mealDate: day,
+        mealType: MealType.LUNCH,
+        options: [{ title: 'چلو جوجه لاری', displayOrder: 1 }],
+      });
+    expect(created.status).toBe(200);
+    const option = created.body.meals
+      .find(
+        (meal: { mealDate: string; mealType: string }) =>
+          meal.mealDate === day && meal.mealType === 'LUNCH',
+      )
+      ?.options[0];
+    expect(option?.id).toBeTruthy();
+
+    const visible = await request(app.getHttpServer())
+      .get('/api/v1/published-menus/1411/1')
+      .set('Cookie', employeeCookie);
+    expect(JSON.stringify(visible.body)).toContain('چلو جوجه لاری');
+
+    const ordered = await request(app.getHttpServer())
+      .post('/api/v1/orders')
+      .set('Cookie', employeeCookie)
+      .send({
+        mealDate: day,
+        mealType: MealType.LUNCH,
+        menuItemId: option.id,
+      });
+    expect([200, 201]).toContain(ordered.status);
+    expect(ordered.body.currentCycle?.menuItemId).toBe(option.id);
+    expect(ordered.body.currentCycle?.optionTitle).toBe('چلو جوجه لاری');
+
+    const renamed = await request(app.getHttpServer())
+      .patch(`/api/v1/menus/${menuId}/versions/${draftId}`)
+      .set('Cookie', adminCookie)
+      .send({
+        mealDate: day,
+        mealType: MealType.LUNCH,
+        options: [
+          { id: option.id, title: 'چلو جوجه زعفرانی', displayOrder: 1 },
+        ],
+      });
+    expect(renamed.status).toBe(200);
+    expect(
+      renamed.body.meals
+        .find(
+          (meal: { mealDate: string; mealType: string }) =>
+            meal.mealDate === day && meal.mealType === 'LUNCH',
+        )
+        ?.options[0].id,
+    ).toBe(option.id);
+
+    const cycle = await prisma.orderCycle.findFirst({
+      where: { order: { user: { username: 'e2e.menu.employee' } }, menuItemId: option.id },
+      orderBy: { createdAt: 'desc' },
+    });
+    expect(cycle?.mealTitleSnapshot).toBe('چلو جوجه لاری');
+    expect(cycle?.menuItemId).toBe(option.id);
+
+    const daily = await request(app.getHttpServer())
+      .get(`/api/v1/reports/daily?mealDate=${day}`)
+      .set('Cookie', managementCookie);
+    expect(daily.status).toBe(200);
+    expect(
+      (daily.body.lunch.foods as Array<{ menuItemId: string; onMenu: boolean }>).some(
+        (food) => food.menuItemId === option.id && food.onMenu === true,
+      ),
+    ).toBe(true);
+
+    const monthly = await request(app.getHttpServer())
+      .get('/api/v1/reports/monthly?year=1411&month=1')
+      .set('Cookie', managementCookie);
+    expect(monthly.status).toBe(200);
+    expect(monthly.body.reconciliation.matched).toBe(true);
+    expect(
+      (monthly.body.foods as Array<{ menuItemId: string; onMenu: boolean }>).some(
+        (food) => food.menuItemId === option.id && food.onMenu === true,
+      ),
+    ).toBe(true);
   });
 
   it('writes menu audit rows from the session actor', async () => {

@@ -116,13 +116,15 @@ export class MenusController {
   }
 
   @Get(':id/versions')
-  @ApiOperation({ summary: 'فهرست نسخه‌های منو' })
+  @ApiOperation({ summary: 'فهرست نسخه‌های منو؛ نسخه با بزرگ‌ترین شماره نسخه جاری است' })
   listVersions(@Param('id', ParseUUIDPipe) id: string) {
     return this.menus.listVersions(id);
   }
 
   @Post(':id/versions')
-  @ApiOperation({ summary: 'ایجاد نسخه پیش‌نویس' })
+  @ApiOperation({
+    summary: 'دریافت یا ایجاد نسخه جاری منو؛ پیش‌نویس جدید ساخته نمی‌شود',
+  })
   createVersion(
     @CurrentUser() actor: AuthUser,
     @Param('id', ParseUUIDPipe) id: string,
@@ -141,7 +143,7 @@ export class MenusController {
   }
 
   @Patch(':id/versions/:versionId')
-  @ApiOperation({ summary: 'ویرایش وعده در نسخه جاری منو' })
+  @ApiOperation({ summary: 'ذخیره وعده روی منوی معتبر جاری' })
   updateDraft(
     @CurrentUser() actor: AuthUser,
     @Param('id', ParseUUIDPipe) id: string,

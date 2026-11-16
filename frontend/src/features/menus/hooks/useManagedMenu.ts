@@ -36,11 +36,11 @@ async function ensureLive(year: number, month: number, signal?: AbortSignal) {
     (best, item) => !best || item.versionNumber > best.versionNumber ? item : best,
     undefined,
   )
-  const draft = latestSummary
+  const current = latestSummary
     ? await menuApi.getVersion(menu.id, latestSummary.id, signal)
     : await menuApi.createVersion(menu.id, null)
   const latest = await menuApi.get(menu.id)
-  return { menu: latest, draft }
+  return { menu: latest, current }
 }
 
 export function useManagedMenu(year: number, month: number) {
@@ -48,7 +48,7 @@ export function useManagedMenu(year: number, month: number) {
   const [message, setMessage] = useState('')
   const [issues, setIssues] = useState<string[]>([])
   const [menu, setMenu] = useState<MenuSummary | null>(null)
-  const [draft, setDraft] = useState<MenuVersionDetail | null>(null)
+  const [current, setCurrent] = useState<MenuVersionDetail | null>(null)
   const [days, setDays] = useState<MenuDay[]>([])
   const busy = false
   const [saveStatus, setSaveStatus] = useState<MenuSaveStatus>('idle')
@@ -57,22 +57,22 @@ export function useManagedMenu(year: number, month: number) {
   const [boot, setBoot] = useState(0)
   const request = useRef(0)
   const menuRef = useRef(menu)
-  const draftRef = useRef(draft)
+  const currentRef = useRef(current)
   const daysRef = useRef(days)
   const pending = useRef(new Map<string, PendingMeal>())
   const flushing = useRef<Promise<void> | null>(null)
   const failed = useRef<PendingMeal | null>(null)
   const failedMessage = useRef('')
   menuRef.current = menu
-  draftRef.current = draft
+  currentRef.current = current
   daysRef.current = days
 
-  const applyDraft = useCallback(
-    (nextMenu: MenuSummary, nextDraft: MenuVersionDetail) => {
+  const applyCurrent = useCallback(
+    (nextMenu: MenuSummary, nextCurrent: MenuVersionDetail) => {
       if (nextMenu.jalaliYear !== year || nextMenu.jalaliMonth !== month) return
       setMenu(nextMenu)
-      setDraft(nextDraft)
-      setDays(daysFromVersion(year, month, nextDraft))
+      setCurrent(nextCurrent)
+      setDays(daysFromVersion(year, month, nextCurrent))
       setStatus('ready')
       setMessage('')
       setIssues([])
@@ -87,7 +87,7 @@ export function useManagedMenu(year: number, month: number) {
     setMessage('')
     setIssues([])
     setMenu(null)
-    setDraft(null)
+    setCurrent(null)
     setDays([])
     setSaveStatus('idle')
     setSaveMessage('')
@@ -98,7 +98,7 @@ export function useManagedMenu(year: number, month: number) {
     void ensureLive(year, month, controller.signal)
       .then((result) => {
         if (controller.signal.aborted || id !== request.current) return
-        applyDraft(result.menu, result.draft)
+        applyCurrent(result.menu, result.current)
       })
       .catch((error: unknown) => {
         if (controller.signal.aborted || id !== request.current) return
@@ -117,7 +117,7 @@ export function useManagedMenu(year: number, month: number) {
         setIssues(error instanceof AuthRequestError ? error.issues : [])
       })
     return () => controller.abort()
-  }, [applyDraft, boot, month, year])
+  }, [applyCurrent, boot, month, year])
 
   const retry = useCallback(() => setBoot((value) => value + 1), [])
 
@@ -128,21 +128,21 @@ export function useManagedMenu(year: number, month: number) {
       const [key, job] = pending.current.entries().next().value as [string, PendingMeal]
       pending.current.delete(key)
       const currentMenu = menuRef.current
-      const currentDraft = draftRef.current
-      if (!currentMenu || !currentDraft) {
+      const currentVersion = currentRef.current
+      if (!currentMenu || !currentVersion) {
         failed.current = job
         setSaveStatus('error')
         setSaveMessage('منوی جاری برای ذخیره در دسترس نیست.')
         return
       }
       try {
-        const next = await menuApi.patchMeal(currentMenu.id, currentDraft.id, {
+        const next = await menuApi.patchMeal(currentMenu.id, currentVersion.id, {
           mealDate: job.day.mealDate,
           mealType: toBackendMeal(job.meal),
           options: patchOptions(job.options),
         })
         if (request.current && currentMenu.jalaliYear === year && currentMenu.jalaliMonth === month) {
-          setDraft(next)
+          setCurrent(next)
           setDays(daysFromVersion(year, month, next))
         }
         failed.current = null
@@ -229,15 +229,16 @@ export function useManagedMenu(year: number, month: number) {
 
   const reload = useCallback(async () => {
     const result = await ensureLive(year, month)
-    applyDraft(result.menu, result.draft)
-  }, [applyDraft, month, year])
+    applyCurrent(result.menu, result.current)
+  }, [applyCurrent, month, year])
 
   return {
     status,
     message,
     issues,
     menu,
-    draft,
+    current,
+    draft: current,
     days,
     busy,
     saveStatus,

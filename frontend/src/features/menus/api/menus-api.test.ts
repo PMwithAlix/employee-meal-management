@@ -51,7 +51,7 @@ describe('menuApi', () => {
     await expect(menuApi.getPublished(1405, 1)).rejects.toMatchObject({ kind: 'not_found', status: 404 })
   })
 
-  it('creates a monthly menu and a draft from the published version when source is omitted', async () => {
+  it('creates a monthly menu and asks for the current version without copying a draft', async () => {
     const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
       if (String(url).endsWith('/menus') && init?.method === 'POST') {
         return new Response(JSON.stringify({ id: 'menu-2', jalaliYear: 1405, jalaliMonth: 8, publishedVersionId: 'pub-1' }), { status: 201 })

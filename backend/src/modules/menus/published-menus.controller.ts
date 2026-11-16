@@ -18,7 +18,9 @@ export class PublishedMenusController {
   constructor(private readonly menus: MenusService) {}
 
   @Get(':year/:month')
-  @ApiOperation({ summary: 'منوی جاری ماه جلالی برای سفارش' })
+  @ApiOperation({
+    summary: 'منوی معتبر ماه جلالی؛ وابسته به اعلام یا انتشار نسخه‌ای نیست',
+  })
   get(
     @Param('year', ParseIntPipe) year: number,
     @Param('month', ParseIntPipe) month: number,

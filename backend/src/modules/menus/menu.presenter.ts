@@ -101,11 +101,18 @@ export function presentMenu(menu: {
   versions?: { id: string; versionNumber: number; status: MenuVersionStatus }[];
   _count?: { versions: number };
 }) {
+  const currentVersionId =
+    menu.versions?.reduce<{ id: string; versionNumber: number } | undefined>(
+      (best, item) =>
+        !best || item.versionNumber > best.versionNumber ? item : best,
+      undefined,
+    )?.id ?? menu.publishedVersionId;
   return {
     id: menu.id,
     jalaliYear: menu.year,
     jalaliMonth: menu.month,
-    publishedVersionId: menu.publishedVersionId,
+    currentVersionId,
+    publishedVersionId: currentVersionId,
     lastAnnouncedAt: menu.lastAnnouncedAt ?? null,
     lastAnnouncedBy: menu.lastAnnouncedBy ?? null,
     createdAt: menu.createdAt,

@@ -97,7 +97,7 @@ type MealBucket = {
 };
 
 function foodKey(menuItemId: string | null, title: string) {
-  return menuItemId ? `id:${menuItemId}` : `title:${title}`;
+  return menuItemId ? `id:${menuItemId}` : `orphan:${title}`;
 }
 
 function emptyMeal(mealType: MealType, menuItems: DailyReportMenuItem[]): MealBucket {
@@ -119,11 +119,19 @@ function matchFood(bucket: MealBucket, menuItemId: string | null, title: string)
   if (menuItemId) {
     const byId = bucket.foods.get(foodKey(menuItemId, title));
     if (byId) return byId;
-  }
-  if (title) {
-    for (const food of bucket.foods.values()) {
-      if (food.title === title) return food;
-    }
+    const extraKey = foodKey(menuItemId, title);
+    const existing = bucket.extras.get(extraKey);
+    if (existing) return existing;
+    const created: DailyReportFoodRow = {
+      menuItemId,
+      title: title || 'بدون عنوان',
+      onMenu: false,
+      staffCount: 0,
+      guestCount: 0,
+      total: 0,
+    };
+    bucket.extras.set(extraKey, created);
+    return created;
   }
   const extraKey = foodKey(null, title || 'بدون عنوان');
   const existing = bucket.extras.get(extraKey);

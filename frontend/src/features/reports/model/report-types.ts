@@ -65,6 +65,8 @@ export type MonthlyCountRow = {
 }
 
 export type MonthlyFoodRow = MonthlyCountRow & {
+  key?: string
+  menuItemId?: string | null
   title: string
   onMenu: boolean
 }

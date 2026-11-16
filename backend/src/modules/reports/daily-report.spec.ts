@@ -98,20 +98,47 @@ describe('buildDailyReport', () => {
       ],
     });
 
-    const lunchJoojeh = report.lunch.foods.find((item) => item.title === 'جوجه');
-    expect(report.lunch.foods.map((item) => item.title)).toEqual(['جوجه']);
+    const lunchJoojeh = report.lunch.foods.find((item) => item.onMenu);
+    const lunchOrphan = report.lunch.foods.find((item) => !item.onMenu);
     expect(lunchJoojeh).toEqual({
       menuItemId: 'lunch-1',
       title: 'جوجه',
       onMenu: true,
-      staffCount: 2,
+      staffCount: 1,
       guestCount: 3,
-      total: 5,
+      total: 4,
+    });
+    expect(lunchOrphan).toEqual({
+      menuItemId: null,
+      title: 'جوجه',
+      onMenu: false,
+      staffCount: 1,
+      guestCount: 0,
+      total: 1,
     });
     expect(report.lunch.staffTotal).toBe(2);
     expect(report.lunch.guestTotal).toBe(3);
     expect(report.lunch.total).toBe(5);
-    expect(report.dinner.foods.map((item) => item.title)).toEqual(['کوکو']);
+    expect(report.dinner.foods).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          menuItemId: 'dinner-1',
+          title: 'کوکو',
+          onMenu: true,
+          staffCount: 1,
+          guestCount: 0,
+          total: 1,
+        }),
+        expect.objectContaining({
+          menuItemId: null,
+          title: 'کوکو',
+          onMenu: false,
+          staffCount: 0,
+          guestCount: 2,
+          total: 2,
+        }),
+      ]),
+    );
     expect(report.dinner.total).toBe(3);
     expect(report.buildings.map((item) => item.buildingName)).toEqual(['دهقان', 'مرکزی']);
     expect(report.buildings[0].users).toHaveLength(2);
@@ -241,5 +268,100 @@ describe('buildDailyReport', () => {
     expect(report.dinner.foods).toEqual([]);
     expect(report.buildings[0]?.users[0]?.lunch).toEqual(['جوجه']);
     expect(report.buildings[0]?.users[0]?.dinner).toEqual([]);
+  });
+
+  it('keeps identity when the current title differs from the order snapshot', () => {
+    const report = buildDailyReport({
+      mealDate: '2026-11-22',
+      jalaliDate: '1405/09/01',
+      generatedAt: '2026-11-22T12:00:00.000Z',
+      menuItems: [
+        {
+          id: 'MENU_ITEM_123',
+          mealType: MealType.LUNCH,
+          title: 'چلو جوجه زعفرانی',
+          displayOrder: 1,
+        },
+      ],
+      staffOrders: [
+        {
+          id: 'o1',
+          userId: 'u1',
+          mealType: MealType.LUNCH,
+          username: 'کاربر',
+          buildingId: 'b1',
+          buildingName: 'دهقان',
+          menuItemId: 'MENU_ITEM_123',
+          title: 'چلو جوجه لاری',
+        },
+      ],
+      guestOrders: [],
+    });
+    expect(report.lunch.foods).toEqual([
+      {
+        menuItemId: 'MENU_ITEM_123',
+        title: 'چلو جوجه زعفرانی',
+        onMenu: true,
+        staffCount: 1,
+        guestCount: 0,
+        total: 1,
+      },
+    ]);
+  });
+
+  it('reports a deleted item by id without merging another food of the same title', () => {
+    const report = buildDailyReport({
+      mealDate: '2026-11-22',
+      jalaliDate: '1405/09/01',
+      generatedAt: '2026-11-22T12:00:00.000Z',
+      menuItems: [
+        {
+          id: 'current',
+          mealType: MealType.LUNCH,
+          title: 'چلو جوجه لاری',
+          displayOrder: 1,
+        },
+      ],
+      staffOrders: [
+        {
+          id: 'o1',
+          userId: 'u1',
+          mealType: MealType.LUNCH,
+          username: 'کاربر',
+          buildingId: 'b1',
+          buildingName: 'دهقان',
+          menuItemId: 'removed',
+          title: 'چلو جوجه لاری',
+        },
+        {
+          id: 'o2',
+          userId: 'u2',
+          mealType: MealType.LUNCH,
+          username: 'کاربر دو',
+          buildingId: 'b1',
+          buildingName: 'دهقان',
+          menuItemId: 'current',
+          title: 'چلو جوجه لاری',
+        },
+      ],
+      guestOrders: [],
+    });
+    expect(report.lunch.foods).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          menuItemId: 'current',
+          onMenu: true,
+          staffCount: 1,
+          total: 1,
+        }),
+        expect.objectContaining({
+          menuItemId: 'removed',
+          onMenu: false,
+          staffCount: 1,
+          total: 1,
+        }),
+      ]),
+    );
+    expect(report.lunch.total).toBe(2);
   });
 });

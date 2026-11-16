@@ -92,16 +92,27 @@ describe('buildMonthlyReport', () => {
       ],
     );
 
-    expect(result.foods.map((item) => item.title)).toEqual(['چلو جوجه', 'قیمه']);
-    expect(result.foods.find((item) => item.title === 'چلو جوجه')).toMatchObject({
+    expect(result.foods).toHaveLength(3);
+    expect(result.foods.find((item) => item.menuItemId === 'lunch-1')).toMatchObject({
+      title: 'چلو جوجه',
       lunchCount: 5,
-      dinnerCount: 1,
-      staffCount: 2,
+      dinnerCount: 0,
+      staffCount: 1,
       guestCount: 4,
-      total: 6,
+      total: 5,
       onMenu: true,
     });
-    expect(result.foods.find((item) => item.title === 'قیمه')).toMatchObject({
+    expect(result.foods.find((item) => item.menuItemId === 'dinner-1')).toMatchObject({
+      title: 'چلو جوجه',
+      lunchCount: 0,
+      dinnerCount: 1,
+      staffCount: 1,
+      guestCount: 0,
+      total: 1,
+      onMenu: true,
+    });
+    expect(result.foods.find((item) => item.menuItemId === 'lunch-2')).toMatchObject({
+      title: 'قیمه',
       lunchCount: 1,
       dinnerCount: 0,
       total: 1,
@@ -146,8 +157,14 @@ describe('buildMonthlyReport', () => {
       },
     );
 
-    expect(result.foods.map((item) => item.title)).toEqual(['آش', 'چلو جوجه']);
-    expect(result.foods.find((item) => item.title === 'آش')?.onMenu).toBe(false);
+    expect(result.foods.find((item) => item.menuItemId === 'x')).toMatchObject({
+      title: 'آش',
+      onMenu: false,
+    });
+    expect(result.foods.find((item) => item.menuItemId === 'y')).toMatchObject({
+      title: 'چلو جوجه',
+      onMenu: false,
+    });
     expect(result.buildingRows.some((row) => row.buildingId === null && row.title === 'آش')).toBe(true);
     expect(result.reconciliation.matched).toBe(true);
   });
@@ -183,5 +200,50 @@ describe('buildMonthlyReport', () => {
     const dinnerOnly = report(source.staffOrders, source.guestOrders, { meal: 'DINNER' });
     expect(dinnerOnly.foods[0]).toMatchObject({ lunchCount: 0, dinnerCount: 1, total: 1 });
     expect(dinnerOnly.buildingTotals[0]?.total).toBe(1);
+  });
+
+  it('attributes renamed foods by menu item id and keeps snapshot-only orders separate', () => {
+    const result = report(
+      [
+        {
+          id: 'o1',
+          mealType: MealType.LUNCH,
+          buildingId: 'b1',
+          buildingName: 'مرکزی',
+          menuItemId: 'MENU_ITEM_123',
+          title: 'چلو جوجه لاری',
+        },
+        {
+          id: 'o2',
+          mealType: MealType.LUNCH,
+          buildingId: 'b1',
+          buildingName: 'مرکزی',
+          menuItemId: null,
+          title: 'چلو جوجه زعفرانی',
+        },
+      ],
+      [],
+      {
+        menuItems: [
+          {
+            id: 'MENU_ITEM_123',
+            mealType: MealType.LUNCH,
+            title: 'چلو جوجه زعفرانی',
+          },
+        ],
+      },
+    );
+    expect(result.foods.find((item) => item.menuItemId === 'MENU_ITEM_123')).toMatchObject({
+      title: 'چلو جوجه زعفرانی',
+      onMenu: true,
+      total: 1,
+    });
+    expect(result.foods.find((item) => item.menuItemId === null)).toMatchObject({
+      title: 'چلو جوجه زعفرانی',
+      onMenu: false,
+      total: 1,
+    });
+    expect(result.foodsTotal.total).toBe(2);
+    expect(result.reconciliation.matched).toBe(true);
   });
 });

@@ -141,7 +141,7 @@ function DailyMenu({ managed }: { managed: ReturnType<typeof useManagedMenu> }) 
           if (!managed.announceBusy) setAnnounceOpen(false)
         }}
       >
-        <p className="text-sm text-muted">متن پیش‌فرض را در صورت نیاز ویرایش کنید. ارسال فقط پس از تأیید انجام می‌شود.</p>
+        <p className="text-sm text-muted">این کار فقط اطلاع‌رسانی است و منو را معتبر یا نامعتبر نمی‌کند. متن پیش‌فرض را در صورت نیاز ویرایش کنید.</p>
         <label className="mt-3 block text-sm">
           <span className="mb-1 block text-muted">عنوان</span>
           <input
@@ -552,7 +552,7 @@ function ReplaceWizard({
       {step === 'done' && (
         <div className="mt-3 space-y-3">
           <Badge tone="ok">منوی جدید در سامانه اعمال شد</Badge>
-          <p className="text-sm">پیش‌نویس از سرور تازه‌سازی شد. سفارش‌ها فقط طبق سیاست انتخاب‌شده در بک‌اند تغییر کردند.</p>
+          <p className="text-sm">منوی ذخیره‌شده از سرور تازه‌سازی شد. سفارش‌های قبلی عوض نشدند مگر طبق سیاست انتخاب‌شده.</p>
           <div className="flex justify-end"><Button onClick={onClose}>بستن</Button></div>
         </div>
       )}

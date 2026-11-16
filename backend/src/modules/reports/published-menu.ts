@@ -1,16 +1,7 @@
-import { MenuVersionStatus } from '@prisma/client';
+import { itemsFromLiveMenu } from '../menus/live-menu';
 
-export function itemsFromPublishedMenu<T>(menu: {
-  publishedVersionId: string | null;
-  publishedVersion: {
-    id: string;
-    status: MenuVersionStatus;
-    items: T[];
-  } | null;
+export function itemsFromCurrentMenu<T>(menu: {
+  versions?: Array<{ items?: T[] }>;
 } | null): T[] {
-  const version = menu?.publishedVersion;
-  if (!menu?.publishedVersionId || !version) return [];
-  if (version.id !== menu.publishedVersionId) return [];
-  if (version.status !== MenuVersionStatus.PUBLISHED) return [];
-  return version.items;
+  return itemsFromLiveMenu(menu);
 }

@@ -205,7 +205,8 @@ describe('Ratings (e2e)', () => {
           data: {
             menuId: menu.id,
             versionNumber: (last._max.versionNumber ?? 0) + 1,
-            status: MenuVersionStatus.DRAFT,
+            status: MenuVersionStatus.PUBLISHED,
+            publishedAt: new Date(),
             createdBy: admin.id,
           },
         });

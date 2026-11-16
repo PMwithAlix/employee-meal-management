@@ -30,6 +30,8 @@ enum MealType {
   DINNER
 }
 
+// Historical values only. Operational menus use a single live version
+// (highest versionNumber). New versions are created as PUBLISHED.
 enum MenuVersionStatus {
   DRAFT
   PUBLISHED
@@ -148,6 +150,7 @@ model Menu {
   id                 String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   year               Int
   month              Int
+  // Leftover pointer synced to the live version. Not a validity gate.
   publishedVersionId String?   @unique @db.Uuid
   lastAnnouncedAt    DateTime? @db.Timestamptz(6)
   lastAnnouncedBy    String?   @db.Uuid

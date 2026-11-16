@@ -71,10 +71,17 @@ async function cleanup() {
     await prisma.orderDeadline.deleteMany({
       where: { createdByUser: { username: { startsWith: 'e2e.order.' } } },
     });
+    await prisma.orderDeadlinePolicy.updateMany({
+      where: { updatedByUser: { username: { startsWith: 'e2e.order.' } } },
+      data: { updatedBy: null },
+    });
     await prisma.auditLog.deleteMany({
       where: { actor: { username: { startsWith: 'e2e.order.' } } },
     });
     await prisma.session.deleteMany({
+      where: { user: { username: { startsWith: 'e2e.order.' } } },
+    });
+    await prisma.notification.deleteMany({
       where: { user: { username: { startsWith: 'e2e.order.' } } },
     });
     await prisma.groupMembership.deleteMany({
@@ -224,7 +231,8 @@ describe('Orders (e2e)', () => {
       data: {
         menuId: menu.id,
         versionNumber: 1,
-        status: MenuVersionStatus.DRAFT,
+        status: MenuVersionStatus.PUBLISHED,
+        publishedAt: new Date(),
         createdBy: admin.id,
       },
     });

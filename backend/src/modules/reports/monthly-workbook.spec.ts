@@ -28,7 +28,7 @@ describe('buildMonthlyWorkbook', () => {
           mealType: MealType.DINNER,
           buildingId: 'b1',
           buildingName: 'مرکزی',
-          menuItemId: null,
+          menuItemId: '1',
           title: 'قیمه',
           quantity: 2,
         },

@@ -29,7 +29,8 @@ function parseSummary(value: unknown): MenuSummary | null {
     id: body.id,
     jalaliYear: body.jalaliYear,
     jalaliMonth: body.jalaliMonth,
-    publishedVersionId: typeof body.publishedVersionId === 'string' ? body.publishedVersionId : null,
+    currentVersionId: typeof body.currentVersionId === 'string' ? body.currentVersionId : typeof body.publishedVersionId === 'string' ? body.publishedVersionId : null,
+    publishedVersionId: typeof body.currentVersionId === 'string' ? body.currentVersionId : typeof body.publishedVersionId === 'string' ? body.publishedVersionId : null,
     lastAnnouncedAt: typeof body.lastAnnouncedAt === 'string' ? body.lastAnnouncedAt : null,
     lastAnnouncedBy: typeof body.lastAnnouncedBy === 'string' ? body.lastAnnouncedBy : null,
     versionCount: typeof body.versionCount === 'number' ? body.versionCount : undefined,
@@ -40,12 +41,12 @@ function parseVersion(value: unknown): MenuVersionDetail | null {
   const body = asRecord(value)
   if (!body || typeof body.id !== 'string' || typeof body.menuId !== 'string') return null
   if (typeof body.versionNumber !== 'number') return null
-  if (body.status !== 'DRAFT' && body.status !== 'PUBLISHED') return null
+  const status = body.status === 'DRAFT' || body.status === 'PUBLISHED' || body.status === 'CURRENT' ? body.status : 'PUBLISHED'
   return {
     id: body.id,
     menuId: body.menuId,
     versionNumber: body.versionNumber,
-    status: body.status,
+    status,
     publishedAt: typeof body.publishedAt === 'string' ? body.publishedAt : null,
     createdBy: typeof body.createdBy === 'string' ? body.createdBy : '',
     createdAt: typeof body.createdAt === 'string' ? body.createdAt : '',

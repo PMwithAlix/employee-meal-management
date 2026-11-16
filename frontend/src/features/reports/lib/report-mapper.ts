@@ -144,7 +144,17 @@ function parseMonthlyFood(value: unknown): MonthlyFoodRow | null {
   const body = asRecord(value)
   const counts = parseMonthlyCount(value)
   if (!body || !counts || typeof body.title !== 'string') return null
-  return { ...counts, title: body.title, onMenu: body.onMenu === true }
+  return {
+    ...counts,
+    ...(typeof body.key === 'string' ? { key: body.key } : {}),
+    ...(typeof body.menuItemId === 'string'
+      ? { menuItemId: body.menuItemId }
+      : body.menuItemId === null
+        ? { menuItemId: null }
+        : {}),
+    title: body.title,
+    onMenu: body.onMenu === true,
+  }
 }
 
 function parseMonthlyBuildingFood(value: unknown): MonthlyBuildingFoodRow | null {

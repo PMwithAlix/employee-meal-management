@@ -4,7 +4,7 @@ import { IsOptional, IsUUID, ValidateIf } from 'class-validator';
 export class CreateVersionDto {
   @ApiPropertyOptional({
     description:
-      'نسخه مبدأ برای کپی. پیش‌فرض نسخه منتشرشده جاری است. null یعنی پیش‌نویس خالی.',
+      'نادیده گرفته می‌شود. منوی ماه فقط یک نسخه جاری دارد و پیش‌نویس جدید ساخته نمی‌شود.',
     nullable: true,
   })
   @IsOptional()

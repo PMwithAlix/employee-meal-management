@@ -102,17 +102,27 @@ export class MenusService {
         const menu = await tx.menu.create({
           data: { year: dto.year, month: dto.month },
         });
+        const version = await this.ensureLiveVersionTx(tx, actor.id, menu.id);
+        const current = await tx.menu.update({
+          where: { id: menu.id },
+          data: { publishedVersionId: version.id },
+        });
         await this.audit.record(
           {
             actorId: actor.id,
             action: AuditAction.MenuCreated,
             entityType: AuditEntity.Menu,
             entityId: menu.id,
-            afterData: { id: menu.id, year: menu.year, month: menu.month },
+            afterData: {
+              id: menu.id,
+              year: menu.year,
+              month: menu.month,
+              currentVersionId: version.id,
+            },
           },
           tx,
         );
-        return presentMenu(menu);
+        return presentMenu({ ...current, versions: [version] });
       });
     } catch (error) {
       if (
@@ -139,62 +149,16 @@ export class MenusService {
     return presentVersion(version);
   }
 
-  async createVersion(actor: AuthUser, menuId: string, dto: CreateVersionDto) {
-    const menu = await this.requireMenu(menuId);
-    const sourceId =
-      dto.sourceVersionId === null
-        ? null
-        : (dto.sourceVersionId ?? menu.publishedVersionId);
-    const source = sourceId
-      ? await this.requireVersion(menuId, sourceId)
-      : null;
-
+  async createVersion(actor: AuthUser, menuId: string, _dto: CreateVersionDto) {
+    await this.requireMenu(menuId);
     return this.prisma.$transaction(async (tx) => {
-      const aggregate = await tx.menuVersion.aggregate({
-        where: { menuId },
-        _max: { versionNumber: true },
-      });
-      const versionNumber = (aggregate._max.versionNumber ?? 0) + 1;
-      const created = await tx.menuVersion.create({
-        data: {
-          menuId,
-          versionNumber,
-          status: MenuVersionStatus.DRAFT,
-          createdBy: actor.id,
-        },
-      });
-      if (source?.items.length) {
-        await tx.menuItem.createMany({
-          data: source.items.map((item) => ({
-            menuVersionId: created.id,
-            mealDate: item.mealDate,
-            mealType: item.mealType,
-            title: item.title,
-            displayOrder: item.displayOrder,
-            isRice: item.isRice,
-          })),
-        });
-      }
+      const version = await this.ensureLiveVersionTx(tx, actor.id, menuId);
       const full = await tx.menuVersion.findUniqueOrThrow({
-        where: { id: created.id },
+        where: { id: version.id },
         include: {
           items: { orderBy: [{ mealDate: 'asc' }, { displayOrder: 'asc' }] },
         },
       });
-      await this.audit.record(
-        {
-          actorId: actor.id,
-          action: AuditAction.DraftVersionCreated,
-          entityType: AuditEntity.MenuVersion,
-          entityId: created.id,
-          afterData: {
-            id: created.id,
-            versionNumber,
-            sourceVersionId: source?.id ?? null,
-          },
-        },
-        tx,
-      );
       return presentVersion(full);
     });
   }
@@ -266,7 +230,17 @@ export class MenusService {
           },
           tx,
         );
-        return this.getVersion(menuId, versionId);
+        await tx.menu.update({
+          where: { id: menuId },
+          data: { updatedAt: new Date() },
+        });
+        const full = await tx.menuVersion.findUniqueOrThrow({
+          where: { id: versionId },
+          include: {
+            items: { orderBy: [{ mealDate: 'asc' }, { displayOrder: 'asc' }] },
+          },
+        });
+        return presentVersion(full);
       });
     }
 
@@ -383,6 +357,10 @@ export class MenusService {
         },
         tx,
       );
+      await tx.menu.update({
+        where: { id: menuId },
+        data: { updatedAt: new Date() },
+      });
       const full = await tx.menuVersion.findUniqueOrThrow({
         where: { id: versionId },
         include: {
@@ -524,7 +502,8 @@ export class MenusService {
     const text = `${error instanceof Error ? error.message : String(error)} ${meta}`;
     if (
       text.includes('published menu versions are immutable') ||
-      text.includes('historical published menu versions are immutable')
+      text.includes('historical published menu versions are immutable') ||
+      text.includes('historical menu versions are immutable')
     ) {
       throw new UnprocessableEntityException(
         'نسخه‌های قدیمی منو قابل ویرایش نیستند. فقط نسخه جاری ذخیره می‌شود.',
@@ -536,6 +515,14 @@ export class MenusService {
       );
     }
     if (
+      error instanceof Prisma.PrismaClientKnownRequestError &&
+      error.code === 'P2002'
+    ) {
+      throw new ConflictException(
+        'این وعده هم‌زمان ذخیره شد. منو را تازه کنید و دوباره تلاش کنید.',
+      );
+    }
+    if (
       (error instanceof Prisma.PrismaClientKnownRequestError &&
         error.code === 'P2003') ||
       text.includes('cannot detach menu item from an active order cycle')
@@ -543,6 +530,57 @@ export class MenusService {
       throw new UnprocessableEntityException(MENU_ITEM_ACTIVE_ORDER_FALLBACK);
     }
     throw error;
+  }
+
+  private async ensureLiveVersionTx(
+    tx: Prisma.TransactionClient,
+    actorId: string,
+    menuId: string,
+  ) {
+    const live = await tx.menuVersion.findFirst({
+      where: { menuId },
+      orderBy: { versionNumber: 'desc' },
+    });
+    if (live) {
+      if (live.status !== MenuVersionStatus.PUBLISHED || !live.publishedAt) {
+        return tx.menuVersion.update({
+          where: { id: live.id },
+          data: {
+            status: MenuVersionStatus.PUBLISHED,
+            publishedAt: live.publishedAt ?? new Date(),
+          },
+        });
+      }
+      return live;
+    }
+    try {
+      const created = await tx.menuVersion.create({
+        data: {
+          menuId,
+          versionNumber: 1,
+          status: MenuVersionStatus.PUBLISHED,
+          publishedAt: new Date(),
+          createdBy: actorId,
+        },
+      });
+      await tx.menu.update({
+        where: { id: menuId },
+        data: { publishedVersionId: created.id },
+      });
+      return created;
+    } catch (error) {
+      if (
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === 'P2002'
+      ) {
+        const raced = await tx.menuVersion.findFirst({
+          where: { menuId },
+          orderBy: { versionNumber: 'desc' },
+        });
+        if (raced) return raced;
+      }
+      throw error;
+    }
   }
 
   async requireMenu(id: string) {

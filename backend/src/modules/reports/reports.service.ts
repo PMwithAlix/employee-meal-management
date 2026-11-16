@@ -14,7 +14,7 @@ import { DailyReportQueryDto } from './dto/daily-report.query';
 import { MonthlyReportQueryDto } from './dto/monthly-report.query';
 import { buildMonthlyReport } from './monthly-report';
 import { buildMonthlyWorkbook, monthlyWorkbookFilename } from './monthly-workbook';
-import { itemsFromPublishedMenu } from './published-menu';
+import { itemsFromCurrentMenu } from './published-menu';
 import type { ReportMealFilter } from './report-common';
 
 @Injectable()
@@ -29,7 +29,9 @@ export class ReportsService {
       ? await this.prisma.menu.findUnique({
           where: { year_month: { year: jalali.year, month: jalali.month } },
           include: {
-            publishedVersion: {
+            versions: {
+              orderBy: { versionNumber: 'desc' },
+              take: 1,
               include: {
                 items: {
                   where: { mealDate },
@@ -46,7 +48,7 @@ export class ReportsService {
       jalaliDate: jalali ? formatJalali(jalali) : null,
       generatedAt: new Date().toISOString(),
       meal,
-      menuItems: itemsFromPublishedMenu(menu).map((item) => ({
+      menuItems: itemsFromCurrentMenu(menu).map((item) => ({
         id: item.id,
         mealType: item.mealType,
         title: item.title,
@@ -68,7 +70,9 @@ export class ReportsService {
     const menu = await this.prisma.menu.findUnique({
       where: { year_month: { year: query.year, month: query.month } },
       include: {
-        publishedVersion: {
+        versions: {
+          orderBy: { versionNumber: 'desc' },
+          take: 1,
           include: {
             items: {
               orderBy: [{ mealType: 'asc' }, { displayOrder: 'asc' }],
@@ -84,7 +88,7 @@ export class ReportsService {
       monthLabel: `${JALALI_MONTHS[query.month - 1]} ${query.year}`,
       generatedAt: new Date().toISOString(),
       meal,
-      menuItems: itemsFromPublishedMenu(menu).map((item) => ({
+      menuItems: itemsFromCurrentMenu(menu).map((item) => ({
         id: item.id,
         mealType: item.mealType,
         title: item.title,

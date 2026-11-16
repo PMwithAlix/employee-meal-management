@@ -16,12 +16,14 @@ import {
   utcDateFromGregorian,
 } from '../../../common/calendar/jalali';
 import { classifyMenuItem } from '../food-knowledge';
+import { normalizeFoodName } from '../food-name';
 import type { ConfiguredMeal, ImportPolicy } from '../menu.types';
 import {
   presentConfiguredMeals,
   presentMenu,
   presentVersion,
 } from '../menu.presenter';
+import { liveVersionInclude, itemsFromLiveMenu } from '../live-menu';
 import { normalizeOptionTitle, optionTitleIssue } from '../menu.validation';
 import {
   assertPolicy,
@@ -29,6 +31,7 @@ import {
   ImportPreviewStore,
   StoredImportPreview,
 } from './import-preview.store';
+import { planLiveImport } from './live-import.plan';
 import { MenuExcelParser } from './menu-excel.parser';
 import type { UpdateImportMealDto } from '../dto/update-import-meal.dto';
 
@@ -37,6 +40,7 @@ type ItemRef = {
   mealDate: Date;
   mealType: string;
   title: string;
+  displayOrder?: number;
 };
 
 @Injectable()
@@ -56,7 +60,7 @@ export class MenuImportService {
         year_month: { year: parsed.jalaliYear, month: parsed.jalaliMonth },
       },
       include: {
-        publishedVersion: { include: { items: true } },
+        versions: liveVersionInclude(),
         _count: { select: { versions: true } },
       },
     });
@@ -66,10 +70,11 @@ export class MenuImportService {
         mealDate: meal.mealDate,
         mealType: meal.mealType,
         title: option.title,
+        displayOrder: option.displayOrder,
       })),
     );
     const impact = await this.buildImpact(
-      existing?.publishedVersion?.items ?? [],
+      itemsFromLiveMenu(existing),
       importedItems,
     );
     const valid = parsed.errors.length === 0 && parsed.jalaliYear > 0;
@@ -77,7 +82,7 @@ export class MenuImportService {
     if (valid) {
       const stored = this.previews.create({
         actorId: actor.id,
-        fingerprint: this.fingerprint(existing, existing?._count.versions ?? 0),
+        fingerprint: this.fingerprint(existing),
         parsed,
         meals: parsed.meals,
         impact,
@@ -189,7 +194,7 @@ export class MenuImportService {
             },
           },
       include: {
-        publishedVersion: { include: { items: true } },
+        versions: liveVersionInclude(),
         _count: { select: { versions: true } },
       },
     });
@@ -198,10 +203,11 @@ export class MenuImportService {
         mealDate: meal.mealDate,
         mealType: meal.mealType,
         title: option.title,
+        displayOrder: option.displayOrder,
       })),
     );
     const impact = await this.buildImpact(
-      existing?.publishedVersion?.items ?? [],
+      itemsFromLiveMenu(existing),
       importedItems,
     );
     const updated = this.previews.replaceMeals(importId, actor.id, nextMeals);
@@ -233,14 +239,11 @@ export class MenuImportService {
             },
           },
       include: {
-        publishedVersion: { include: { items: true } },
+        versions: liveVersionInclude(),
         _count: { select: { versions: true } },
       },
     });
-    if (
-      this.fingerprint(existing, existing?._count.versions ?? 0) !==
-      stored.fingerprint
-    ) {
+    if (this.fingerprint(existing) !== stored.fingerprint) {
       this.previews.take(importId, actor.id);
       await this.audit.record({
         actorId: actor.id,
@@ -259,10 +262,11 @@ export class MenuImportService {
         mealDate: meal.mealDate,
         mealType: meal.mealType,
         title: option.title,
+        displayOrder: option.displayOrder,
       })),
     );
     const impact = await this.buildImpact(
-      existing?.publishedVersion?.items ?? [],
+      itemsFromLiveMenu(existing),
       importedItems,
     );
     const policyError = assertPolicy(policy, impact);
@@ -310,47 +314,99 @@ export class MenuImportService {
           );
         }
 
-        const aggregate = await tx.menuVersion.aggregate({
+        let live = await tx.menuVersion.findFirst({
           where: { menuId: menu.id },
-          _max: { versionNumber: true },
+          orderBy: { versionNumber: 'desc' },
         });
-        const created = await tx.menuVersion.create({
+        if (!live) {
+          live = await tx.menuVersion.create({
+            data: {
+              menuId: menu.id,
+              versionNumber: 1,
+              status: MenuVersionStatus.PUBLISHED,
+              publishedAt: new Date(),
+              createdBy: actor.id,
+            },
+          });
+        } else if (live.status !== MenuVersionStatus.PUBLISHED) {
+          live = await tx.menuVersion.update({
+            where: { id: live.id },
+            data: {
+              status: MenuVersionStatus.PUBLISHED,
+              publishedAt: live.publishedAt ?? new Date(),
+            },
+          });
+        }
+        await tx.menu.update({
+          where: { id: menu.id },
           data: {
-            menuId: menu.id,
-            versionNumber: (aggregate._max.versionNumber ?? 0) + 1,
-            status: MenuVersionStatus.DRAFT,
-            createdBy: actor.id,
+            publishedVersionId: live.id,
+            updatedAt: new Date(),
           },
         });
-        const importedItems: Array<{
-          menuVersionId: string;
-          mealDate: Date;
-          mealType: MealType;
-          title: string;
-          displayOrder: number;
-          isRice: boolean;
-        }> = [];
-        for (const meal of stored.meals) {
-          for (const option of meal.options) {
-            importedItems.push({
-              menuVersionId: created.id,
-              mealDate: meal.mealDate,
-              mealType: meal.mealType,
-              title: option.title,
-              displayOrder: option.displayOrder,
-              isRice: await classifyMenuItem(tx, { title: option.title }),
-            });
-          }
+
+        const existingItems = await tx.menuItem.findMany({
+          where: { menuVersionId: live.id },
+        });
+        const imported = stored.meals.flatMap((meal) =>
+          meal.options.map((option) => ({
+            mealDate: meal.mealDate,
+            mealType: meal.mealType,
+            title: option.title,
+            displayOrder: option.displayOrder,
+          })),
+        );
+        const plan = planLiveImport(existingItems, imported);
+        const atRiskIds = new Set(
+          impact.atRiskOrders.map((order) => order.menuItemId),
+        );
+        const deleteIds =
+          policy === 'KEEP_EXISTING_ORDERS'
+            ? plan.deletes.filter((id) => !atRiskIds.has(id))
+            : plan.deletes;
+        if (deleteIds.length) {
+          await tx.menuItem.deleteMany({
+            where: { id: { in: deleteIds }, menuVersionId: live.id },
+          });
         }
-        if (importedItems.length) {
-          await tx.menuItem.createMany({ data: importedItems });
+        for (const item of plan.updates) {
+          const previous = existingItems.find((row) => row.id === item.id);
+          const isRice = await classifyMenuItem(tx, {
+            title: item.title,
+            previousNormalized: previous
+              ? normalizeFoodName(previous.title)
+              : undefined,
+            previousIsRice: previous?.isRice,
+          });
+          await tx.menuItem.update({
+            where: { id: item.id },
+            data: {
+              title: item.title,
+              displayOrder: item.displayOrder,
+              mealDate: item.mealDate,
+              mealType: item.mealType as MealType,
+              isRice,
+            },
+          });
+        }
+        for (const item of plan.creates) {
+          await tx.menuItem.create({
+            data: {
+              menuVersionId: live.id,
+              mealDate: item.mealDate,
+              mealType: item.mealType as MealType,
+              title: item.title,
+              displayOrder: item.displayOrder,
+              isRice: await classifyMenuItem(tx, { title: item.title }),
+            },
+          });
         }
         await this.audit.record(
           {
             actorId: actor.id,
             action: AuditAction.ExcelImportConfirmed,
             entityType: AuditEntity.MenuVersion,
-            entityId: created.id,
+            entityId: live.id,
             afterData: {
               policy,
               importId,
@@ -358,12 +414,13 @@ export class MenuImportService {
               jalaliMonth: stored.parsed.jalaliMonth,
               optionCount: stored.parsed.optionCount,
               matchCount: impact.matches.length,
+              keptItemIds: plan.updates.map((item) => item.id),
             },
           },
           tx,
         );
         const full = await tx.menuVersion.findUniqueOrThrow({
-          where: { id: created.id },
+          where: { id: live.id },
           include: {
             items: {
               orderBy: [{ mealDate: 'asc' }, { displayOrder: 'asc' }],
@@ -395,8 +452,9 @@ export class MenuImportService {
     existing: {
       id: string;
       publishedVersionId: string | null;
+      updatedAt: Date;
       _count: { versions: number };
-      publishedVersion: { items: unknown[] } | null;
+      versions: { id: string; items: unknown[] }[];
     } | null,
   ) {
     return this.presentPreview({
@@ -419,11 +477,13 @@ export class MenuImportService {
     existing: {
       id: string;
       publishedVersionId: string | null;
+      updatedAt: Date;
       _count: { versions: number };
-      publishedVersion: { items: unknown[] } | null;
+      versions: { id: string; items: unknown[] }[];
     } | null;
     expiresAt: string | null;
   }) {
+    const live = input.existing?.versions[0];
     return {
       importId: input.importId,
       valid: input.valid,
@@ -439,9 +499,11 @@ export class MenuImportService {
       existing: input.existing
         ? {
             menuId: input.existing.id,
-            publishedVersionId: input.existing.publishedVersionId,
+            currentVersionId: live?.id ?? input.existing.publishedVersionId,
+            publishedVersionId: live?.id ?? input.existing.publishedVersionId,
             versionCount: input.existing._count.versions,
-            publishedItemCount: input.existing.publishedVersion?.items.length ?? 0,
+            publishedItemCount: live?.items.length ?? 0,
+            currentItemCount: live?.items.length ?? 0,
           }
         : null,
       impact: input.impact,
@@ -450,81 +512,66 @@ export class MenuImportService {
   }
 
   private fingerprint(
-    menu: { id: string; publishedVersionId: string | null } | null,
-    versionCount: number,
+    menu: {
+      id: string;
+      updatedAt: Date;
+      versions?: { id: string; items: unknown[] }[];
+    } | null,
   ) {
     if (!menu) {
       return 'new';
     }
-    return `${menu.id}:${menu.publishedVersionId ?? 'none'}:${versionCount}`;
+    const live = menu.versions?.[0];
+    return `${menu.id}:${live?.id ?? 'none'}:${menu.updatedAt.toISOString()}:${live?.items.length ?? 0}`;
   }
 
   async buildImpact(
     publishedItems: ItemRef[],
     importedItems: ItemRef[],
   ): Promise<ImportImpact> {
-    const publishedMap = new Map<string, ItemRef[]>();
-    for (const item of publishedItems) {
-      const key = this.optionKey(item);
-      const list = publishedMap.get(key) ?? [];
-      list.push(item);
-      publishedMap.set(key, list);
-    }
-    const importedMap = new Map<string, ItemRef[]>();
-    for (const item of importedItems) {
-      const key = this.optionKey(item);
-      const list = importedMap.get(key) ?? [];
-      list.push(item);
-      importedMap.set(key, list);
-    }
-
-    const matches: ImportImpact['matches'] = [];
-    const unmatchedPublished: ImportImpact['unmatchedPublished'] = [];
-    const unmatchedImported: ImportImpact['unmatchedImported'] = [];
+    const plan = planLiveImport(
+      publishedItems.map((item) => ({
+        id: item.id,
+        mealDate: item.mealDate,
+        mealType: item.mealType,
+        title: item.title,
+        displayOrder: item.displayOrder ?? 0,
+      })),
+      importedItems.map((item) => ({
+        mealDate: item.mealDate,
+        mealType: item.mealType,
+        title: item.title,
+        displayOrder: item.displayOrder ?? 0,
+      })),
+    );
+    const existingById = new Map(
+      publishedItems
+        .filter((item): item is ItemRef & { id: string } => !!item.id)
+        .map((item) => [item.id, item]),
+    );
+    const matches: ImportImpact['matches'] = plan.updates.map((item) => ({
+      publishedItemId: item.id,
+      title: item.title,
+      mealType: item.mealType,
+      mealDate: formatDateOnly(item.mealDate),
+    }));
+    const unmatchedPublished: ImportImpact['unmatchedPublished'] = plan.deletes
+      .map((id) => existingById.get(id))
+      .filter((item): item is ItemRef & { id: string } => !!item?.id)
+      .map((item) => ({
+        publishedItemId: item.id,
+        title: item.title,
+        mealType: item.mealType,
+        mealDate: formatDateOnly(item.mealDate),
+      }));
+    const unmatchedImported: ImportImpact['unmatchedImported'] = plan.creates.map(
+      (item) => ({
+        title: item.title,
+        mealType: item.mealType,
+        mealDate: formatDateOnly(item.mealDate),
+      }),
+    );
     const ambiguous: ImportImpact['ambiguous'] = [];
-
-    for (const [key, list] of publishedMap) {
-      const incoming = importedMap.get(key) ?? [];
-      if (list.length === 1 && incoming.length === 1 && list[0].id) {
-        matches.push({
-          publishedItemId: list[0].id,
-          title: list[0].title,
-          mealType: list[0].mealType,
-          mealDate: formatDateOnly(list[0].mealDate),
-        });
-      } else if (incoming.length > 1 || list.length > 1) {
-        ambiguous.push({
-          title: list[0].title,
-          mealType: list[0].mealType,
-          mealDate: formatDateOnly(list[0].mealDate),
-          reason: 'تطبیق غیریکتا',
-        });
-      } else if (incoming.length === 0) {
-        for (const item of list) {
-          if (!item.id) {
-            continue;
-          }
-          unmatchedPublished.push({
-            publishedItemId: item.id,
-            title: item.title,
-            mealType: item.mealType,
-            mealDate: formatDateOnly(item.mealDate),
-          });
-        }
-      }
-    }
-
-    for (const [key, list] of importedMap) {
-      if (!publishedMap.has(key)) {
-        for (const item of list) {
-          unmatchedImported.push({
-            title: item.title,
-            mealType: item.mealType,
-            mealDate: formatDateOnly(item.mealDate),
-          });
-        }
-      }
-    }
 
     const publishedIds = publishedItems
       .map((item) => item.id)
@@ -571,7 +618,4 @@ export class MenuImportService {
     };
   }
 
-  private optionKey(item: ItemRef) {
-    return `${formatDateOnly(item.mealDate)}:${item.mealType}:${normalizeOptionTitle(item.title)}`;
-  }
 }

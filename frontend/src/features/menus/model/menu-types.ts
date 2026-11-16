@@ -1,7 +1,7 @@
 import type { MealKind, ReplacePolicy } from '../../../shared/types/domain'
 
 export type BackendMealType = 'LUNCH' | 'DINNER'
-export type MenuVersionStatus = 'DRAFT' | 'PUBLISHED'
+export type MenuVersionStatus = 'DRAFT' | 'PUBLISHED' | 'CURRENT'
 
 export type MenuOption = {
   id: string
@@ -24,6 +24,7 @@ export type MenuSummary = {
   id: string
   jalaliYear: number
   jalaliMonth: number
+  currentVersionId?: string | null
   publishedVersionId: string | null
   lastAnnouncedAt?: string | null
   lastAnnouncedBy?: string | null
@@ -97,9 +98,11 @@ export type ImportPreview = {
   meals: BackendMeal[]
   existing: {
     menuId: string
+    currentVersionId?: string | null
     publishedVersionId: string | null
     versionCount: number
     publishedItemCount: number
+    currentItemCount?: number
   } | null
   impact: ImportImpact | null
   expiresAt: string | null
