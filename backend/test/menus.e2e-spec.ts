@@ -1,7 +1,7 @@
 import { INestApplication } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Test } from '@nestjs/testing';
-import { MealType, PrismaClient, Role } from '@prisma/client';
+import { MealType, MenuVersionStatus, PrismaClient, Role } from '@prisma/client';
 import request from 'supertest';
 import { App } from 'supertest/types';
 import { AppModule } from '../src/app.module';
@@ -279,6 +279,39 @@ describe('Menus (e2e)', () => {
       .get('/api/v1/published-menus/1411/1')
       .set('Cookie', employeeCookie);
     expect(JSON.stringify(live.body)).toContain('چلوکباب تازه');
+  });
+
+  it('lets admin and support edit the live version even if it is still marked published', async () => {
+    await prisma.menuVersion.update({
+      where: { id: draftId },
+      data: { status: MenuVersionStatus.PUBLISHED, publishedAt: new Date() },
+    });
+    await prisma.menu.update({
+      where: { id: menuId },
+      data: { publishedVersionId: draftId },
+    });
+
+    const supportDinner = await request(app.getHttpServer())
+      .patch(`/api/v1/menus/${menuId}/versions/${draftId}`)
+      .set('Cookie', supportCookie)
+      .send({
+        mealDate: mealDate(2),
+        mealType: MealType.DINNER,
+        options: [{ title: 'عدسی پشتیبان', displayOrder: 1 }],
+      });
+    expect(supportDinner.status).toBe(200);
+    expect(JSON.stringify(supportDinner.body.meals)).toContain('عدسی پشتیبان');
+
+    const adminLunch = await request(app.getHttpServer())
+      .patch(`/api/v1/menus/${menuId}/versions/${draftId}`)
+      .set('Cookie', adminCookie)
+      .send({
+        mealDate: mealDate(2),
+        mealType: MealType.LUNCH,
+        options: [{ title: 'خوراک ادمین', displayOrder: 1 }],
+      });
+    expect(adminLunch.status).toBe(200);
+    expect(JSON.stringify(adminLunch.body.meals)).toContain('خوراک ادمین');
   });
 
   it('does not expose a publish endpoint', async () => {

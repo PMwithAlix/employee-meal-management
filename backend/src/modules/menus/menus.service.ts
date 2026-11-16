@@ -191,6 +191,19 @@ export class MenusService {
     versionId: string,
     dto: UpsertMealDto,
   ) {
+    try {
+      return await this.writeMeal(actor, menuId, versionId, dto);
+    } catch (error) {
+      this.rethrowMenuMutationError(error);
+    }
+  }
+
+  private async writeMeal(
+    actor: AuthUser,
+    menuId: string,
+    versionId: string,
+    dto: UpsertMealDto,
+  ) {
     const version = await this.requireLiveVersion(menuId, versionId);
     const mealDate = this.parseMenuDate(
       dto.mealDate,
@@ -275,16 +288,15 @@ export class MenusService {
         },
         orderBy: { displayOrder: 'asc' },
       });
+      const keepIds = options
+        .map((option) => option.id)
+        .filter((id): id is string => !!id);
       await tx.menuItem.deleteMany({
         where: {
           menuVersionId: versionId,
           mealDate,
           mealType: dto.mealType,
-          id: {
-            notIn: options
-              .map((option) => option.id)
-              .filter((id): id is string => !!id),
-          },
+          ...(keepIds.length > 0 ? { id: { notIn: keepIds } } : {}),
         },
       });
       const after: {
@@ -406,6 +418,36 @@ export class MenusService {
         recipientCount: recipients.length,
       };
     });
+  }
+
+  private rethrowMenuMutationError(error: unknown): never {
+    const meta =
+      error && typeof error === 'object' && 'meta' in error
+        ? JSON.stringify((error as { meta?: unknown }).meta)
+        : '';
+    const text = `${error instanceof Error ? error.message : String(error)} ${meta}`;
+    if (
+      text.includes('published menu versions are immutable') ||
+      text.includes('historical published menu versions are immutable')
+    ) {
+      throw new UnprocessableEntityException(
+        'نسخه‌های قدیمی منو قابل ویرایش نیستند. فقط نسخه جاری ذخیره می‌شود.',
+      );
+    }
+    if (text.includes('each meal may have at most 3 menu items')) {
+      throw new UnprocessableEntityException(
+        'هر وعده حداکثر ۳ گزینه می‌تواند داشته باشد.',
+      );
+    }
+    if (
+      error instanceof Prisma.PrismaClientKnownRequestError &&
+      error.code === 'P2003'
+    ) {
+      throw new UnprocessableEntityException(
+        'این گزینه به سفارش ثبت‌شده وصل است و حذف نمی‌شود.',
+      );
+    }
+    throw error;
   }
 
   async requireMenu(id: string) {
