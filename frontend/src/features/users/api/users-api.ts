@@ -13,6 +13,8 @@ export type UserListQuery = {
   isActive?: boolean
   username?: string
   buildingId?: string
+  sortBy?: 'createdAt' | 'username' | 'role'
+  sortOrder?: 'asc' | 'desc'
 }
 
 function asRecord(value: unknown) {
@@ -50,6 +52,8 @@ export const userApi = {
     const params = new URLSearchParams()
     params.set('page', String(query.page ?? 1))
     params.set('pageSize', String(query.pageSize ?? 100))
+    params.set('sortBy', query.sortBy ?? 'createdAt')
+    params.set('sortOrder', query.sortOrder ?? 'desc')
     if (query.role) params.set('role', query.role)
     if (query.isActive !== undefined) params.set('isActive', String(query.isActive))
     if (query.username) params.set('username', query.username)

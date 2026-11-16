@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Copy, RefreshCw } from 'lucide-react'
 import { AuthRequestError } from '../features/auth/lib/auth-errors'
 import { buildingApi, type BuildingSummary } from '../features/buildings/api/buildings-api'
@@ -36,7 +36,10 @@ function LiveEmployeesPage() {
   const [role, setRole] = useState<'all' | DirectoryRole | HrManagedRole>(isAdmin ? 'all' : 'EMPLOYEE')
   const [status, setStatus] = useState<'all' | 'active' | 'inactive'>('all')
   const [page, setPage] = useState(1)
-  const [boot, setBoot] = useState(0)
+  const [refBoot, setRefBoot] = useState(0)
+  const [listBoot, setListBoot] = useState(0)
+  const listGeneration = useRef(0)
+  const pendingVisible = useRef<ManagedUser | null>(null)
   const pageSize = 20
   const [buildings, setBuildings] = useState<BuildingSummary[]>([])
   const [groupNames, setGroupNames] = useState<Record<string, string[]>>({})
@@ -90,10 +93,11 @@ function LiveEmployeesPage() {
       setRefMessage(apiMessage(error, 'بارگذاری ساختمان‌ها انجام نشد.'))
     })
     return () => controller.abort()
-  }, [boot])
+  }, [refBoot])
 
   useEffect(() => {
     const controller = new AbortController()
+    const generation = ++listGeneration.current
     setListStatus('loading')
     setListMessage('')
     void userApi.list({
@@ -103,8 +107,10 @@ function LiveEmployeesPage() {
       role: role === 'all' ? undefined : role,
       buildingId: buildingId === 'all' ? undefined : buildingId,
       isActive: status === 'all' ? undefined : status === 'active',
+      sortBy: 'createdAt',
+      sortOrder: 'desc',
     }, controller.signal).then((listed) => {
-      if (controller.signal.aborted) return
+      if (controller.signal.aborted || generation !== listGeneration.current) return
       if (!Number.isInteger(listed.total) || listed.page !== page || listed.pageSize !== pageSize) {
         setItems([])
         setTotal(0)
@@ -112,12 +118,21 @@ function LiveEmployeesPage() {
         setListMessage('بارگذاری فهرست کارکنان کامل نشد.')
         return
       }
-      setItems(listed.items)
-      setTotal(listed.total)
+      const pending = pendingVisible.current
+      const matchesPending = pending && (!q.trim() || pending.username.includes(q.trim()))
+        && (role === 'all' || pending.role === role)
+        && (buildingId === 'all' || pending.buildingId === buildingId)
+        && (status === 'all' || pending.isActive === (status === 'active'))
+      const merged = pending && matchesPending && page === 1 && !listed.items.some((item) => item.id === pending.id)
+        ? [pending, ...listed.items].slice(0, pageSize)
+        : listed.items
+      if (pending && listed.items.some((item) => item.id === pending.id)) pendingVisible.current = null
+      setItems(merged)
+      setTotal(pending && matchesPending && !listed.items.some((item) => item.id === pending.id) ? listed.total + 1 : listed.total)
       setListStatus('ready')
-      setSelected((currentId) => currentId && listed.items.some((item) => item.id === currentId) ? currentId : listed.items[0]?.id ?? null)
+      setSelected((currentId) => currentId && merged.some((item) => item.id === currentId) ? currentId : merged[0]?.id ?? null)
     }).catch((error: unknown) => {
-      if (controller.signal.aborted) return
+      if (controller.signal.aborted || generation !== listGeneration.current) return
       setItems([])
       setTotal(0)
       setSelected(null)
@@ -125,10 +140,38 @@ function LiveEmployeesPage() {
       setListMessage(apiMessage(error, 'بارگذاری فهرست کارکنان انجام نشد.'))
     })
     return () => controller.abort()
-  }, [q, buildingId, role, status, page, pageSize, boot])
+  }, [q, buildingId, role, status, page, pageSize, listBoot])
 
   function refresh() {
-    setBoot((value) => value + 1)
+    setRefBoot((value) => value + 1)
+    setListBoot((value) => value + 1)
+  }
+
+  function refreshList() {
+    setListBoot((value) => value + 1)
+  }
+
+  function applySavedUser(saved: ManagedUser, created: boolean) {
+    pendingVisible.current = saved
+    setQ('')
+    setPage(1)
+    if (role !== 'all' && role !== saved.role) {
+      setRole(isAdmin ? 'all' : saved.role as HrManagedRole)
+    }
+    if (buildingId !== 'all' && buildingId !== saved.buildingId) {
+      setBuildingId('all')
+    }
+    if (status !== 'all' && ((status === 'active') !== saved.isActive)) {
+      setStatus('all')
+    }
+    setItems((list) => {
+      const next = [saved, ...list.filter((item) => item.id !== saved.id)]
+      return next.slice(0, pageSize)
+    })
+    setTotal((count) => (created ? count + 1 : count))
+    setSelected(saved.id)
+    setListStatus('ready')
+    refreshList()
   }
 
   async function confirmStatus() {
@@ -177,15 +220,16 @@ function LiveEmployeesPage() {
           </div>
         )}
         {groupsMessage && <p className="text-sm text-danger">{groupsMessage}</p>}
-        {listStatus === 'loading' && <p className="text-sm text-muted">در حال بارگذاری کارکنان…</p>}
+        {listStatus === 'loading' && items.length === 0 && <p className="text-sm text-muted">در حال بارگذاری کارکنان…</p>}
+        {listStatus === 'loading' && items.length > 0 && <p className="text-sm text-muted">در حال به‌روزرسانی فهرست…</p>}
         {listStatus === 'error' && (
           <div className="space-y-2">
             <Empty title="فهرست کارکنان از سامانه خوانده نشد" body={listMessage} />
             <Button variant="secondary" onClick={refresh}>تلاش دوباره</Button>
           </div>
         )}
-        {listStatus === 'ready' && items.length === 0 && <Empty title={filteredEmpty ? 'نتیجه‌ای پیدا نشد' : 'کارمندی نیست'} body="عبارت جستجو یا فیلتر را تغییر دهید." />}
-        {listStatus === 'ready' && items.length > 0 && (
+        {listStatus !== 'error' && items.length === 0 && listStatus !== 'loading' && <Empty title={filteredEmpty ? 'نتیجه‌ای پیدا نشد' : 'کارمندی نیست'} body="عبارت جستجو یا فیلتر را تغییر دهید." />}
+        {items.length > 0 && listStatus !== 'error' && (
           <>
             <div className="space-y-2 lg:hidden">
               {items.map((employee) => (
@@ -261,7 +305,7 @@ function LiveEmployeesPage() {
           buildings={buildings}
           allowAllRoles={isAdmin}
           onClose={() => setEditing(null)}
-          onSaved={() => { setPage(1); refresh() }}
+          onSaved={(saved, created) => applySavedUser(saved, created)}
         />
       )}
       {resetting && current && (
@@ -306,7 +350,7 @@ function LiveEmployeeForm({
   buildings: BuildingSummary[]
   allowAllRoles: boolean
   onClose: () => void
-  onSaved: () => void
+  onSaved: (saved: ManagedUser, created: boolean) => void
 }) {
   const creating = !id
   const [username, setUsername] = useState(current?.username ?? '')
@@ -345,8 +389,8 @@ function LiveEmployeeForm({
             const request = creating
               ? userApi.create({ username: normalized, password, role: assignedRole, buildingId: nextBuilding ?? undefined })
               : userApi.update(id, allowAllRoles ? { buildingId: nextBuilding, role: assignedRole } : { buildingId })
-            void request.then(() => {
-              onSaved()
+            void request.then((saved) => {
+              onSaved(saved, creating)
               if (creating) setHandoff({ username: normalized, password })
               else onClose()
             }).catch((caught: unknown) => {

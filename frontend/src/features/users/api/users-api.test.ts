@@ -36,6 +36,8 @@ describe('userApi', () => {
     })
     const url = String((fetchMock.mock.calls as unknown as Array<[string]>)[0][0])
     expect(url).toContain('/api/v1/users')
+    expect(url).toContain('sortBy=createdAt')
+    expect(url).toContain('sortOrder=desc')
     expect(url).toContain('username=emp')
     expect(url).toContain('role=EMPLOYEE')
     expect(url).toContain('buildingId=b1')

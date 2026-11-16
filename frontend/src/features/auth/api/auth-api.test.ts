@@ -21,6 +21,7 @@ describe('authRequest', () => {
     expect(fetchMock).toHaveBeenCalledTimes(1)
     const init = (fetchMock.mock.calls as unknown as Array<[string, RequestInit]>)[0][1]
     expect(init.credentials).toBe('include')
+    expect(init.cache).toBe('no-store')
     expect(JSON.stringify(init)).not.toMatch(/khaan\.sid|accessToken|sessionToken/i)
   })
 

@@ -41,6 +41,7 @@ export async function authRequest<T>(path: string, options: RequestOptions = {})
     response = await fetch(url, {
       method: options.method ?? 'GET',
       credentials: 'include',
+      cache: 'no-store',
       headers,
       body: payload,
       signal: options.signal,

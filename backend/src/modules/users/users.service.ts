@@ -109,11 +109,13 @@ export class UsersService {
     }
 
     const skip = (query.page - 1) * query.pageSize;
+    const sortBy = query.sortBy ?? 'createdAt';
+    const sortOrder = query.sortOrder ?? 'desc';
     const [items, total] = await this.prisma.$transaction([
       this.prisma.user.findMany({
         where,
         select: userPublic,
-        orderBy: { [query.sortBy]: query.sortOrder },
+        orderBy: [{ [sortBy]: sortOrder }, { id: sortOrder }],
         skip,
         take: query.pageSize,
       }),
