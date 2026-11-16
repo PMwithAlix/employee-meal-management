@@ -5,6 +5,12 @@ import type {
   DailyReportGuestRow,
   DailyReportMealSummary,
   DailyReportUserRow,
+  MonthlyBuildingFoodRow,
+  MonthlyBuildingTotal,
+  MonthlyCountRow,
+  MonthlyFoodRow,
+  MonthlyReport,
+  ReportMealFilter,
   ReportMealType,
 } from '../model/report-types'
 
@@ -15,6 +21,11 @@ function asRecord(value: unknown) {
 function asMealType(value: unknown): ReportMealType | null {
   if (value === 'LUNCH' || value === 'DINNER') return value
   return null
+}
+
+function asMealFilter(value: unknown): ReportMealFilter {
+  if (value === 'LUNCH' || value === 'DINNER' || value === 'ALL') return value
+  return 'ALL'
 }
 
 function asStringArray(value: unknown) {
@@ -98,10 +109,101 @@ export function parseDailyReport(value: unknown): DailyReport | null {
     mealDate: body.mealDate,
     jalaliDate: typeof body.jalaliDate === 'string' ? body.jalaliDate : null,
     generatedAt: typeof body.generatedAt === 'string' ? body.generatedAt : '',
+    meal: asMealFilter(body.meal),
     lunch,
     dinner,
     buildings,
     unassignedGuests,
+  }
+}
+
+function asCount(value: unknown): number | null {
+  return typeof value === 'number' && Number.isFinite(value) ? value : null
+}
+
+function parseMonthlyCount(value: unknown): MonthlyCountRow | null {
+  const body = asRecord(value)
+  if (!body) return null
+  const lunchStaff = asCount(body.lunchStaff)
+  const lunchGuest = asCount(body.lunchGuest)
+  const dinnerStaff = asCount(body.dinnerStaff)
+  const dinnerGuest = asCount(body.dinnerGuest)
+  const lunchCount = asCount(body.lunchCount)
+  const dinnerCount = asCount(body.dinnerCount)
+  const staffCount = asCount(body.staffCount)
+  const guestCount = asCount(body.guestCount)
+  const total = asCount(body.total)
+  if (
+    lunchStaff === null || lunchGuest === null || dinnerStaff === null || dinnerGuest === null
+    || lunchCount === null || dinnerCount === null || staffCount === null || guestCount === null || total === null
+  ) return null
+  return { lunchStaff, lunchGuest, dinnerStaff, dinnerGuest, lunchCount, dinnerCount, staffCount, guestCount, total }
+}
+
+function parseMonthlyFood(value: unknown): MonthlyFoodRow | null {
+  const body = asRecord(value)
+  const counts = parseMonthlyCount(value)
+  if (!body || !counts || typeof body.title !== 'string') return null
+  return { ...counts, title: body.title, onMenu: body.onMenu === true }
+}
+
+function parseMonthlyBuildingFood(value: unknown): MonthlyBuildingFoodRow | null {
+  const food = parseMonthlyFood(value)
+  const body = asRecord(value)
+  if (!food || !body || typeof body.buildingName !== 'string') return null
+  return {
+    ...food,
+    buildingId: typeof body.buildingId === 'string' ? body.buildingId : null,
+    buildingName: body.buildingName,
+  }
+}
+
+function parseMonthlyBuildingTotal(value: unknown): MonthlyBuildingTotal | null {
+  const counts = parseMonthlyCount(value)
+  const body = asRecord(value)
+  if (!counts || !body || typeof body.buildingName !== 'string') return null
+  return {
+    ...counts,
+    buildingId: typeof body.buildingId === 'string' ? body.buildingId : null,
+    buildingName: body.buildingName,
+  }
+}
+
+export function parseMonthlyReport(value: unknown): MonthlyReport | null {
+  const body = asRecord(value)
+  if (!body || typeof body.year !== 'number' || typeof body.month !== 'number') return null
+  if (typeof body.monthLabel !== 'string' || typeof body.mealLabel !== 'string') return null
+  if (!Array.isArray(body.foods) || !Array.isArray(body.buildingRows) || !Array.isArray(body.buildingTotals) || !Array.isArray(body.supply)) return null
+  const foods = body.foods.map(parseMonthlyFood).filter((item): item is MonthlyFoodRow => item !== null)
+  const buildingRows = body.buildingRows.map(parseMonthlyBuildingFood).filter((item): item is MonthlyBuildingFoodRow => item !== null)
+  const buildingTotals = body.buildingTotals.map(parseMonthlyBuildingTotal).filter((item): item is MonthlyBuildingTotal => item !== null)
+  const supply = body.supply.map(parseMonthlyFood).filter((item): item is MonthlyFoodRow => item !== null)
+  const foodsTotal = parseMonthlyCount(body.foodsTotal)
+  const supplyTotal = parseMonthlyCount(body.supplyTotal)
+  const recon = asRecord(body.reconciliation)
+  if (foods.length !== body.foods.length || buildingRows.length !== body.buildingRows.length) return null
+  if (buildingTotals.length !== body.buildingTotals.length || supply.length !== body.supply.length) return null
+  if (!foodsTotal || !supplyTotal || !recon) return null
+  if (typeof recon.foodsTotal !== 'number' || typeof recon.buildingsTotal !== 'number' || typeof recon.difference !== 'number') return null
+  return {
+    year: body.year,
+    month: body.month,
+    monthLabel: body.monthLabel,
+    meal: asMealFilter(body.meal),
+    mealLabel: body.mealLabel,
+    generatedAt: typeof body.generatedAt === 'string' ? body.generatedAt : '',
+    foods,
+    foodsTotal,
+    buildingRows,
+    buildingTotals,
+    supply,
+    supplyTotal,
+    reconciliation: {
+      foodsTotal: recon.foodsTotal,
+      buildingsTotal: recon.buildingsTotal,
+      difference: recon.difference,
+      matched: recon.matched === true,
+    },
   }
 }
 
@@ -123,6 +225,36 @@ export function dishes(values: string[]) {
   return values.length ? values.join('، ') : '—'
 }
 
+export function foodsWithOrders(foods: DailyReportFoodRow[]) {
+  return foods.filter((food) => food.total > 0)
+}
+
 export function mealLabel(meal: ReportMealType) {
   return meal === 'DINNER' ? 'شام' : 'ناهار'
+}
+
+export function mealFilterLabel(meal: ReportMealFilter) {
+  if (meal === 'LUNCH') return 'فقط ناهار'
+  if (meal === 'DINNER') return 'فقط شام'
+  return 'هر دو وعده'
+}
+
+export function showsLunch(meal: ReportMealFilter) {
+  return meal !== 'DINNER'
+}
+
+export function showsDinner(meal: ReportMealFilter) {
+  return meal !== 'LUNCH'
+}
+
+export function saveBlob(blob: Blob, filename: string) {
+  const url = URL.createObjectURL(blob)
+  const link = document.createElement('a')
+  link.href = url
+  link.download = filename
+  link.rel = 'noopener'
+  document.body.append(link)
+  link.click()
+  link.remove()
+  URL.revokeObjectURL(url)
 }

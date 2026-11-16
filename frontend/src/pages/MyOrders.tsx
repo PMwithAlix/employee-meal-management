@@ -1,18 +1,21 @@
-import { useEffect, useRef, useState } from 'react'
-import { Button, Dialog, Empty, MonthBar } from '../shared/ui/primitives'
-import { MealPicker } from '../shared/ui/MealPicker'
+import { useEffect, useState } from 'react'
+import { Badge, Button, Dialog, Empty } from '../shared/ui/primitives'
 import { StaffOrdersPanel } from '../features/orders/ui/StaffOrdersPanel'
-import { usePublishedMenu } from '../features/menus/hooks/usePublishedMenu'
 import { useApp } from '../app/providers/app-store'
-import { daysForMyOrders, mealDisplayName, partitionMyOrders } from '../features/orders/lib/my-orders'
-import { canGiveFeedback, findCancelledOrder, findOrder, isMealOpen, mealChoices, type MealDeadlineState } from '../shared/lib/order-rules'
-import type { MonthDeadlines } from '../shared/lib/deadlines'
-import { isSameDate, JALALI_MONTHS, type JalaliDateTime } from '../shared/lib/jalali'
+import {
+  feedbackEligibleOrders,
+  orderFoodName,
+  orderMealLabel,
+  orderWeekday,
+  paginateOrders,
+} from '../features/orders/lib/my-orders'
+import { canGiveFeedback } from '../shared/lib/order-rules'
+import { isSameDate, JALALI_MONTHS } from '../shared/lib/jalali'
 import { can } from '../shared/config/permissions'
-import { fa } from '../shared/lib/persian-text'
+import { cn, fa } from '../shared/lib/persian-text'
 import { AuthRequestError } from '../features/auth/lib/auth-errors'
 import { orderApi } from '../features/orders/api/orders-api'
-import type { DayMenu, MealKind, MealOptionChoice, Order } from '../shared/types/domain'
+import type { Order } from '../shared/types/domain'
 
 export function MyOrdersPage() {
   const app = useApp()
@@ -23,20 +26,23 @@ export function MyOrdersPage() {
 
 function EmployeeOrdersPage() {
   const app = useApp()
-  const published = usePublishedMenu(app.selectedMonth.jy, app.selectedMonth.jm)
   const id = app.role === 'admin' ? null : app.selfId
   const [editing, setEditing] = useState<Order | null>(null)
+  const [page, setPage] = useState(1)
+  const ready = Boolean(id) && app.myOrdersStatus === 'ready' && app.mealServingsStatus === 'ready'
+  const listed = id && ready ? feedbackEligibleOrders(app.myOrders, id, app.now, app.mealServings) : []
+  const paged = paginateOrders(listed, page)
+  useEffect(() => {
+    if (page !== paged.page) setPage(paged.page)
+  }, [page, paged.page])
   if (!id) return <Empty title="سفارش شخصی ندارید" body="نقش ادمین به ساختمان و سفارش شخصی متصل نیست." />
-
-  const split = partitionMyOrders(app.myOrders, id, app.selectedMonth)
-  const days = daysForMyOrders(published.pickerDays, split.current, app.selectedMonth)
 
   return (
     <div className="space-y-4">
       <section className="rounded-md border border-line bg-surface">
         <header className="border-b border-line px-4 py-3">
-          <MonthBar />
-          <p className="text-xs text-muted">سفارش‌های خودتان در این ماه. ناهار و شام جدا هستند و دیدگاه هر وعده فقط برای خودتان در این صفحه دیده می‌شود.</p>
+          <h2 className="text-sm font-semibold">سفارش‌های من</h2>
+          <p className="text-xs text-muted">در این بخش می‌توانید سفارش‌های دریافت‌شده خود را مشاهده کنید و درباره هر وعده نظر ثبت کنید.</p>
         </header>
         {app.myOrdersStatus === 'loading' && <p className="px-4 py-3 text-sm text-muted">در حال خواندن سفارش‌های شما از سامانه…</p>}
         {app.myOrdersStatus === 'unavailable' && (
@@ -51,215 +57,95 @@ function EmployeeOrdersPage() {
             <Button className="mt-2" variant="secondary" onClick={app.retryMyOrders}>تلاش دوباره</Button>
           </div>
         )}
-        {published.status === 'empty' && days.length === 0 && (
-          <div className="p-4"><Empty title="منویی برای این ماه نیست" body="سفارش ثبت‌شده‌ای هم برای این ماه پیدا نشد." /></div>
+        {app.myOrdersStatus === 'ready' && app.mealServingsStatus === 'loading' && (
+          <p className="px-4 py-3 text-sm text-muted">در حال خواندن ساعت سرو وعده برای تشخیص سفارش‌های قابل بازخورد…</p>
         )}
-        <div className="divide-y divide-line">
-          {days.map((day) => {
-            const lunch = findOrder(app.myOrders, id, day, day.jd, 'lunch')
-            const dinner = findOrder(app.myOrders, id, day, day.jd, 'dinner')
-            const lunchCancelled = lunch ? undefined : findCancelledOrder(app.myOrders, id, day, day.jd, 'lunch')
-            const dinnerCancelled = dinner ? undefined : findCancelledOrder(app.myOrders, id, day, day.jd, 'dinner')
-            const lunchView = mealDisplayName(Boolean(day.lunch), lunch, lunchCancelled)
-            const dinnerView = mealDisplayName(Boolean(day.dinner), dinner, dinnerCancelled)
-            return (
-              <div key={`${day.jy}-${day.jm}-${day.jd}`} className="grid gap-3 px-4 py-3 md:grid-cols-[8rem_1fr_1fr]">
-                <div>
-                  <p className="text-sm font-medium">{fa(day.jd)} {JALALI_MONTHS[day.jm - 1]}</p>
-                  <p className="text-xs text-muted">{day.weekday}{isSameDate(day, app.now) ? ' · امروز' : ''}</p>
-                </div>
-                <OrderLine
-                  meal="lunch"
-                  name={lunchView.name}
-                  missing={lunchView.missing}
-                  order={lunch}
-                  note={lunchCancelled ? `${lunchCancelled.snapshotTitle ?? '—'} · لغو شده` : undefined}
-                  status={day.lunch ? (isMealOpen(day, 'lunch', app.deadlines, app.now, app.mealDeadlineAt(day, 'lunch')) ? 'مهلت باز' : 'مهلت تمام') : undefined}
-                  canEdit={canChange(app.role, day, 'lunch', app.deadlines, app.now, app.mealDeadlineAt(day, 'lunch'))}
-                  canRate={app.mealServingsStatus === 'ready' && canGiveFeedback(lunch, app.now, app.mealServings)}
-                  options={mealChoices(day, 'lunch')}
-                  currentId={lunch?.menuItemId ?? null}
-                  locked={!isMealOpen(day, 'lunch', app.deadlines, app.now, app.mealDeadlineAt(day, 'lunch'))}
-                  ops={can(app.role, 'order.ops')}
-                  onSave={(menuItemId) => app.selectMeal(id, day.jd, 'lunch', null, 'self', menuItemId)}
-                  onRate={() => lunch && setEditing(lunch)}
-                />
-                <OrderLine
-                  meal="dinner"
-                  name={dinnerView.name}
-                  missing={dinnerView.missing}
-                  order={dinner}
-                  note={dinnerCancelled ? `${dinnerCancelled.snapshotTitle ?? '—'} · لغو شده` : undefined}
-                  status={day.dinner ? (isMealOpen(day, 'dinner', app.deadlines, app.now, app.mealDeadlineAt(day, 'dinner')) ? 'مهلت باز' : 'مهلت تمام') : undefined}
-                  canEdit={canChange(app.role, day, 'dinner', app.deadlines, app.now, app.mealDeadlineAt(day, 'dinner'))}
-                  canRate={app.mealServingsStatus === 'ready' && canGiveFeedback(dinner, app.now, app.mealServings)}
-                  options={mealChoices(day, 'dinner')}
-                  currentId={dinner?.menuItemId ?? null}
-                  locked={!isMealOpen(day, 'dinner', app.deadlines, app.now, app.mealDeadlineAt(day, 'dinner'))}
-                  ops={can(app.role, 'order.ops')}
-                  onSave={(menuItemId) => app.selectMeal(id, day.jd, 'dinner', null, 'self', menuItemId)}
-                  onRate={() => dinner && setEditing(dinner)}
-                />
-              </div>
-            )
-          })}
-        </div>
-      </section>
-      {(app.myOrdersStatus === 'ready' || app.myOrders.length > 0) && (
-        <>
-          <HistorySection
-            title="سفارش‌های آینده"
-            emptyTitle="سفارش آینده‌ای نسبت به این ماه نیست"
-            emptyBody="سفارش‌هایی که بعد از پایان این ماه هستند اینجا می‌آیند."
-            hint="این سفارش‌ها بعد از ماه انتخاب‌شده هستند و نام غذا همان متن زمان ثبت است."
-            items={split.future}
-          />
-          <HistorySection
-            title="سفارش‌های گذشته"
-            emptyTitle="سفارش گذشته‌ای نسبت به این ماه نیست"
-            emptyBody="سفارش‌های ماه انتخاب‌شده در بخش بالا قرار دارند."
-            hint="این سفارش‌ها پیش از شروع ماه انتخاب‌شده هستند و نام غذا همان متن زمان ثبت است."
-            items={split.past}
-          />
-          {split.invalid.length > 0 && (
-            <HistorySection
-              title="سفارش با تاریخ نامعتبر"
-              emptyTitle=""
-              emptyBody=""
-              hint="این سفارش‌ها حذف نشدند، اما به هیچ ماهی نسبت داده نشدند چون تاریخ وعده معتبر نبود."
-              items={split.invalid}
+        {app.myOrdersStatus === 'ready' && (app.mealServingsStatus === 'unavailable' || app.mealServingsStatus === 'error') && (
+          <div className="px-4 py-3">
+            <Empty
+              title="ساعت سرو وعده خوانده نشد"
+              body={app.mealServingsMessage || 'بدون ساعت سرو نمی‌توان تشخیص داد کدام سفارش برای بازخورد آماده است. تاریخ سفارش به‌تنهایی ملاک قرار نمی‌گیرد.'}
             />
-          )}
-        </>
-      )}
+            <Button className="mt-2" variant="secondary" onClick={app.retryMealServings}>تلاش دوباره</Button>
+          </div>
+        )}
+        {ready && listed.length === 0 && (
+          <div className="p-4">
+            <Empty
+              title="سفارش دریافت‌شده‌ای نیست"
+              body="این فهرست فقط سفارش فعال شما را نشان می‌دهد که زمان سرو آن گذشته باشد. انتخاب، تغییر و لغو غذا از منوی ماهانه انجام می‌شود."
+            />
+          </div>
+        )}
+        {ready && listed.length > 0 && (
+          <>
+            <ul className="divide-y divide-line">
+              {paged.items.map((item) => (
+                <li key={item.id} className="px-4 py-3">
+                  <ReceivedOrderCard
+                    order={item}
+                    today={isSameDate(item, app.now)}
+                    canRate={can(app.role, 'order.rate') && canGiveFeedback(item, app.now, app.mealServings)}
+                    onRate={() => setEditing(item)}
+                  />
+                </li>
+              ))}
+            </ul>
+            {paged.pageCount > 1 && (
+              <div className="flex items-center justify-between gap-2 border-t border-line px-4 py-3 text-sm">
+                <Button variant="secondary" disabled={paged.page <= 1} onClick={() => setPage((value) => value - 1)}>قبلی</Button>
+                <span>{fa(paged.page)} / {fa(paged.pageCount)}</span>
+                <Button variant="secondary" disabled={paged.page >= paged.pageCount} onClick={() => setPage((value) => value + 1)}>بعدی</Button>
+              </div>
+            )}
+          </>
+        )}
+      </section>
       {editing && <RatingDialog order={editing} onClose={() => setEditing(null)} />}
     </div>
   )
 }
 
-function HistorySection({
-  title,
-  hint,
-  emptyTitle,
-  emptyBody,
-  items,
-}: {
-  title: string
-  hint: string
-  emptyTitle: string
-  emptyBody: string
-  items: Order[]
-}) {
-  return (
-    <section className="rounded-md border border-line bg-surface">
-      <header className="border-b border-line px-4 py-3">
-        <h2 className="text-sm font-semibold">{title}</h2>
-        <p className="text-xs text-muted">{hint}</p>
-      </header>
-      {items.length === 0 ? (
-        emptyTitle ? <div className="p-4"><Empty title={emptyTitle} body={emptyBody} /></div> : null
-      ) : (
-        <ul className="divide-y divide-line">
-          {items.map((item) => (
-            <li key={item.id} className="flex flex-col gap-1 px-4 py-3 text-sm sm:flex-row sm:items-center sm:justify-between">
-              <span className="min-w-0 break-words">
-                {item.jy && item.jm && item.jd ? `${fa(item.jd)} ${JALALI_MONTHS[item.jm - 1] ?? ''} ${fa(item.jy)}` : 'تاریخ نامعتبر'}
-                {' · '}
-                {item.meal === 'lunch' ? 'ناهار' : 'شام'}
-              </span>
-              <span className="font-medium">{item.snapshotTitle ?? item.choice ?? '—'}</span>
-              <span className="text-xs text-muted">{item.cycleStatus === 'CANCELLED' ? 'لغو شده' : 'ثبت‌شده'}</span>
-            </li>
-          ))}
-        </ul>
-      )}
-    </section>
-  )
-}
-
-function canChange(role: Parameters<typeof can>[0], day: DayMenu, meal: MealKind, deadlines: MonthDeadlines, now: JalaliDateTime, deadlineAt?: MealDeadlineState) {
-  if (!day[meal]) return false
-  return isMealOpen(day, meal, deadlines, now, deadlineAt) ? can(role, 'order.self') : can(role, 'order.ops')
-}
-
-function OrderLine({
-  meal,
-  name,
-  missing,
+function ReceivedOrderCard({
   order,
-  note,
-  onRate,
-  status,
+  today,
   canRate,
-  canEdit,
-  options,
-  currentId,
-  locked,
-  ops,
-  onSave,
+  onRate,
 }: {
-  meal: MealKind
-  name: string | null | undefined
-  missing: boolean
-  order?: Order
-  note?: string
-  onRate: () => void
-  status?: string
+  order: Order
+  today: boolean
   canRate: boolean
-  canEdit: boolean
-  options: MealOptionChoice[] | null
-  currentId: string | null
-  locked: boolean
-  ops: boolean
-  onSave: (menuItemId: string | null) => boolean | Promise<boolean>
+  onRate: () => void
 }) {
-  const app = useApp()
-  const [open, setOpen] = useState(false)
-  const triggerRef = useRef<HTMLDivElement>(null)
-  const lunch = meal === 'lunch'
-  const label = lunch ? 'ناهار' : 'شام'
-  const busy = Boolean(app.orderingKey)
+  const lunch = order.meal === 'lunch'
+  const rated = Boolean(order.rating)
   return (
-    <div ref={triggerRef} className={lunch ? 'rounded-md border border-lunchline bg-lunchbg px-3 py-3' : 'rounded-md border border-dinnerline bg-dinnerbg px-3 py-3'}>
-      <p className={lunch ? 'text-xs font-medium text-lunch' : 'text-xs font-medium text-dinner'}>{label}</p>
-      <p className="mt-1 break-words text-sm">{missing ? 'منو تعریف نشده' : name ?? 'انتخاب نشده'}</p>
-      {note && <p className="mt-1 text-xs text-muted">{note}</p>}
-      {status && <p className="mt-1 text-xs text-muted">{status}</p>}
-      {(canEdit || (canRate && name && order)) && (
-        <div className="mt-2 flex flex-col gap-2">
-          {canEdit && (
-            <button
-              type="button"
-              className="min-h-11 rounded-md border border-line bg-surface px-3 text-sm"
-              aria-haspopup="listbox"
-              aria-expanded={open}
-              disabled={busy}
-              onClick={() => setOpen((value) => !value)}
-            >
-              {name ? `تغییر یا حذف ${label}` : `انتخاب ${label}`}
-            </button>
-          )}
-          {canRate && name && order && (
-            <button type="button" className="min-h-11 rounded-md px-3 text-start text-sm text-link" onClick={onRate}>
-              {order.rating ? `ویرایش دیدگاه: ${fa(order.rating.score)} از ۵` : 'ثبت دیدگاه'}
-            </button>
-          )}
+    <article className={cn('rounded-md border px-3 py-3', lunch ? 'border-lunchline bg-lunchbg' : 'border-dinnerline bg-dinnerbg')}>
+      <div className="flex flex-wrap items-start justify-between gap-2">
+        <div>
+          <p className="text-sm font-medium">
+            {fa(order.jd)} {JALALI_MONTHS[order.jm - 1]} {fa(order.jy)}
+          </p>
+          <p className="text-xs text-muted">{orderWeekday(order)}{today ? ' · امروز' : ''}</p>
         </div>
+        <p className={lunch ? 'text-xs font-medium text-lunch' : 'text-xs font-medium text-dinner'}>{orderMealLabel(order.meal)}</p>
+      </div>
+      <p className="mt-2 break-words text-sm">{orderFoodName(order)}</p>
+      <div className="mt-2 flex flex-wrap items-center gap-2">
+        <Badge tone={rated ? 'ok' : 'neutral'}>{rated ? 'بازخورد ثبت شده' : 'بازخورد ثبت نشده'}</Badge>
+        {order.rating && (
+          <p className="text-xs text-muted">
+            امتیاز {fa(order.rating.score)} از ۵
+            {order.rating.comment ? ` · ${order.rating.comment}` : ''}
+          </p>
+        )}
+      </div>
+      {canRate && (
+        <button type="button" className="mt-2 min-h-11 rounded-md px-3 text-start text-sm text-link" onClick={onRate}>
+          {rated ? 'مشاهده یا ویرایش نظر' : 'ثبت نظر'}
+        </button>
       )}
-      {canEdit && options && (
-        <MealPicker
-          open={open}
-          trigger={triggerRef.current}
-          kind={meal}
-          options={options}
-          currentId={currentId}
-          locked={locked}
-          ops={ops}
-          onClose={() => setOpen(false)}
-          onSave={onSave}
-        />
-      )}
-    </div>
+    </article>
   )
 }
 
@@ -273,7 +159,7 @@ function RatingDialog({ order, onClose }: { order: Order; onClose: () => void })
   const [failMessage, setFailMessage] = useState('دیدگاه ذخیره نشد. این وعده باید گذشته باشد و غذای انتخاب‌شده داشته باشد.')
   const [loadError, setLoadError] = useState('')
   const editing = Boolean(order.rating)
-  const meal = order.meal === 'lunch' ? 'ناهار' : 'شام'
+  const meal = orderMealLabel(order.meal)
   useEffect(() => {
     const controller = new AbortController()
     void orderApi.getRating(order.id, controller.signal).then((rating) => {
@@ -290,7 +176,7 @@ function RatingDialog({ order, onClose }: { order: Order; onClose: () => void })
   return (
     <Dialog open title={`${editing ? 'ویرایش دیدگاه' : 'ثبت دیدگاه'} ${meal} ${fa(order.jd)} ${JALALI_MONTHS[order.jm - 1]}`} onClose={onClose} locked={saving || Boolean(notice)}>
       <p className="text-sm text-muted">امتیاز ۱ تا ۵. توضیح اختیاری است. در این صفحه فقط دیدگاه خودتان دیده می‌شود.</p>
-      {order.choice && <p className="mt-2 text-sm">غذای ثبت‌شده: {order.choice}</p>}
+      {(order.choice || order.snapshotTitle) && <p className="mt-2 text-sm">غذای ثبت‌شده: {orderFoodName(order)}</p>}
       {loadError && <p className="mt-2 text-sm text-danger">{loadError}</p>}
       <fieldset className="mt-3" disabled={saving || Boolean(notice)}>
         <legend className="text-sm text-muted">امتیاز</legend>

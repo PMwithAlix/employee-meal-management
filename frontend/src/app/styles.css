@@ -178,12 +178,16 @@ textarea {
   }
 
   html[data-print-report="restaurant"] .report-buildings,
-  html[data-print-report="buildings"] .report-restaurant {
+  html[data-print-report="buildings"] .report-restaurant,
+  html[data-print-report="restaurant"] .report-monthly,
+  html[data-print-report="buildings"] .report-monthly,
+  html[data-print-report="monthly"] .report-daily {
     display: none !important;
   }
 
   html[data-print-report="restaurant"] .report-restaurant,
-  html[data-print-report="buildings"] .report-buildings {
+  html[data-print-report="buildings"] .report-buildings,
+  html[data-print-report="monthly"] .report-monthly {
     display: block !important;
   }
 

@@ -13,6 +13,7 @@ type RequestOptions = {
   method?: 'GET' | 'POST' | 'PATCH' | 'PUT' | 'DELETE'
   body?: unknown
   signal?: AbortSignal
+  accept?: string
   treatUnauthorizedAsSessionEnd?: boolean
 }
 
@@ -70,6 +71,59 @@ export async function authRequest<T>(path: string, options: RequestOptions = {})
   }
 
   return body as T
+}
+
+export function filenameFromDisposition(header: string | null) {
+  if (!header) return null
+  const utf = /filename\*=UTF-8''([^;]+)/i.exec(header)
+  if (utf?.[1]) {
+    try {
+      return decodeURIComponent(utf[1])
+    } catch {
+      return utf[1]
+    }
+  }
+  const ascii = /filename="?([^";]+)"?/i.exec(header)
+  return ascii?.[1] ?? null
+}
+
+export async function authDownload(path: string, options: RequestOptions = {}) {
+  const url = `${apiBaseUrl()}/api/v1${path}`
+  let response: Response
+  try {
+    response = await fetch(url, {
+      method: options.method ?? 'GET',
+      credentials: 'include',
+      cache: 'no-store',
+      headers: { Accept: options.accept ?? 'application/octet-stream' },
+      signal: options.signal,
+    })
+  } catch (error) {
+    if (error instanceof DOMException && error.name === 'AbortError') throw error
+    throw networkError()
+  }
+
+  if (response.status === 401 && options.treatUnauthorizedAsSessionEnd) {
+    unauthorizedHandler?.()
+  }
+
+  if (!response.ok) {
+    let body: unknown = null
+    const text = await response.text()
+    if (text) {
+      try {
+        body = JSON.parse(text) as unknown
+      } catch {
+        body = { message: text }
+      }
+    }
+    throw errorFromResponse(response.status, body)
+  }
+
+  return {
+    blob: await response.blob(),
+    filename: filenameFromDisposition(response.headers.get('content-disposition')),
+  }
 }
 
 export const authApi = {

@@ -10,7 +10,7 @@ import {
 } from 'lucide-react'
 import { ROLE_LABEL } from '../shared/fixtures/seed-data'
 import { usernameInitials } from '../shared/lib/credentials'
-import { canAccess, ROLES } from '../shared/config/permissions'
+import { can, canAccess, ROLES } from '../shared/config/permissions'
 import { NAV_ITEMS, pageTitle } from '../shared/config/navigation'
 import { useApp } from '../app/providers/app-store'
 import { cn } from '../shared/lib/persian-text'
@@ -281,11 +281,13 @@ export function Shell() {
             <h1 className="truncate text-sm font-semibold">
               {app.routeStatus === 'unknown' ? 'صفحه پیدا نشد' : app.routeStatus === 'forbidden' ? 'دسترسی ندارید' : pageTitle(app.page, app.role)}
             </h1>
-            <div className="flex items-center gap-1">
-              <button type="button" className="min-h-11 rounded-md px-2 text-xs text-link" onClick={() => app.shiftMonth(-1)}>ماه قبل</button>
-              <p className="truncate text-[11px] text-muted">{app.monthTitle}</p>
-              <button type="button" className="min-h-11 rounded-md px-2 text-xs text-link" onClick={() => app.shiftMonth(1)}>ماه بعد</button>
-            </div>
+            {!(app.page === 'orders' && can(app.role, 'order.self')) && (
+              <div className="flex items-center gap-1">
+                <button type="button" className="min-h-11 rounded-md px-2 text-xs text-link" onClick={() => app.shiftMonth(-1)}>ماه قبل</button>
+                <p className="truncate text-[11px] text-muted">{app.monthTitle}</p>
+                <button type="button" className="min-h-11 rounded-md px-2 text-xs text-link" onClick={() => app.shiftMonth(1)}>ماه بعد</button>
+              </div>
+            )}
           </div>
           <div className="flex shrink-0 items-center gap-1">
             <button

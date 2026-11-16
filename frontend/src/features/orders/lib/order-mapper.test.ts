@@ -4,7 +4,7 @@ import { currentDateTime } from '../../../shared/lib/jalali'
 import { defaultMonthDeadlines } from '../../../shared/lib/deadlines'
 import type { DayMenu } from '../../../shared/types/domain'
 import { deadlineKey, isDeadlineOpen, mealDeadlineFromMap, mealServingsFromSettings, parseBackendOrder, parseDeadline, parseMealSetting, parseStaffRating, toDeadlineMap, toUiOrder } from './order-mapper'
-import { partitionMyOrders } from './my-orders'
+import { feedbackEligibleOrders } from './my-orders'
 
 const payload = {
   id: 'order-1',
@@ -81,11 +81,13 @@ describe('parseBackendOrder', () => {
     expect(invalid).toMatchObject({ id: 'order-1', jy: 0, jm: 0, jd: 0, snapshotTitle: 'چلوکباب', cycleStatus: 'ACTIVE' })
     const emptyDate = toUiOrder(parseBackendOrder({ ...payload, mealDate: '', jalaliDate: '1405/08/01' })!)
     expect(emptyDate).toMatchObject({ jy: 0, jm: 0, jd: 0, snapshotTitle: 'چلوکباب' })
-    const split = partitionMyOrders([invalid!], 'user-1', { jy: 1405, jm: 8 })
-    expect(split.invalid.map((item) => item.id)).toEqual(['order-1'])
-    expect(split.current).toEqual([])
-    expect(split.past).toEqual([])
-    expect(split.future).toEqual([])
+    const listed = feedbackEligibleOrders(
+      [invalid!],
+      'user-1',
+      { jy: 1405, jm: 8, jd: 10, hour: 13, minute: 0 },
+      { lunch: '12:00', dinner: '19:00' },
+    )
+    expect(listed).toEqual([])
   })
 })
 

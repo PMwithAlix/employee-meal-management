@@ -1,4 +1,6 @@
 export type ReportMealType = 'LUNCH' | 'DINNER'
+export type ReportMealFilter = 'ALL' | 'LUNCH' | 'DINNER'
+export type ReportPeriod = 'daily' | 'monthly'
 
 export type DailyReportFoodRow = {
   menuItemId: string | null
@@ -43,12 +45,65 @@ export type DailyReport = {
   mealDate: string
   jalaliDate: string | null
   generatedAt: string
+  meal: ReportMealFilter
   lunch: DailyReportMealSummary
   dinner: DailyReportMealSummary
   buildings: DailyReportBuilding[]
   unassignedGuests: DailyReportGuestRow[]
 }
 
+export type MonthlyCountRow = {
+  lunchStaff: number
+  lunchGuest: number
+  dinnerStaff: number
+  dinnerGuest: number
+  lunchCount: number
+  dinnerCount: number
+  staffCount: number
+  guestCount: number
+  total: number
+}
+
+export type MonthlyFoodRow = MonthlyCountRow & {
+  title: string
+  onMenu: boolean
+}
+
+export type MonthlyBuildingFoodRow = MonthlyFoodRow & {
+  buildingId: string | null
+  buildingName: string
+}
+
+export type MonthlyBuildingTotal = MonthlyCountRow & {
+  buildingId: string | null
+  buildingName: string
+}
+
+export type MonthlyReconciliation = {
+  foodsTotal: number
+  buildingsTotal: number
+  difference: number
+  matched: boolean
+}
+
+export type MonthlyReport = {
+  year: number
+  month: number
+  monthLabel: string
+  meal: ReportMealFilter
+  mealLabel: string
+  generatedAt: string
+  foods: MonthlyFoodRow[]
+  foodsTotal: MonthlyCountRow
+  buildingRows: MonthlyBuildingFoodRow[]
+  buildingTotals: MonthlyBuildingTotal[]
+  supply: MonthlyFoodRow[]
+  supplyTotal: MonthlyCountRow
+  reconciliation: MonthlyReconciliation
+}
+
 export const REPORT_ENDPOINTS = {
   daily: '/reports/daily',
+  monthly: '/reports/monthly',
+  monthlyExcel: '/reports/monthly.xlsx',
 } as const

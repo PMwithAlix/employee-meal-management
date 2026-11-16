@@ -1,6 +1,15 @@
 import { MealType } from '@prisma/client';
+import {
+  UNASSIGNED_BUILDING_KEY,
+  allowsReportMeal,
+  compareFa,
+  reportBuildingKey,
+  reportBuildingName,
+  reportFoodTitle,
+  type ReportMealFilter,
+} from './report-common';
 
-export const UNASSIGNED_BUILDING_KEY = '__unassigned__';
+export { UNASSIGNED_BUILDING_KEY, type ReportMealFilter } from './report-common';
 
 export type DailyReportMenuItem = {
   id: string;
@@ -74,6 +83,7 @@ export type DailyReport = {
   mealDate: string;
   jalaliDate: string | null;
   generatedAt: string;
+  meal: ReportMealFilter;
   lunch: DailyReportMealSummary;
   dinner: DailyReportMealSummary;
   buildings: DailyReportBuilding[];
@@ -141,34 +151,23 @@ function summarize(bucket: MealBucket): DailyReportMealSummary {
   const foods = [...bucket.foods.values(), ...bucket.extras.values()];
   return {
     mealType: bucket.mealType,
-    foods,
+    foods: foods.filter((food) => food.total > 0),
     staffTotal: foods.reduce((sum, food) => sum + food.staffCount, 0),
     guestTotal: foods.reduce((sum, food) => sum + food.guestCount, 0),
     total: foods.reduce((sum, food) => sum + food.total, 0),
   };
 }
 
-function buildingKey(buildingId: string | null) {
-  return buildingId && buildingId.trim() ? buildingId : UNASSIGNED_BUILDING_KEY;
-}
-
-function buildingName(buildingId: string | null, name: string | null) {
-  if (buildingKey(buildingId) === UNASSIGNED_BUILDING_KEY) return 'بدون ساختمان مشخص';
-  return name?.trim() || 'ساختمان بدون نام';
-}
-
-function compareFa(left: string, right: string) {
-  return left.localeCompare(right, 'fa');
-}
-
 export function buildDailyReport(input: {
   mealDate: string;
   jalaliDate: string | null;
   generatedAt: string;
+  meal?: ReportMealFilter;
   menuItems: DailyReportMenuItem[];
   staffOrders: DailyReportStaffOrder[];
   guestOrders: DailyReportGuestOrder[];
 }): DailyReport {
+  const meal = input.meal ?? 'ALL';
   const lunch = emptyMeal(
     MealType.LUNCH,
     input.menuItems.filter((item) => item.mealType === MealType.LUNCH),
@@ -187,17 +186,17 @@ export function buildDailyReport(input: {
   const buildings = new Map<string, DailyReportBuilding>();
 
   function ensureBuilding(buildingId: string | null, name: string | null) {
-    const key = buildingKey(buildingId);
+    const key = reportBuildingKey(buildingId);
     const current = buildings.get(key);
     if (current) {
       if (!current.buildingName || current.buildingName === 'ساختمان بدون نام') {
-        current.buildingName = buildingName(buildingId, name);
+        current.buildingName = reportBuildingName(buildingId, name);
       }
       return current;
     }
     const created: DailyReportBuilding = {
       buildingId: key === UNASSIGNED_BUILDING_KEY ? null : buildingId,
-      buildingName: buildingName(buildingId, name),
+      buildingName: reportBuildingName(buildingId, name),
       users: [],
       guests: [],
     };
@@ -208,9 +207,10 @@ export function buildDailyReport(input: {
   for (const order of input.staffOrders) {
     if (seenStaff.has(order.id)) continue;
     seenStaff.add(order.id);
+    if (!allowsReportMeal(meal, order.mealType)) continue;
     const bucket = meals[order.mealType];
     addCount(matchFood(bucket, order.menuItemId, order.title), 'staff', 1);
-    const userKey = `${buildingKey(order.buildingId)}:${order.userId}`;
+    const userKey = `${reportBuildingKey(order.buildingId)}:${order.userId}`;
     const row =
       users.get(userKey) ??
       ({
@@ -219,10 +219,10 @@ export function buildDailyReport(input: {
         lunch: [],
         dinner: [],
         buildingId: order.buildingId,
-        buildingName: buildingName(order.buildingId, order.buildingName),
+        buildingName: reportBuildingName(order.buildingId, order.buildingName),
       } satisfies DailyReportUserRow & { buildingId: string | null; buildingName: string });
-    if (order.mealType === MealType.LUNCH) row.lunch.push(order.title || 'بدون عنوان');
-    else row.dinner.push(order.title || 'بدون عنوان');
+    if (order.mealType === MealType.LUNCH) row.lunch.push(reportFoodTitle(order.title));
+    else row.dinner.push(reportFoodTitle(order.title));
     users.set(userKey, row);
   }
 
@@ -231,6 +231,7 @@ export function buildDailyReport(input: {
   for (const order of input.guestOrders) {
     if (seenGuests.has(order.id)) continue;
     seenGuests.add(order.id);
+    if (!allowsReportMeal(meal, order.mealType)) continue;
     const quantity = Number.isInteger(order.quantity) ? order.quantity : 0;
     if (quantity <= 0) continue;
     const bucket = meals[order.mealType];
@@ -238,11 +239,11 @@ export function buildDailyReport(input: {
     const guestRow: DailyReportGuestRow = {
       id: order.id,
       mealType: order.mealType,
-      title: order.title || 'بدون عنوان',
+      title: reportFoodTitle(order.title),
       quantity,
       note: order.note,
     };
-    if (buildingKey(order.buildingId) === UNASSIGNED_BUILDING_KEY) {
+    if (reportBuildingKey(order.buildingId) === UNASSIGNED_BUILDING_KEY) {
       unassignedGuests.push(guestRow);
       continue;
     }
@@ -275,6 +276,7 @@ export function buildDailyReport(input: {
     mealDate: input.mealDate,
     jalaliDate: input.jalaliDate,
     generatedAt: input.generatedAt,
+    meal,
     lunch: summarize(lunch),
     dinner: summarize(dinner),
     buildings: listed,

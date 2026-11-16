@@ -104,6 +104,7 @@ describe('canGiveFeedback', () => {
     expect(canGiveFeedback({ ...order, choice: null }, now, { lunch: '12:00', dinner: '19:00' })).toBe(false)
     expect(canGiveFeedback(order, now, { lunch: '12:00', dinner: '19:00' })).toBe(true)
     expect(canGiveFeedback(order, { ...now, hour: 11, minute: 0 }, { lunch: '12:00', dinner: '19:00' })).toBe(false)
+    expect(canGiveFeedback({ ...order, cycleStatus: 'CANCELLED' }, now, { lunch: '12:00', dinner: '19:00' })).toBe(false)
   })
 })
 

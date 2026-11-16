@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { apiBaseUrl, authApi, authRequest, setUnauthorizedHandler } from './auth-api'
+import { apiBaseUrl, authApi, authDownload, authRequest, filenameFromDisposition, setUnauthorizedHandler } from './auth-api'
 import { AuthRequestError } from '../lib/auth-errors'
 
 describe('apiBaseUrl', () => {
@@ -95,6 +95,21 @@ describe('authRequest', () => {
     const init = (fetchMock.mock.calls as unknown as Array<[string, RequestInit]>)[0][1]
     expect(init.method).toBe('PUT')
     expect(init.credentials).toBe('include')
+  })
+
+  it('downloads binary files with cookies and reads the filename header', async () => {
+    const fetchMock = vi.fn(async () => new Response(new Blob(['xlsx']), {
+      status: 200,
+      headers: {
+        'Content-Disposition': "attachment; filename=\"monthly.xlsx\"; filename*=UTF-8''%D8%A2%D8%B0%D8%B1.xlsx",
+      },
+    }))
+    vi.stubGlobal('fetch', fetchMock)
+    const result = await authDownload('/reports/monthly.xlsx', { treatUnauthorizedAsSessionEnd: true })
+    const init = (fetchMock.mock.calls as unknown as Array<[string, RequestInit]>)[0][1]
+    expect(init).toMatchObject({ credentials: 'include', cache: 'no-store' })
+    expect(result.filename).toBe('آذر.xlsx')
+    expect(filenameFromDisposition('attachment; filename="plain.xlsx"')).toBe('plain.xlsx')
   })
 
   it('notifies the session handler only for authenticated 401s', async () => {

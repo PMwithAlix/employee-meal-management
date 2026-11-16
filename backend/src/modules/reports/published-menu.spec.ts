@@ -83,7 +83,8 @@ describe('published menu with extra ordered foods', () => {
       ],
       guestOrders: [],
     });
-    expect(report.lunch.foods.map((item) => item.title)).toEqual(['جوجه', 'قیمه']);
+    expect(report.lunch.foods.map((item) => item.title)).toEqual(['قیمه']);
     expect(report.lunch.foods.find((item) => item.title === 'قیمه')?.onMenu).toBe(false);
+    expect(report.lunch.total).toBe(1);
   });
 });

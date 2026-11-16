@@ -95,6 +95,7 @@ function parseServing(value: string): readonly [number, number] {
 
 export function canGiveFeedback(order: Order | undefined, now: JalaliDateTime, servings: MealServings | null) {
   if (!order?.choice || !servings) return false
+  if (order.cycleStatus === 'CANCELLED') return false
   const clock = servings[order.meal]
   if (!/^([01]\d|2[0-3]):([0-5]\d)$/.test(clock)) return false
   const [hour, minute] = parseServing(clock)

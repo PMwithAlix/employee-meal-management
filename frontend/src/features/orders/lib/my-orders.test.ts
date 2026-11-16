@@ -1,8 +1,14 @@
 import { describe, expect, it } from 'vitest'
 import { formatGregorianDate, jalaliFromJalaliField, jalaliFromMealDate } from '../../menus/lib/menu-mapper'
-import { jalaliMonthLength } from '../../../shared/lib/jalali'
-import type { DayMenu, Order } from '../../../shared/types/domain'
-import { daysForMyOrders, mealDisplayName, orderTimeBucket, partitionMyOrders } from './my-orders'
+import type { Order } from '../../../shared/types/domain'
+import {
+  MY_ORDERS_PAGE_SIZE,
+  feedbackEligibleOrders,
+  isFeedbackEligibleOrder,
+  orderFoodName,
+  orderMealLabel,
+  paginateOrders,
+} from './my-orders'
 
 function order(partial: Partial<Order> & Pick<Order, 'id' | 'jy' | 'jm' | 'jd'>): Order {
   return {
@@ -17,110 +23,59 @@ function order(partial: Partial<Order> & Pick<Order, 'id' | 'jy' | 'jm' | 'jd'>)
   }
 }
 
-const aban = { jy: 1405, jm: 8 }
+const servings = { lunch: '12:00', dinner: '19:00' }
+const now = { jy: 1405, jm: 8, jd: 10, hour: 13, minute: 0 }
 
-describe('orderTimeBucket', () => {
-  it('places orders before, inside, and after the selected month without overlap', () => {
-    expect(orderTimeBucket({ jy: 1405, jm: 7, jd: 30 }, aban)).toBe('past')
-    expect(orderTimeBucket({ jy: 1405, jm: 8, jd: 1 }, aban)).toBe('current')
-    expect(orderTimeBucket({ jy: 1405, jm: 8, jd: 30 }, aban)).toBe('current')
-    expect(orderTimeBucket({ jy: 1405, jm: 9, jd: 1 }, aban)).toBe('future')
-  })
-
-  it('keeps the same month in another year in a different bucket', () => {
-    expect(orderTimeBucket({ jy: 1404, jm: 8, jd: 10 }, aban)).toBe('past')
-    expect(orderTimeBucket({ jy: 1406, jm: 8, jd: 10 }, aban)).toBe('future')
-  })
-
-  it('uses inclusive month bounds, including 29/30/31-day months', () => {
-    expect(jalaliMonthLength(1405, 6)).toBe(31)
-    expect(orderTimeBucket({ jy: 1405, jm: 6, jd: 31 }, { jy: 1405, jm: 6 })).toBe('current')
-    expect(orderTimeBucket({ jy: 1405, jm: 7, jd: 1 }, { jy: 1405, jm: 6 })).toBe('future')
-    expect(jalaliMonthLength(1405, 7)).toBe(30)
-    expect(orderTimeBucket({ jy: 1405, jm: 7, jd: 30 }, { jy: 1405, jm: 7 })).toBe('current')
-    expect(orderTimeBucket({ jy: 1405, jm: 7, jd: 31 }, { jy: 1405, jm: 7 })).toBe('invalid')
-    expect(jalaliMonthLength(1403, 12)).toBe(30)
-    expect(orderTimeBucket({ jy: 1403, jm: 12, jd: 30 }, { jy: 1403, jm: 12 })).toBe('current')
-    expect(orderTimeBucket({ jy: 1404, jm: 1, jd: 1 }, { jy: 1403, jm: 12 })).toBe('future')
-    expect(jalaliMonthLength(1404, 12)).toBe(29)
-    expect(orderTimeBucket({ jy: 1404, jm: 12, jd: 29 }, { jy: 1404, jm: 12 })).toBe('current')
-    expect(orderTimeBucket({ jy: 1404, jm: 12, jd: 30 }, { jy: 1404, jm: 12 })).toBe('invalid')
-  })
-
-  it('classifies across Esfand and Farvardin by year, not by month number', () => {
-    expect(orderTimeBucket({ jy: 1404, jm: 12, jd: 29 }, { jy: 1405, jm: 1 })).toBe('past')
-    expect(orderTimeBucket({ jy: 1405, jm: 1, jd: 1 }, { jy: 1404, jm: 12 })).toBe('future')
-    expect(orderTimeBucket({ jy: 1405, jm: 1, jd: 1 }, { jy: 1405, jm: 1 })).toBe('current')
-  })
-
-  it('does not assign an invalid date to any month', () => {
-    expect(orderTimeBucket({ jy: 0, jm: 0, jd: 0 }, aban)).toBe('invalid')
-    expect(orderTimeBucket({ jy: 1405, jm: 12, jd: 30 }, aban)).toBe('invalid')
-  })
-})
-
-describe('partitionMyOrders', () => {
-  it('splits past, selected month, and future without duplicates', () => {
+describe('feedbackEligibleOrders', () => {
+  it('keeps only the current user\'s active meals whose serving time has ended', () => {
     const items = [
-      order({ id: 'past', jy: 1405, jm: 7, jd: 15 }),
-      order({ id: 'current', jy: 1405, jm: 8, jd: 10 }),
-      order({ id: 'future', jy: 1405, jm: 9, jd: 1 }),
-      order({ id: 'current', jy: 1405, jm: 8, jd: 10 }),
-      order({ id: 'other', employeeId: 'user-2', jy: 1405, jm: 8, jd: 11 }),
-      order({ id: 'bad', jy: 0, jm: 0, jd: 0, choice: null, snapshotTitle: 'آش' }),
+      order({ id: 'served-lunch', jy: 1405, jm: 8, jd: 10, meal: 'lunch' }),
+      order({ id: 'future-dinner', jy: 1405, jm: 8, jd: 10, meal: 'dinner' }),
+      order({ id: 'tomorrow', jy: 1405, jm: 8, jd: 11 }),
+      order({ id: 'cancelled', jy: 1405, jm: 8, jd: 9, choice: null, cycleStatus: 'CANCELLED' }),
+      order({ id: 'unselected', jy: 1405, jm: 8, jd: 9, choice: null }),
+      order({ id: 'other', employeeId: 'user-2', jy: 1405, jm: 8, jd: 9 }),
+      order({ id: 'past-dinner', jy: 1405, jm: 8, jd: 9, meal: 'dinner' }),
+      order({ id: 'past-lunch', jy: 1405, jm: 8, jd: 9, meal: 'lunch' }),
+      order({ id: 'invalid', jy: 0, jm: 0, jd: 0 }),
     ]
-    const split = partitionMyOrders(items, 'user-1', aban)
-    expect(split.current.map((item) => item.id)).toEqual(['current'])
-    expect(split.past.map((item) => item.id)).toEqual(['past'])
-    expect(split.future.map((item) => item.id)).toEqual(['future'])
-    expect(split.invalid.map((item) => item.id)).toEqual(['bad'])
+    expect(feedbackEligibleOrders(items, 'user-1', now, servings).map((item) => item.id)).toEqual([
+      'served-lunch',
+      'past-dinner',
+      'past-lunch',
+    ])
   })
 
-  it('treats the viewed month as future when looking from an earlier month, and past from a later month', () => {
-    const current = order({ id: 'aban', jy: 1405, jm: 8, jd: 20 })
-    expect(partitionMyOrders([current], 'user-1', { jy: 1405, jm: 7 }).future.map((item) => item.id)).toEqual(['aban'])
-    expect(partitionMyOrders([current], 'user-1', { jy: 1405, jm: 9 }).past.map((item) => item.id)).toEqual(['aban'])
-  })
-})
-
-describe('daysForMyOrders', () => {
-  const menuDay: DayMenu = {
-    jy: 1405,
-    jm: 8,
-    jd: 3,
-    weekday: 'یکشنبه',
-    lunch: ['جوجه'],
-    dinner: null,
-  }
-
-  it('keeps menu days without orders and adds ordered days that are missing from the published menu', () => {
-    const days = daysForMyOrders(
-      [menuDay],
-      [order({ id: 'orphan', jy: 1405, jm: 8, jd: 8, snapshotTitle: 'قیمه', choice: 'قیمه' })],
-      aban,
-    )
-    expect(days.map((day) => day.jd)).toEqual([8, 3])
-    expect(days[0]?.lunch).toBeNull()
-    expect(days[1]?.lunch).toEqual(['جوجه'])
+  it('does not use the selected month and treats lunch and dinner as separate orders', () => {
+    const lunch = order({ id: 'lunch', jy: 1405, jm: 7, jd: 20, meal: 'lunch' })
+    const dinner = order({ id: 'dinner', jy: 1405, jm: 7, jd: 20, meal: 'dinner' })
+    const listed = feedbackEligibleOrders([lunch, dinner], 'user-1', now, servings)
+    expect(listed.map((item) => item.id)).toEqual(['dinner', 'lunch'])
   })
 
-  it('does not drop an order just because the published month is empty', () => {
-    const days = daysForMyOrders([], [order({ id: 'keep', jy: 1405, jm: 8, jd: 12 })], aban)
-    expect(days).toHaveLength(1)
-    expect(days[0]?.jd).toBe(12)
+  it('drops duplicates and does not invent eligibility without a serving clock', () => {
+    const served = order({ id: 'same', jy: 1405, jm: 8, jd: 1 })
+    expect(feedbackEligibleOrders([served, served], 'user-1', now, servings)).toHaveLength(1)
+    expect(isFeedbackEligibleOrder(served, 'user-1', now, { lunch: '', dinner: '19:00' })).toBe(false)
   })
 })
 
-describe('mealDisplayName', () => {
-  it('prefers the stored snapshot when the current menu no longer has that day', () => {
-    const active = order({ id: 'o1', jy: 1405, jm: 8, jd: 1, choice: null, snapshotTitle: 'چلوکباب', cycleStatus: 'ACTIVE' })
-    expect(mealDisplayName(false, active, undefined)).toEqual({ name: 'چلوکباب', missing: false })
+describe('paginateOrders', () => {
+  it('pages newest-first lists without overlapping rows', () => {
+    const items = Array.from({ length: MY_ORDERS_PAGE_SIZE + 2 }, (_, index) => index)
+    expect(paginateOrders(items, 1).items).toEqual(items.slice(0, 20))
+    expect(paginateOrders(items, 2)).toMatchObject({ items: [20, 21], page: 2, pageCount: 2, total: 22 })
+    expect(paginateOrders(items, 9).page).toBe(2)
+    expect(paginateOrders([], 3)).toMatchObject({ items: [], page: 1, pageCount: 1, total: 0 })
   })
+})
 
-  it('keeps cancelled history as a note source without treating it as an active choice', () => {
-    const cancelled = order({ id: 'c1', jy: 1405, jm: 8, jd: 1, choice: null, snapshotTitle: 'عدسی', cycleStatus: 'CANCELLED' })
-    expect(mealDisplayName(true, undefined, cancelled)).toEqual({ name: null, missing: false })
-    expect(mealDisplayName(false, undefined, cancelled)).toEqual({ name: 'عدسی', missing: false })
+describe('order display helpers', () => {
+  it('prefers the stored food title and labels meals separately', () => {
+    expect(orderFoodName(order({ id: 'named', jy: 1405, jm: 8, jd: 1, choice: 'قیمه', snapshotTitle: 'عدسی' }))).toBe('قیمه')
+    expect(orderFoodName(order({ id: 'snap', jy: 1405, jm: 8, jd: 1, choice: null, snapshotTitle: 'آش' }))).toBe('آش')
+    expect(orderMealLabel('lunch')).toBe('ناهار')
+    expect(orderMealLabel('dinner')).toBe('شام')
   })
 })
 
