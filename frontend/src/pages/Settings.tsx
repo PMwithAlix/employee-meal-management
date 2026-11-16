@@ -4,6 +4,7 @@ import { AuthRequestError } from '../features/auth/lib/auth-errors'
 import { passwordIssue } from '../shared/lib/credentials'
 import { useApp } from '../app/providers/app-store'
 import { Button, Segmented } from '../shared/ui/primitives'
+import { TimePicker } from '../shared/ui/TimePicker'
 import { SecretField } from '../shared/ui/SecretField'
 import { can } from '../shared/config/permissions'
 
@@ -87,14 +88,8 @@ export function SettingsPage() {
             </div>
           ) : (
           <div className="mt-3 grid gap-3 sm:grid-cols-2">
-            <label className="text-sm">
-              <span className="mb-1 block text-muted">ناهار</span>
-              <input type="time" className="h-11 w-full rounded-md border border-line bg-bg px-3 text-base" value={app.mealServings.lunch} onChange={(event) => void app.setMealServing('lunch', event.target.value)} />
-            </label>
-            <label className="text-sm">
-              <span className="mb-1 block text-muted">شام</span>
-              <input type="time" className="h-11 w-full rounded-md border border-line bg-bg px-3 text-base" value={app.mealServings.dinner} onChange={(event) => void app.setMealServing('dinner', event.target.value)} />
-            </label>
+            <TimePicker label="ناهار" value={app.mealServings.lunch} ariaLabel="ساعت سرو ناهار" onChange={(clock) => void app.setMealServing('lunch', clock)} />
+            <TimePicker label="شام" value={app.mealServings.dinner} ariaLabel="ساعت سرو شام" onChange={(clock) => void app.setMealServing('dinner', clock)} />
           </div>
           )}
         </section>

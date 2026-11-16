@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  buildingDetachSuccessNotice,
   buildingStatusSuccessNotice,
   buildingTransferSuccessNotice,
   noticeAfterBuildingSelection,
@@ -19,6 +20,9 @@ describe('building notice ownership', () => {
     expect(buildingStatusSuccessNotice(true)).toBe('ساختمان دوباره فعال شد.')
     expect(buildingTransferSuccessNotice('pr2val.emp')).toBe(
       'حساب pr2val.emp به این ساختمان منتقل شد.',
+    )
+    expect(buildingDetachSuccessNotice('pr2val.emp', 'فرعی')).toBe(
+      'حساب pr2val.emp به ساختمان «فرعی» منتقل شد.',
     )
   })
 })

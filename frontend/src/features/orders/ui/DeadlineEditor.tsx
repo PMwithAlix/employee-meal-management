@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Button, Field, controlClass } from '../../../shared/ui/primitives'
+import { TimePicker } from '../../../shared/ui/TimePicker'
+import { parseClock } from '../../../shared/lib/clock-time'
 import { AuthRequestError } from '../../auth/lib/auth-errors'
 import { deadlineAtFromPattern, formatDeadline, inferMealDeadline, type DeadlineRelation, type MealDeadline } from '../../../shared/lib/deadlines'
 import { usePublishedMenu } from '../../menus/hooks/usePublishedMenu'
@@ -106,20 +108,19 @@ function MealFields({ meal, value, defined, disabled, onChange }: { meal: MealKi
           <option value="previous_day">روز قبل</option>
         </select>
       </Field>
-      <Field label="ساعت">
-        <input
-          className={controlClass}
-          type="time"
-          disabled={disabled}
-          aria-label={meal === 'lunch' ? 'ساعت مهلت ناهار' : 'ساعت مهلت شام'}
+      <div className="min-w-[12rem]">
+        <TimePicker
+          label="ساعت"
           value={time}
-          onChange={(event) => {
-            const [hour, minute] = event.target.value.split(':').map(Number)
-            if (Number.isNaN(hour) || Number.isNaN(minute)) return
-            onChange({ ...value, hour, minute })
+          disabled={disabled}
+          ariaLabel={meal === 'lunch' ? 'ساعت مهلت ناهار' : 'ساعت مهلت شام'}
+          onChange={(clock) => {
+            const parsed = parseClock(clock)
+            if (!parsed) return
+            onChange({ ...value, hour: parsed.hour, minute: parsed.minute })
           }}
         />
-      </Field>
+      </div>
       <p className="pb-2 text-xs text-muted">{defined ? formatDeadline(value) : 'ذخیره نشده'}</p>
     </div>
   )

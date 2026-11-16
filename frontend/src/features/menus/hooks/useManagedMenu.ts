@@ -2,10 +2,17 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { AuthRequestError } from '../../auth/lib/auth-errors'
 import type { MealKind } from '../../../shared/types/domain'
 import { menuApi } from '../api/menus-api'
-import { daysFromVersion, patchOptions, toBackendMeal } from '../lib/menu-mapper'
+import { daysFromVersion, patchOptions, sameOptions, toBackendMeal } from '../lib/menu-mapper'
 import type { MenuDay, MenuOption, MenuSummary, MenuVersionDetail } from '../model/menu-types'
 
 export type ManagedLoadState = 'loading' | 'ready' | 'unavailable' | 'forbidden' | 'error'
+export type MenuSaveStatus = 'idle' | 'saving' | 'saved' | 'error'
+
+type PendingMeal = {
+  day: MenuDay
+  meal: MealKind
+  options: MenuOption[]
+}
 
 async function ensureDraft(year: number, month: number, signal?: AbortSignal) {
   const listed = await menuApi.list(year, month, signal)
@@ -46,8 +53,20 @@ export function useManagedMenu(year: number, month: number) {
   const [draft, setDraft] = useState<MenuVersionDetail | null>(null)
   const [days, setDays] = useState<MenuDay[]>([])
   const [busy, setBusy] = useState(false)
+  const [saveStatus, setSaveStatus] = useState<MenuSaveStatus>('idle')
+  const [saveMessage, setSaveMessage] = useState('')
+  const [announceBusy, setAnnounceBusy] = useState(false)
   const [boot, setBoot] = useState(0)
   const request = useRef(0)
+  const menuRef = useRef(menu)
+  const draftRef = useRef(draft)
+  const daysRef = useRef(days)
+  const pending = useRef(new Map<string, PendingMeal>())
+  const flushing = useRef<Promise<void> | null>(null)
+  const failed = useRef<PendingMeal | null>(null)
+  menuRef.current = menu
+  draftRef.current = draft
+  daysRef.current = days
 
   const applyDraft = useCallback(
     (nextMenu: MenuSummary, nextDraft: MenuVersionDetail) => {
@@ -71,6 +90,11 @@ export function useManagedMenu(year: number, month: number) {
     setMenu(null)
     setDraft(null)
     setDays([])
+    setSaveStatus('idle')
+    setSaveMessage('')
+    pending.current.clear()
+    failed.current = null
+    flushing.current = null
     void ensureDraft(year, month, controller.signal)
       .then((result) => {
         if (controller.signal.aborted || id !== request.current) return
@@ -97,35 +121,82 @@ export function useManagedMenu(year: number, month: number) {
 
   const retry = useCallback(() => setBoot((value) => value + 1), [])
 
-  const saveMeal = useCallback(
-    async (day: MenuDay, meal: MealKind, options: MenuOption[]) => {
-      if (!menu || !draft || draft.status !== 'DRAFT' || busy) return
-      setBusy(true)
-      setMessage('')
-      setIssues([])
+  const runFlush = useCallback(async () => {
+    setSaveStatus('saving')
+    setSaveMessage('')
+    while (pending.current.size > 0) {
+      const [key, job] = pending.current.entries().next().value as [string, PendingMeal]
+      pending.current.delete(key)
+      const currentMenu = menuRef.current
+      const currentDraft = draftRef.current
+      if (!currentMenu || !currentDraft || currentDraft.status !== 'DRAFT') {
+        failed.current = job
+        setSaveStatus('error')
+        setSaveMessage('پیش‌نویس برای ذخیره در دسترس نیست.')
+        return
+      }
       try {
-        const next = await menuApi.patchMeal(menu.id, draft.id, {
-          mealDate: day.mealDate,
-          mealType: toBackendMeal(meal),
-          options: patchOptions(options),
+        const next = await menuApi.patchMeal(currentMenu.id, currentDraft.id, {
+          mealDate: job.day.mealDate,
+          mealType: toBackendMeal(job.meal),
+          options: patchOptions(job.options),
         })
-        if (request.current && menu.jalaliYear === year && menu.jalaliMonth === month) {
+        if (request.current && currentMenu.jalaliYear === year && currentMenu.jalaliMonth === month) {
           setDraft(next)
           setDays(daysFromVersion(year, month, next))
         }
+        failed.current = null
       } catch (error) {
-        setMessage(error instanceof AuthRequestError ? error.message : 'ذخیره وعده انجام نشد.')
+        failed.current = job
+        setSaveStatus('error')
+        setSaveMessage(error instanceof AuthRequestError ? error.message : 'ذخیره وعده انجام نشد.')
         setIssues(error instanceof AuthRequestError ? error.issues : [])
-        throw error
-      } finally {
-        setBusy(false)
+        return
+      }
+    }
+    setSaveStatus('saved')
+    setSaveMessage('ذخیره شد')
+  }, [month, year])
+
+  const flushSaves = useCallback(async () => {
+    if (flushing.current) {
+      await flushing.current
+      if (pending.current.size > 0) await flushSaves()
+      return
+    }
+    const work = runFlush().finally(() => {
+      if (flushing.current === work) flushing.current = null
+    })
+    flushing.current = work
+    await work
+    if (pending.current.size > 0) await flushSaves()
+  }, [runFlush])
+
+  const saveMeal = useCallback(
+    async (day: MenuDay, meal: MealKind, options: MenuOption[]) => {
+      const current = daysRef.current.find((item) => item.jd === day.jd)
+      const existing = meal === 'lunch' ? current?.lunch ?? [] : current?.dinner ?? []
+      if (sameOptions(existing, options)) return
+      const key = `${day.mealDate}:${meal}`
+      pending.current.set(key, { day, meal, options })
+      setIssues([])
+      await flushSaves()
+      if (failed.current && `${failed.current.day.mealDate}:${failed.current.meal}` === key) {
+        throw new Error('save-failed')
       }
     },
-    [busy, draft, menu, month, year],
+    [flushSaves],
   )
 
+  const retrySave = useCallback(async () => {
+    if (!failed.current) return
+    const job = failed.current
+    pending.current.set(`${job.day.mealDate}:${job.meal}`, job)
+    await flushSaves()
+  }, [flushSaves])
+
   const publish = useCallback(async () => {
-    if (!menu || !draft || draft.status !== 'DRAFT' || busy) return
+    if (!menu || !draft || draft.status !== 'DRAFT' || busy || flushing.current) return
     setBusy(true)
     setMessage('')
     setIssues([])
@@ -142,10 +213,56 @@ export function useManagedMenu(year: number, month: number) {
     }
   }, [applyDraft, busy, draft, menu, month, year])
 
+  const announce = useCallback(
+    async (payload: { title: string; body: string }) => {
+      if (!menu || announceBusy) return null
+      setAnnounceBusy(true)
+      setMessage('')
+      setIssues([])
+      try {
+        const result = await menuApi.announce(menu.id, payload)
+        setMenu((current) =>
+          current && current.id === result.id
+            ? {
+                ...current,
+                lastAnnouncedAt: result.lastAnnouncedAt ?? null,
+                lastAnnouncedBy: result.lastAnnouncedBy ?? null,
+              }
+            : current,
+        )
+        return result
+      } catch (error) {
+        setMessage(error instanceof AuthRequestError ? error.message : 'ارسال اعلام انتشار انجام نشد.')
+        setIssues(error instanceof AuthRequestError ? error.issues : [])
+        throw error
+      } finally {
+        setAnnounceBusy(false)
+      }
+    },
+    [announceBusy, menu],
+  )
+
   const reload = useCallback(async () => {
     const result = await ensureDraft(year, month)
     applyDraft(result.menu, result.draft)
   }, [applyDraft, month, year])
 
-  return { status, message, issues, menu, draft, days, busy, retry, saveMeal, publish, reload }
+  return {
+    status,
+    message,
+    issues,
+    menu,
+    draft,
+    days,
+    busy,
+    saveStatus,
+    saveMessage,
+    announceBusy,
+    retry,
+    saveMeal,
+    retrySave,
+    publish,
+    announce,
+    reload,
+  }
 }

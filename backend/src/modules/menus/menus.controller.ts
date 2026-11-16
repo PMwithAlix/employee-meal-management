@@ -31,6 +31,7 @@ import { RolesGuard } from '../../common/guards/roles.guard';
 import type { AuthUser } from '../../common/types/auth-user';
 import { ConfirmImportDto } from './dto/confirm-import.dto';
 import { UpdateImportMealDto } from './dto/update-import-meal.dto';
+import { AnnounceMenuDto } from './dto/announce-menu.dto';
 import { CreateMenuDto } from './dto/create-menu.dto';
 import { CreateVersionDto } from './dto/create-version.dto';
 import { ListMenusQueryDto } from './dto/list-menus.query';
@@ -159,5 +160,16 @@ export class MenusController {
     @Param('versionId', ParseUUIDPipe) versionId: string,
   ) {
     return this.menus.publish(actor, id, versionId);
+  }
+
+  @Post(':id/announce')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'اعلام انتشار منوی ماهانه به کاربران فعال' })
+  announce(
+    @CurrentUser() actor: AuthUser,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: AnnounceMenuDto,
+  ) {
+    return this.menus.announce(actor, id, dto);
   }
 }

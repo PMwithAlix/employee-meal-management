@@ -139,12 +139,14 @@ model GroupMembership {
 }
 
 model Menu {
-  id                 String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  id                 String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   year               Int
   month              Int
-  publishedVersionId String?  @unique @db.Uuid
-  createdAt          DateTime @default(now()) @db.Timestamptz(6)
-  updatedAt          DateTime @updatedAt @db.Timestamptz(6)
+  publishedVersionId String?   @unique @db.Uuid
+  lastAnnouncedAt    DateTime? @db.Timestamptz(6)
+  lastAnnouncedBy    String?   @db.Uuid
+  createdAt          DateTime  @default(now()) @db.Timestamptz(6)
+  updatedAt          DateTime  @updatedAt @db.Timestamptz(6)
 
   publishedVersion MenuVersion?  @relation("MenuPublishedVersion", fields: [publishedVersionId], references: [id], onDelete: Restrict, onUpdate: Restrict)
   versions         MenuVersion[] @relation("MenuVersions")

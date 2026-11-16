@@ -1,10 +1,12 @@
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
+import { ChevronDown, ChevronUp } from 'lucide-react'
 import { GuestsPanel } from '../features/guests/ui/GuestsPanel'
 import { DeadlineEditor } from '../features/orders/ui/DeadlineEditor'
 import { StaffOrdersPanel } from '../features/orders/ui/StaffOrdersPanel'
 import { Badge, Button, Dialog, Empty, controlClass } from '../shared/ui/primitives'
 import { AuthRequestError } from '../features/auth/lib/auth-errors'
 import { menuApi } from '../features/menus/api/menus-api'
+import { defaultMenuAnnouncementCopy } from '../features/menus/lib/menu-announcement'
 import { localOption, patchOptions, toBackendMeal } from '../features/menus/lib/menu-mapper'
 import type { ImportPreview, MenuOption } from '../features/menus/model/menu-types'
 import { ImportPreviewBoard } from '../features/menus/ui/ImportPreviewBoard'
@@ -23,7 +25,7 @@ const POLICIES: Array<{ id: ReplacePolicy; title: string; body: string }> = [
 export function MenuManagementPage() {
   const app = useApp()
   const managed = useManagedMenu(app.selectedMonth.jy, app.selectedMonth.jm)
-  const [tab, setTab] = useState<'daily' | 'import' | 'guests' | 'staff'>('daily')
+  const [tab, setTab] = useState<'daily' | 'guests' | 'staff'>('daily')
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-end justify-between gap-3">
@@ -34,12 +36,13 @@ export function MenuManagementPage() {
         <DeadlineEditor />
       </div>
       <div className="flex flex-wrap gap-1">
-        {([['daily', 'منوی روزانه'], ['import', 'ورود از اکسل'], ['guests', 'سفارش مهمان'], ['staff', 'سفارش کارکنان']] as const).map(([id, label]) => (
+        {([['daily', 'منوی روزانه'], ['guests', 'سفارش مهمان'], ['staff', 'سفارش کارکنان']] as const).map(([id, label]) => (
           <button key={id} className={`min-h-11 rounded-md px-3 text-sm ${tab === id ? 'bg-primary text-onprimary' : 'border border-line bg-surface'}`} onClick={() => setTab(id)}>{label}</button>
         ))}
       </div>
       {tab === 'daily' && <DailyMenu managed={managed} />}
-      {tab === 'import' && <ImportPanel managed={managed} />}
+      {/* ورود از اکسل برای نسخه‌های بعدی از تب‌ها برداشته شده است. */}
+      {false && <ImportPanel managed={managed} />}
       {tab === 'guests' && <GuestsPanel />}
       {tab === 'staff' && <StaffOrdersPanel />}
     </div>
@@ -48,6 +51,17 @@ export function MenuManagementPage() {
 
 function DailyMenu({ managed }: { managed: ReturnType<typeof useManagedMenu> }) {
   const app = useApp()
+  const [announceOpen, setAnnounceOpen] = useState(false)
+  const [announceTitle, setAnnounceTitle] = useState('')
+  const [announceBody, setAnnounceBody] = useState('')
+  const [announceNotice, setAnnounceNotice] = useState('')
+  const copy = defaultMenuAnnouncementCopy(app.selectedMonth.jm)
+
+  useEffect(() => {
+    setAnnounceOpen(false)
+    setAnnounceNotice('')
+  }, [app.selectedMonth.jy, app.selectedMonth.jm])
+
   if (managed.status === 'loading') {
     return <Empty title="در حال آماده‌سازی پیش‌نویس" body="منوی این ماه از سامانه خوانده می‌شود. در صورت نبود منو، پیش‌نویس خالی ساخته می‌شود." />
   }
@@ -73,13 +87,42 @@ function DailyMenu({ managed }: { managed: ReturnType<typeof useManagedMenu> }) 
   return (
     <div className="space-y-2">
       <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-line bg-surface p-3">
-        <p className="text-sm">
-          پیش‌نویس نسخه {managed.draft ? fa(managed.draft.versionNumber) : '—'}
-          {managed.menu?.publishedVersionId ? ' · نسخه منتشرشده فعلی حفظ می‌شود تا انتشار جدید' : ' · هنوز نسخه‌ای منتشر نشده'}
-        </p>
-        <Button disabled={managed.busy || !managed.draft} onClick={() => void managed.publish()}>انتشار پیش‌نویس</Button>
+        <div className="min-w-0 space-y-1">
+          <p className="text-sm">
+            پیش‌نویس نسخه {managed.draft ? fa(managed.draft.versionNumber) : '—'}
+            {managed.menu?.publishedVersionId ? ' · نسخه منتشرشده فعلی حفظ می‌شود تا انتشار جدید' : ' · هنوز نسخه‌ای منتشر نشده'}
+          </p>
+          <p className="text-xs text-muted" aria-live="polite">
+            {managed.saveStatus === 'saving' && 'در حال ذخیره‌سازی'}
+            {managed.saveStatus === 'saved' && 'ذخیره شد'}
+            {managed.saveStatus === 'error' && (managed.saveMessage || 'خطا در ذخیره‌سازی')}
+            {managed.saveStatus === 'idle' && 'تغییرات روزانه به‌صورت خودکار ذخیره می‌شوند و تا اعلام انتشار برای کاربران ارسال نمی‌شوند.'}
+          </p>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          {managed.saveStatus === 'error' && (
+            <Button variant="secondary" onClick={() => void managed.retrySave()}>تلاش دوباره ذخیره</Button>
+          )}
+          <Button disabled={managed.busy || !managed.draft || managed.saveStatus === 'saving'} onClick={() => void managed.publish()}>انتشار پیش‌نویس</Button>
+          <Button
+            variant="secondary"
+            disabled={managed.announceBusy || !managed.menu?.publishedVersionId}
+            onClick={() => {
+              setAnnounceTitle(copy.title)
+              setAnnounceBody(copy.body)
+              setAnnounceNotice('')
+              setAnnounceOpen(true)
+            }}
+          >
+            اعلام انتشار به همه کاربران
+          </Button>
+          {!managed.menu?.publishedVersionId && (
+            <p className="basis-full text-xs text-muted">برای اعلام به کاربران، ابتدا پیش‌نویس را منتشر کنید.</p>
+          )}
+        </div>
       </div>
       {managed.message && <p className="rounded-md bg-dangerbg px-3 py-2 text-sm text-danger" role="alert">{managed.message}</p>}
+      {announceNotice && <p className="rounded-md bg-okbg px-3 py-2 text-sm text-ok" role="status">{announceNotice}</p>}
       {managed.issues.length > 0 && (
         <ul className="list-disc pe-5 text-sm text-danger">{managed.issues.map((item) => <li key={item}>{item}</li>)}</ul>
       )}
@@ -96,6 +139,52 @@ function DailyMenu({ managed }: { managed: ReturnType<typeof useManagedMenu> }) 
           </div>
         </article>
       ))}
+      <Dialog
+        open={announceOpen}
+        title={`اعلام انتشار منوی ${app.monthTitle}`}
+        locked={managed.announceBusy}
+        onClose={() => {
+          if (!managed.announceBusy) setAnnounceOpen(false)
+        }}
+      >
+        <p className="text-sm text-muted">متن پیش‌فرض را در صورت نیاز ویرایش کنید. ارسال فقط پس از تأیید انجام می‌شود.</p>
+        <label className="mt-3 block text-sm">
+          <span className="mb-1 block text-muted">عنوان</span>
+          <input
+            value={announceTitle}
+            maxLength={120}
+            disabled={managed.announceBusy}
+            onChange={(event) => setAnnounceTitle(event.target.value)}
+            className="h-11 w-full rounded-md border border-line bg-bg px-3 text-base"
+          />
+        </label>
+        <label className="mt-3 block text-sm">
+          <span className="mb-1 block text-muted">متن پیام</span>
+          <textarea
+            value={announceBody}
+            maxLength={280}
+            rows={3}
+            disabled={managed.announceBusy}
+            onChange={(event) => setAnnounceBody(event.target.value)}
+            className="w-full rounded-md border border-line bg-bg px-3 py-2 text-base"
+          />
+        </label>
+        <div className="mt-3 flex flex-wrap justify-end gap-2">
+          <Button variant="secondary" disabled={managed.announceBusy} onClick={() => setAnnounceOpen(false)}>انصراف</Button>
+          <Button
+            disabled={managed.announceBusy || !announceTitle.trim() || !announceBody.trim()}
+            onClick={() => {
+              void managed.announce({ title: announceTitle.trim(), body: announceBody.trim() }).then((result) => {
+                if (!result) return
+                setAnnounceOpen(false)
+                setAnnounceNotice(`اعلام انتشار برای ${fa(result.recipientCount)} کاربر فعال ارسال شد.`)
+              }).catch(() => undefined)
+            }}
+          >
+            {managed.announceBusy ? 'در حال ارسال…' : 'تأیید و ارسال'}
+          </Button>
+        </div>
+      </Dialog>
     </div>
   )
 }
@@ -112,17 +201,102 @@ function OptionEditor({
   onSave: (options: MenuOption[]) => Promise<void>
 }) {
   const [value, setValue] = useState('')
+  const [items, setItems] = useState(options)
+  const [editingId, setEditingId] = useState<string | null>(null)
   const [removing, setRemoving] = useState<MenuOption | null>(null)
+  const debounce = useRef<number | null>(null)
   const label = meal === 'lunch' ? 'ناهار' : 'شام'
+
+  useEffect(() => {
+    setItems(options)
+  }, [options])
+
+  useEffect(() => () => {
+    if (debounce.current) window.clearTimeout(debounce.current)
+  }, [])
+
+  function persist(next: MenuOption[], delay = 0) {
+    setItems(next)
+    if (debounce.current) window.clearTimeout(debounce.current)
+    const run = () => {
+      void onSave(next.map((item, index) => ({ ...item, displayOrder: index + 1 }))).catch(() => setItems(options))
+    }
+    if (delay <= 0) {
+      run()
+      return
+    }
+    debounce.current = window.setTimeout(run, delay)
+  }
+
   return (
     <div>
       <p className={`mb-1 text-xs ${meal === 'lunch' ? 'text-lunch' : 'text-dinner'}`}>{label}</p>
-      {options.length === 0 && <p className="text-xs text-muted">گزینه‌ای ثبت نشده</p>}
-      <div className="flex flex-wrap gap-1">
-        {options.map((option) => (
-          <button key={option.id} className="min-h-11 rounded border border-line px-3 text-sm" disabled={disabled} onClick={() => setRemoving(option)}>
-            {option.title} ×
-          </button>
+      {items.length === 0 && <p className="text-xs text-muted">گزینه‌ای ثبت نشده</p>}
+      <div className="space-y-1">
+        {items.map((option, index) => (
+          <div key={option.id} className="flex min-h-11 items-center gap-1 rounded border border-line px-1">
+            <div className="flex flex-col">
+              <button
+                type="button"
+                className="grid h-5 w-7 place-items-center text-muted disabled:opacity-30"
+                disabled={disabled || index === 0}
+                aria-label={`بالا بردن ${option.title}`}
+                onClick={() => {
+                  const next = [...items]
+                  const current = next[index]
+                  const previous = next[index - 1]
+                  if (!current || !previous) return
+                  next[index - 1] = current
+                  next[index] = previous
+                  persist(next)
+                }}
+              >
+                <ChevronUp size={14} />
+              </button>
+              <button
+                type="button"
+                className="grid h-5 w-7 place-items-center text-muted disabled:opacity-30"
+                disabled={disabled || index === items.length - 1}
+                aria-label={`پایین آوردن ${option.title}`}
+                onClick={() => {
+                  const next = [...items]
+                  const current = next[index]
+                  const following = next[index + 1]
+                  if (!current || !following) return
+                  next[index + 1] = current
+                  next[index] = following
+                  persist(next)
+                }}
+              >
+                <ChevronDown size={14} />
+              </button>
+            </div>
+            {editingId === option.id ? (
+              <input
+                autoFocus
+                value={option.title}
+                disabled={disabled}
+                aria-label={`ویرایش ${label}`}
+                className="h-9 min-w-0 flex-1 rounded-md border border-line bg-bg px-2 text-sm"
+                onChange={(event) => persist(items.map((item) => item.id === option.id ? { ...item, title: event.target.value } : item), 400)}
+                onBlur={() => {
+                  const title = option.title.trim()
+                  if (!title) {
+                    setItems(options)
+                    setEditingId(null)
+                    return
+                  }
+                  persist(items.map((item) => item.id === option.id ? { ...item, title } : item))
+                  setEditingId(null)
+                }}
+              />
+            ) : (
+              <button type="button" className="min-w-0 flex-1 truncate px-2 text-start text-sm" disabled={disabled} onClick={() => setEditingId(option.id)}>
+                {option.title}
+              </button>
+            )}
+            <button type="button" className="grid h-9 w-9 place-items-center text-sm text-danger" disabled={disabled} aria-label={`حذف ${option.title}`} onClick={() => setRemoving(option)}>×</button>
+          </div>
         ))}
       </div>
       <form
@@ -130,12 +304,13 @@ function OptionEditor({
         onSubmit={(event) => {
           event.preventDefault()
           const name = value.trim()
-          if (!name || disabled || options.some((item) => item.title === name) || options.length >= 3) return
-          void onSave([...options, localOption(name, options.length + 1)]).then(() => setValue('')).catch(() => undefined)
+          if (!name || disabled || items.some((item) => item.title === name) || items.length >= 3) return
+          persist([...items, localOption(name, items.length + 1)])
+          setValue('')
         }}
       >
         <input value={value} onChange={(event) => setValue(event.target.value)} placeholder="غذای جدید" aria-label={`غذای جدید ${label}`} disabled={disabled} className="h-11 min-w-0 flex-1 rounded-md border border-line bg-bg px-2 text-base" />
-        <Button type="submit" variant="secondary" disabled={disabled}>افزودن</Button>
+        <Button type="submit" variant="secondary" disabled={disabled || items.length >= 3}>افزودن</Button>
       </form>
       <Dialog open={Boolean(removing)} title={`حذف از ${label}`} onClose={() => setRemoving(null)}>
         <p className="text-sm">«{removing?.title}» از {label} این روز حذف شود؟ سفارش‌هایی که قبلاً این نام را ثبت کرده‌اند عوض نمی‌شوند.</p>
@@ -146,7 +321,8 @@ function OptionEditor({
             disabled={disabled}
             onClick={() => {
               if (!removing) return
-              void onSave(options.filter((item) => item.id !== removing.id)).then(() => setRemoving(null)).catch(() => undefined)
+              persist(items.filter((item) => item.id !== removing.id))
+              setRemoving(null)
             }}
           >
             حذف
@@ -157,6 +333,7 @@ function OptionEditor({
   )
 }
 
+// ورود از اکسل در این نسخه از رابط کاربری پنهان است؛ کد برای نسخه‌های بعدی مانده است.
 function ImportPanel({ managed }: { managed: ReturnType<typeof useManagedMenu> }) {
   const app = useApp()
   const [wizard, setWizard] = useState(false)

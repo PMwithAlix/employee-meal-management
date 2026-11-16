@@ -1,4 +1,5 @@
 import { MealType } from '@prisma/client';
+import { JALALI_MONTHS } from '../../common/calendar/jalali';
 
 export type MenuOptionInput = {
   id?: string;
@@ -26,3 +27,13 @@ export const ImportPolicy = {
 } as const;
 
 export type ImportPolicy = (typeof ImportPolicy)[keyof typeof ImportPolicy];
+
+export const MENU_PUBLISHED_NOTIFICATION = 'MENU_PUBLISHED' as const;
+
+export function defaultMenuAnnouncementCopy(jalaliMonth: number) {
+  const monthName = JALALI_MONTHS[jalaliMonth - 1];
+  return {
+    title: `منوی ${monthName} منتشر شد 🍽️`,
+    body: 'برای مشاهده منو و ثبت وعده‌های غذایی، وارد سامانه شوید.',
+  };
+}

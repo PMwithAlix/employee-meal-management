@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { daysFromVersion, formatGregorianDate, overlayMeals, patchOptions, toBackendMeal, toFrontendMeal, toPickerDay } from './menu-mapper'
+import { daysFromVersion, formatGregorianDate, overlayMeals, patchOptions, sameOptions, toBackendMeal, toFrontendMeal, toPickerDay } from './menu-mapper'
 import { IMPORT_POLICY, MENU_ENDPOINTS } from '../model/menu-types'
 
 describe('meal type mapping', () => {
@@ -73,5 +73,14 @@ describe('contracts', () => {
     expect(MENU_ENDPOINTS.list).toBe('/menus')
     expect(MENU_ENDPOINTS.preview).toBe('/menus/imports/preview')
     expect(MENU_ENDPOINTS.patchImport('import-1')).toBe('/menus/imports/import-1')
+    expect(MENU_ENDPOINTS.announce('menu-1')).toBe('/menus/menu-1/announce')
+  })
+})
+
+describe('sameOptions', () => {
+  it('skips identical auto-save payloads', () => {
+    const options = [{ id: 'a', title: 'سوپ', displayOrder: 1 }]
+    expect(sameOptions(options, [{ ...options[0]! }])).toBe(true)
+    expect(sameOptions(options, [{ id: 'a', title: 'آش', displayOrder: 1 }])).toBe(false)
   })
 })

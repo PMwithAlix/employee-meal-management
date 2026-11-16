@@ -5,6 +5,7 @@ import { activeMemberCount } from '../features/buildings/lib/building-mapper'
 import { usesLiveBuildingsPage } from '../features/buildings/lib/building-access'
 import { isDuplicateBuildingName, normalizeBuildingName } from '../features/buildings/lib/building-name'
 import {
+  buildingDetachSuccessNotice,
   buildingStatusSuccessNotice,
   buildingTransferSuccessNotice,
   noticeAfterBuildingSelection,
@@ -14,7 +15,7 @@ import { can } from '../shared/config/permissions'
 import { fa } from '../shared/lib/persian-text'
 import { useApp } from '../app/providers/app-store'
 import { userApi } from '../features/users/api/users-api'
-import { isHrManagedRole, type ManagedUser } from '../features/users/lib/user-mapper'
+import { isHrManagedRole, roleLabel, type ManagedUser } from '../features/users/lib/user-mapper'
 
 export function BuildingsPage() {
   const app = useApp()
@@ -47,6 +48,10 @@ function LiveBuildingsPage() {
   const [moving, setMoving] = useState('')
   const [transferBusy, setTransferBusy] = useState(false)
   const [transferError, setTransferError] = useState('')
+  const [detaching, setDetaching] = useState<ManagedUser | null>(null)
+  const [destinationId, setDestinationId] = useState('')
+  const [detachBusy, setDetachBusy] = useState(false)
+  const [detachError, setDetachError] = useState('')
   const [notice, setNotice] = useState('')
   const [statusConfirmation, setStatusConfirmation] = useState(false)
   const [statusMutation, setStatusMutation] = useState(false)
@@ -111,6 +116,16 @@ function LiveBuildingsPage() {
     }),
     [users, openId, app.role],
   )
+  const destinations = useMemo(
+    () => buildings.filter((item) => item.id !== openId && item.isActive),
+    [buildings, openId],
+  )
+
+  function canAssign(user: ManagedUser) {
+    if (!canMoveEmployee) return false
+    if (app.role === 'admin') return true
+    return isHrManagedRole(user.role)
+  }
 
   function refresh() {
     setBoot((value) => value + 1)
@@ -155,6 +170,35 @@ function LiveBuildingsPage() {
     }
   }
 
+  async function confirmDetach() {
+    if (!detaching || !building || detachBusy) return
+    const canClear = detaching.role === 'ADMIN'
+    if (!destinationId && !canClear) {
+      setDetachError('برای جدا کردن این حساب باید ساختمان دیگری انتخاب شود.')
+      return
+    }
+    setDetachBusy(true)
+    setDetachError('')
+    setNotice('')
+    try {
+      const updated = await userApi.update(detaching.id, { buildingId: destinationId || null })
+      setUsers((list) => list.map((item) => (item.id === updated.id ? updated : item)))
+      setDetail((current) => (
+        current && current.id === building.id && current.usersCount !== null
+          ? { ...current, usersCount: Math.max(0, current.usersCount - 1) }
+          : current
+      ))
+      const destination = buildings.find((item) => item.id === destinationId)
+      setNotice(buildingDetachSuccessNotice(updated.username, destination?.name))
+      setDetaching(null)
+      setDestinationId('')
+    } catch (error: unknown) {
+      setDetachError(apiMessage(error, 'جدا کردن کارمند از ساختمان انجام نشد.'))
+    } finally {
+      setDetachBusy(false)
+    }
+  }
+
   async function transfer(event: { preventDefault: () => void }) {
     event.preventDefault()
     if (!moving || !building || transferBusy) return
@@ -166,7 +210,11 @@ function LiveBuildingsPage() {
       setUsers((list) => list.map((item) => (item.id === updated.id ? updated : item)))
       setMoving('')
       setNotice(buildingTransferSuccessNotice(updated.username))
-      refresh()
+      setDetail((current) => (
+        current && current.id === building.id && current.usersCount !== null
+          ? { ...current, usersCount: current.usersCount + 1 }
+          : current
+      ))
     } catch (error: unknown) {
       setTransferError(apiMessage(error, 'انتقال کارمند انجام نشد.'))
     } finally {
@@ -236,9 +284,23 @@ function LiveBuildingsPage() {
           {people.length === 0 ? <p className="mt-3 text-sm text-muted">عضوی برای این ساختمان ثبت نشده است.</p> : (
             <ul className="mt-3 divide-y divide-line text-sm">
               {people.map((employee) => (
-                <li key={employee.id} className="flex justify-between py-2">
-                  <span dir="ltr">{employee.username}</span>
-                  <span className="text-muted">{employee.isActive ? 'فعال' : 'غیرفعال'}</span>
+                <li key={employee.id} className="flex flex-wrap items-center justify-between gap-2 py-2">
+                  <span>
+                    <span dir="ltr">{employee.username}</span>
+                    <span className="ms-2 text-xs text-muted">{roleLabel(employee.role)} · {employee.isActive ? 'فعال' : 'غیرفعال'}</span>
+                  </span>
+                  {canAssign(employee) && (
+                    <Button
+                      variant="danger"
+                      onClick={() => {
+                        setDetaching(employee)
+                        setDestinationId(destinations[0]?.id ?? '')
+                        setDetachError('')
+                      }}
+                    >
+                      حذف از ساختمان
+                    </Button>
+                  )}
                 </li>
               ))}
             </ul>
@@ -260,6 +322,41 @@ function LiveBuildingsPage() {
             </form>
           )}
         </section>
+      )}
+      {detaching && building && (
+        <Dialog open title="حذف از ساختمان" onClose={() => !detachBusy && setDetaching(null)}>
+          <p className="text-sm">
+            حساب <span dir="ltr">{detaching.username}</span> از ساختمان «{building.name}» جدا شود؟
+            {detaching.role === 'ADMIN'
+              ? ' ادمین می‌تواند بدون ساختمان بماند.'
+              : ' این حساب باید به ساختمان دیگری منتقل شود؛ سفارش‌های قبلی عوض نمی‌شوند.'}
+          </p>
+          {destinations.length > 0 ? (
+            <div className="mt-3">
+              <Field label="ساختمان مقصد">
+                <select className={controlClass} value={destinationId} onChange={(event) => setDestinationId(event.target.value)} disabled={detachBusy}>
+                  {detaching.role === 'ADMIN' && <option value="">بدون ساختمان</option>}
+                  {destinations.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
+                </select>
+              </Field>
+            </div>
+          ) : detaching.role === 'ADMIN' ? (
+            <p className="mt-3 text-sm text-muted">ساختمان فعال دیگری نیست. این حساب ادمین بدون ساختمان می‌ماند.</p>
+          ) : (
+            <p className="mt-3 text-sm text-danger">ساختمان فعال دیگری نیست. اول یک ساختمان دیگر بسازید یا فعال کنید.</p>
+          )}
+          {detachError && <p className="mt-2 text-sm text-danger">{detachError}</p>}
+          <div className="mt-4 flex justify-end gap-2">
+            <Button variant="secondary" disabled={detachBusy} onClick={() => setDetaching(null)}>انصراف</Button>
+            <Button
+              variant="danger"
+              disabled={detachBusy || (destinations.length === 0 && detaching.role !== 'ADMIN')}
+              onClick={() => void confirmDetach()}
+            >
+              {detachBusy ? 'در حال انتقال' : 'حذف از این ساختمان'}
+            </Button>
+          </div>
+        </Dialog>
       )}
       {deleteConfirmation && building && (
         <Dialog open title="حذف ساختمان" onClose={() => !deleteBusy && setDeleteConfirmation(false)}>

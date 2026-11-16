@@ -116,3 +116,13 @@ export function patchOptions(options: MenuOption[]) {
 export function localOption(title: string, displayOrder: number): MenuOption {
   return { id: `new:${displayOrder}:${title}`, title, displayOrder }
 }
+
+export function sameOptions(left: MenuOption[], right: MenuOption[]) {
+  if (left.length !== right.length) return false
+  return left.every(
+    (option, index) =>
+      option.id === right[index]?.id &&
+      option.title === right[index]?.title &&
+      option.displayOrder === right[index]?.displayOrder,
+  )
+}

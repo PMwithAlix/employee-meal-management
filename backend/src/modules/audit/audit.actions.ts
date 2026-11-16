@@ -25,6 +25,7 @@ export const AuditAction = {
   MealOptionRemoved: 'MEAL_OPTION_REMOVED',
   MealOptionsReordered: 'MEAL_OPTIONS_REORDERED',
   MenuVersionPublished: 'MENU_VERSION_PUBLISHED',
+  MenuPublicationAnnounced: 'MENU_PUBLICATION_ANNOUNCED',
   ExcelImportPreviewCreated: 'EXCEL_IMPORT_PREVIEW_CREATED',
   ExcelImportConfirmed: 'EXCEL_IMPORT_CONFIRMED',
   ExcelImportRejected: 'EXCEL_IMPORT_REJECTED',

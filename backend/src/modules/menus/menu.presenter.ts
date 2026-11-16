@@ -89,6 +89,8 @@ export function presentMenu(menu: {
   year: number;
   month: number;
   publishedVersionId: string | null;
+  lastAnnouncedAt?: Date | null;
+  lastAnnouncedBy?: string | null;
   createdAt: Date;
   updatedAt: Date;
   versions?: { id: string; versionNumber: number; status: MenuVersionStatus }[];
@@ -99,6 +101,8 @@ export function presentMenu(menu: {
     jalaliYear: menu.year,
     jalaliMonth: menu.month,
     publishedVersionId: menu.publishedVersionId,
+    lastAnnouncedAt: menu.lastAnnouncedAt ?? null,
+    lastAnnouncedBy: menu.lastAnnouncedBy ?? null,
     createdAt: menu.createdAt,
     updatedAt: menu.updatedAt,
     versionCount: menu._count?.versions ?? menu.versions?.length,

@@ -1,7 +1,7 @@
-import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react'
+import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react'
 import { buildMonthMenu, createSnapshot, fullName, PERSONA_ID, ROLE_LABEL, SEED_MONTH } from '../../shared/fixtures/seed-data'
 import { defaultMonthDeadlines, formatDeadline, isOrderingOpen, summarizeBackendDeadlines, type MealDeadline, type MonthDeadlines } from '../../shared/lib/deadlines'
-import { addMonths, currentDateTime, JALALI_MONTHS, monthKey, type JalaliDate, type JalaliDateTime } from '../../shared/lib/jalali'
+import { addMonths, currentDateTime, isValidJalaliDate, JALALI_MONTHS, monthKey, type JalaliDate, type JalaliDateTime } from '../../shared/lib/jalali'
 import { canGiveFeedback, isEmployeeDeadlineOpen, type MealDeadlineState } from '../../shared/lib/order-rules'
 import { ADMIN_ACCOUNT_ID, normalizeUsername, passwordIssue, setSessionSecret, usernameIssue, verifySessionSecret } from '../../shared/lib/credentials'
 import { fa } from '../../shared/lib/persian-text'
@@ -77,6 +77,7 @@ interface StoreValue {
   setRole: (role: Role) => void
   setTheme: (theme: 'light' | 'dark') => void
   setPage: (page: Page) => void
+  openMenuMonth: (jy: number, jm: number) => { ok: boolean; message?: string }
   setCollapsed: (value: boolean) => void
   setMobileNav: (value: boolean) => void
   setMenuView: (view: MenuView) => void
@@ -298,6 +299,19 @@ export function StoreProvider({
     setPageState(next)
     setMobileNav(false)
   }
+
+  const openMenuMonth = useCallback((jy: number, jm: number) => {
+    if (!isValidJalaliDate(jy, jm, 1)) {
+      return { ok: false, message: 'ماه مقصد این اعلان نامعتبر است.' }
+    }
+    setSelectedMonth({ jy, jm })
+    if (!canAccess(role, 'menu')) {
+      return { ok: false, message: 'صفحه سفارش این ماه برای نقش شما در دسترس نیست.' }
+    }
+    setPageState('menu')
+    setMobileNav(false)
+    return { ok: true }
+  }, [role])
 
   function mealDeadlineAt(day: Pick<DayMenu, 'jy' | 'jm' | 'jd' | 'gregorianDate'>, meal: MealKind): MealDeadlineState {
     const date = day.gregorianDate ?? formatGregorianDate(day.jy, day.jm, day.jd)
@@ -815,6 +829,7 @@ export function StoreProvider({
     setRole,
     setTheme: setThemeState,
     setPage,
+    openMenuMonth,
     setCollapsed,
     setMobileNav,
     setMenuView,

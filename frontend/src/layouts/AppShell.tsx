@@ -15,7 +15,8 @@ import { NAV_ITEMS, pageTitle } from '../shared/config/navigation'
 import { useApp } from '../app/providers/app-store'
 import { cn } from '../shared/lib/persian-text'
 import { AuthRequestError } from '../features/auth/lib/auth-errors'
-import { notificationApi } from '../features/notifications/api/notifications-api'
+import { notificationApi, type NotificationItem } from '../features/notifications/api/notifications-api'
+import { consumeMenuDeepLink, parseMenuNotificationTarget, persistMenuDeepLink } from '../features/notifications/lib/notification-target'
 import {
   NOTIFICATION_PAGE_SIZE,
   applyLoadMoreError,
@@ -77,6 +78,7 @@ export function Shell() {
   const desktop = useIsDesktop()
   const [notesOpen, setNotesOpen] = useState(false)
   const [profileOpen, setProfileOpen] = useState(false)
+  const [deepLinkError, setDeepLinkError] = useState('')
   const [notificationRefresh, setNotificationRefresh] = useState(0)
   const [notifications, setNotifications] = useState<NotificationPanelState>(emptyNotificationPanel)
   const notificationsRef = useRef(notifications)
@@ -95,6 +97,13 @@ export function Shell() {
   useEffect(() => {
     document.title = `${pageTitle(app.page, app.role)} · ${BRAND_NAME}`
   }, [app.page, app.role])
+
+  useEffect(() => {
+    const pending = consumeMenuDeepLink()
+    if (!pending) return
+    const result = app.openMenuMonth(pending.jalaliYear, pending.jalaliMonth)
+    if (!result.ok) setDeepLinkError(result.message ?? 'باز کردن منوی مقصد ممکن نشد.')
+  }, [app.openMenuMonth])
 
   useEffect(() => {
     if (desktop && app.mobileNav) app.setMobileNav(false)
@@ -161,6 +170,21 @@ export function Shell() {
         message: error instanceof AuthRequestError ? error.message : 'علامت‌گذاری اعلان انجام نشد.',
       }))
     }
+  }
+
+  async function openNotification(item: NotificationItem) {
+    const target = parseMenuNotificationTarget(item.data)
+    if (target) persistMenuDeepLink(target)
+    setDeepLinkError('')
+    if (!item.readAt) await markNotificationRead(item.id)
+    if (!target) return
+    const result = app.openMenuMonth(target.jalaliYear, target.jalaliMonth)
+    if (result.ok) {
+      consumeMenuDeepLink()
+      setNotesOpen(false)
+      return
+    }
+    setDeepLinkError(result.message ?? 'باز کردن منوی مقصد ممکن نشد.')
   }
 
   async function markAllNotificationsRead() {
@@ -326,8 +350,7 @@ export function Shell() {
                           key={item.id}
                           type="button"
                           className={cn('block min-h-11 w-full rounded-md px-2 py-2 text-start hover:bg-surface2', !item.readAt && 'bg-infobg')}
-                          onClick={() => void markNotificationRead(item.id)}
-                          disabled={Boolean(item.readAt)}
+                          onClick={() => void openNotification(item)}
                         >
                           <span className="flex items-center justify-between gap-2">
                             <span className="text-sm font-medium">{item.title}</span>
@@ -407,6 +430,9 @@ export function Shell() {
       </div>
       <BottomNav />
       <div className="fixed bottom-[calc(4.75rem+env(safe-area-inset-bottom,0px))] start-4 z-50 space-y-2 md:bottom-4">
+        {deepLinkError && (
+          <div className="rounded-md border border-line bg-dangerbg px-3 py-2 text-sm text-danger shadow-card" role="alert">{deepLinkError}</div>
+        )}
         {app.toasts.map((item) => (
           <div key={item.id} className="rounded-md border border-line bg-surface px-3 py-2 text-sm shadow-card">{item.text}</div>
         ))}

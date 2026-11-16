@@ -15,11 +15,13 @@ import {
   isValidJalaliMonth,
   utcDateFromGregorian,
 } from '../../common/calendar/jalali';
+import { AnnounceMenuDto } from './dto/announce-menu.dto';
 import { CreateMenuDto } from './dto/create-menu.dto';
 import { CreateVersionDto } from './dto/create-version.dto';
 import { ListMenusQueryDto } from './dto/list-menus.query';
 import { UpsertMealDto } from './dto/upsert-meal.dto';
 import { presentMenu, presentVersion } from './menu.presenter';
+import { MENU_PUBLISHED_NOTIFICATION } from './menu.types';
 import {
   groupItemsAsMeals,
   normalizeOptionTitle,
@@ -406,14 +408,85 @@ export class MenusService {
           },
           tx,
         );
-        return presentVersion(published);
-      });
+      return presentVersion(published);
+    });
     } catch (error) {
       if (error instanceof UnprocessableEntityException) {
         throw error;
       }
       throw error;
     }
+  }
+
+  async announce(actor: AuthUser, menuId: string, dto: AnnounceMenuDto) {
+    const menu = await this.requireMenu(menuId);
+    if (!menu.publishedVersionId) {
+      throw new UnprocessableEntityException(
+        'تا وقتی نسخه‌ای برای این ماه منتشر نشده، اعلام انتشار برای کاربران ممکن نیست.',
+      );
+    }
+    const title = dto.title.replace(/\s+/g, ' ').trim();
+    const body = dto.body.replace(/\s+/g, ' ').trim();
+    if (!title || !body) {
+      throw new UnprocessableEntityException('عنوان و متن اعلام انتشار الزامی است.');
+    }
+
+    return this.prisma.$transaction(async (tx) => {
+      const recipients = await tx.user.findMany({
+        where: { isActive: true },
+        select: { id: true },
+      });
+      const announcedAt = new Date();
+      if (recipients.length) {
+        await tx.notification.createMany({
+          data: recipients.map((user) => ({
+            userId: user.id,
+            type: MENU_PUBLISHED_NOTIFICATION,
+            title,
+            body,
+            data: {
+              page: 'menu',
+              jalaliYear: menu.year,
+              jalaliMonth: menu.month,
+              menuId: menu.id,
+            },
+          })),
+        });
+      }
+      const updated = await tx.menu.update({
+        where: { id: menuId },
+        data: {
+          lastAnnouncedAt: announcedAt,
+          lastAnnouncedBy: actor.id,
+        },
+      });
+      await this.audit.record(
+        {
+          actorId: actor.id,
+          action: AuditAction.MenuPublicationAnnounced,
+          entityType: AuditEntity.Menu,
+          entityId: menuId,
+          beforeData: {
+            lastAnnouncedAt: menu.lastAnnouncedAt,
+            lastAnnouncedBy: menu.lastAnnouncedBy,
+          },
+          afterData: {
+            lastAnnouncedAt: announcedAt,
+            lastAnnouncedBy: actor.id,
+            recipientCount: recipients.length,
+            title,
+            body,
+            jalaliYear: menu.year,
+            jalaliMonth: menu.month,
+          },
+        },
+        tx,
+      );
+      return {
+        ...presentMenu(updated),
+        recipientCount: recipients.length,
+      };
+    });
   }
 
   async requireMenu(id: string) {

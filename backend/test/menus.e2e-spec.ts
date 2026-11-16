@@ -51,6 +51,9 @@ async function cleanupMenuFixtures() {
     await prisma.session.deleteMany({
       where: { user: { username: { startsWith: 'e2e.menu.' } } },
     });
+    await prisma.notification.deleteMany({
+      where: { user: { username: { startsWith: 'e2e.menu.' } } },
+    });
     await prisma.menuItem.deleteMany({
       where: {
         menuVersion: {
@@ -424,6 +427,102 @@ describe('Menus (e2e)', () => {
     ).toBe(item.title);
   });
 
+  it('announces a published month to every active user and keeps the month in notification data', async () => {
+    await prisma.user.update({
+      where: { username: 'e2e.menu.hr' },
+      data: { isActive: false },
+    });
+
+    const denied = await request(app.getHttpServer())
+      .post(`/api/v1/menus/${menuId}/announce`)
+      .set('Cookie', employeeCookie)
+      .send({
+        title: 'منوی فروردین منتشر شد 🍽️',
+        body: 'برای مشاهده منو و ثبت وعده‌های غذایی، وارد سامانه شوید.',
+      });
+    expect(denied.status).toBe(403);
+
+    const unpublished = await request(app.getHttpServer())
+      .post('/api/v1/menus')
+      .set('Cookie', adminCookie)
+      .send({ year: 1411, month: 2 });
+    expect(unpublished.status).toBe(201);
+    expect(
+      (
+        await request(app.getHttpServer())
+          .post(`/api/v1/menus/${unpublished.body.id as string}/announce`)
+          .set('Cookie', adminCookie)
+          .send({
+            title: 'منوی اردیبهشت منتشر شد 🍽️',
+            body: 'برای مشاهده منو و ثبت وعده‌های غذایی، وارد سامانه شوید.',
+          })
+      ).status,
+    ).toBe(422);
+
+    const announced = await request(app.getHttpServer())
+      .post(`/api/v1/menus/${menuId}/announce`)
+      .set('Cookie', adminCookie)
+      .send({
+        title: 'منوی سفارشی فروردین',
+        body: 'متن تأییدشده مدیر برای فروردین',
+      });
+    expect(announced.status).toBe(200);
+    expect(announced.body.jalaliYear).toBe(1411);
+    expect(announced.body.jalaliMonth).toBe(1);
+    expect(announced.body.lastAnnouncedBy).toBe(adminId);
+    expect(announced.body.lastAnnouncedAt).toBeTruthy();
+    expect(announced.body.recipientCount).toBeGreaterThanOrEqual(4);
+
+    const employeeNotes = await request(app.getHttpServer())
+      .get('/api/v1/notifications')
+      .set('Cookie', employeeCookie);
+    expect(employeeNotes.status).toBe(200);
+    const publishedNote = (
+      employeeNotes.body.items as Array<{
+        type: string;
+        title: string;
+        body: string;
+        data: {
+          page: string;
+          jalaliYear: number;
+          jalaliMonth: number;
+          menuId: string;
+        };
+      }>
+    ).find((item) => item.type === 'MENU_PUBLISHED');
+    expect(publishedNote?.title).toBe('منوی سفارشی فروردین');
+    expect(publishedNote?.body).toBe('متن تأییدشده مدیر برای فروردین');
+    expect(publishedNote?.data).toMatchObject({
+      page: 'menu',
+      jalaliYear: 1411,
+      jalaliMonth: 1,
+      menuId,
+    });
+
+    const hrNotes = await prisma.notification.count({
+      where: {
+        user: { username: 'e2e.menu.hr' },
+        type: 'MENU_PUBLISHED',
+      },
+    });
+    expect(hrNotes).toBe(0);
+
+    const again = await request(app.getHttpServer())
+      .post(`/api/v1/menus/${menuId}/announce`)
+      .set('Cookie', adminCookie)
+      .send({
+        title: 'اعلام مجدد فروردین',
+        body: 'برای مشاهده منو و ثبت وعده‌های غذایی، وارد سامانه شوید.',
+      });
+    expect(again.status).toBe(200);
+    expect(again.body.recipientCount).toBeGreaterThanOrEqual(4);
+
+    await prisma.user.update({
+      where: { username: 'e2e.menu.hr' },
+      data: { isActive: true },
+    });
+  });
+
   it('writes menu audit rows from the session actor', async () => {
     const logs = await prisma.auditLog.findMany({
       where: {
@@ -432,6 +531,7 @@ describe('Menus (e2e)', () => {
           in: [
             'MENU_CREATED',
             'MENU_VERSION_PUBLISHED',
+            'MENU_PUBLICATION_ANNOUNCED',
             'EXCEL_IMPORT_CONFIRMED',
           ],
         },

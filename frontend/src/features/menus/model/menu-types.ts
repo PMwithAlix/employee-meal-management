@@ -24,7 +24,13 @@ export type MenuSummary = {
   jalaliYear: number
   jalaliMonth: number
   publishedVersionId: string | null
+  lastAnnouncedAt?: string | null
+  lastAnnouncedBy?: string | null
   versionCount?: number
+}
+
+export type MenuAnnouncementResult = MenuSummary & {
+  recipientCount: number
 }
 
 export type MenuVersionSummary = {
@@ -121,6 +127,7 @@ export const MENU_ENDPOINTS = {
   versions: (id: string) => `/menus/${id}/versions`,
   version: (id: string, versionId: string) => `/menus/${id}/versions/${versionId}`,
   publish: (id: string, versionId: string) => `/menus/${id}/versions/${versionId}/publish`,
+  announce: (id: string) => `/menus/${id}/announce`,
   preview: '/menus/imports/preview',
   patchImport: (importId: string) => `/menus/imports/${importId}`,
   confirm: (importId: string) => `/menus/imports/${importId}/confirm`,

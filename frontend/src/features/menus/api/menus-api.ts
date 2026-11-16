@@ -7,6 +7,7 @@ import {
   type ImportConfirmResult,
   type ImportPreview,
   type MealPatch,
+  type MenuAnnouncementResult,
   type MenuListResponse,
   type MenuSummary,
   type MenuVersionDetail,
@@ -29,6 +30,8 @@ function parseSummary(value: unknown): MenuSummary | null {
     jalaliYear: body.jalaliYear,
     jalaliMonth: body.jalaliMonth,
     publishedVersionId: typeof body.publishedVersionId === 'string' ? body.publishedVersionId : null,
+    lastAnnouncedAt: typeof body.lastAnnouncedAt === 'string' ? body.lastAnnouncedAt : null,
+    lastAnnouncedBy: typeof body.lastAnnouncedBy === 'string' ? body.lastAnnouncedBy : null,
     versionCount: typeof body.versionCount === 'number' ? body.versionCount : undefined,
   }
 }
@@ -177,6 +180,21 @@ export const menuApi = {
       const version = parseVersion(value)
       if (!version) throw new Error('پاسخ انتشار نامعتبر است.')
       return version
+    })
+  },
+
+  announce(menuId: string, payload: { title: string; body: string }) {
+    return authRequest<unknown>(MENU_ENDPOINTS.announce(menuId), {
+      ...session,
+      method: 'POST',
+      body: payload,
+    }).then((value) => {
+      const summary = parseSummary(value)
+      const record = asRecord(value)
+      if (!summary || typeof record?.recipientCount !== 'number') {
+        throw new Error('پاسخ اعلام انتشار نامعتبر است.')
+      }
+      return { ...summary, recipientCount: record.recipientCount } satisfies MenuAnnouncementResult
     })
   },
 
