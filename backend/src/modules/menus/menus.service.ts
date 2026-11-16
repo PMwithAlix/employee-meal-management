@@ -4,7 +4,12 @@ import {
   NotFoundException,
   UnprocessableEntityException,
 } from '@nestjs/common';
-import { MenuVersionStatus, Prisma } from '@prisma/client';
+import {
+  GuestOrderStatus,
+  MenuVersionStatus,
+  OrderCycleStatus,
+  Prisma,
+} from '@prisma/client';
 import { AuditAction, AuditEntity } from '../audit/audit.actions';
 import { AuditService } from '../audit/audit.service';
 import type { AuthUser } from '../../common/types/auth-user';
@@ -225,6 +230,10 @@ export class MenusService {
             mealType: dto.mealType,
           },
         });
+        await this.assertMenuItemsRemovable(
+          tx,
+          existing.map((item) => item.id),
+        );
         await tx.menuItem.deleteMany({
           where: {
             menuVersionId: versionId,
@@ -291,6 +300,12 @@ export class MenusService {
       const keepIds = options
         .map((option) => option.id)
         .filter((id): id is string => !!id);
+      await this.assertMenuItemsRemovable(
+        tx,
+        before
+          .filter((item) => !keepIds.includes(item.id))
+          .map((item) => item.id),
+      );
       await tx.menuItem.deleteMany({
         where: {
           menuVersionId: versionId,
@@ -420,6 +435,34 @@ export class MenusService {
     });
   }
 
+  private async assertMenuItemsRemovable(
+    tx: Prisma.TransactionClient,
+    itemIds: string[],
+  ) {
+    if (!itemIds.length) {
+      return;
+    }
+    const [activeOrders, activeGuests] = await Promise.all([
+      tx.orderCycle.count({
+        where: {
+          menuItemId: { in: itemIds },
+          status: OrderCycleStatus.ACTIVE,
+        },
+      }),
+      tx.guestOrder.count({
+        where: {
+          menuItemId: { in: itemIds },
+          status: GuestOrderStatus.ACTIVE,
+        },
+      }),
+    ]);
+    if (activeOrders + activeGuests > 0) {
+      throw new UnprocessableEntityException(
+        'این غذا در سفارش فعال ثبت شده است و حذف نمی‌شود. ابتدا سفارش فعال این وعده را لغو کنید.',
+      );
+    }
+  }
+
   private rethrowMenuMutationError(error: unknown): never {
     const meta =
       error && typeof error === 'object' && 'meta' in error
@@ -440,11 +483,12 @@ export class MenusService {
       );
     }
     if (
-      error instanceof Prisma.PrismaClientKnownRequestError &&
-      error.code === 'P2003'
+      (error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === 'P2003') ||
+      text.includes('cannot detach menu item from an active order cycle')
     ) {
       throw new UnprocessableEntityException(
-        'این گزینه به سفارش ثبت‌شده وصل است و حذف نمی‌شود.',
+        'این غذا در سفارش فعال ثبت شده است و حذف نمی‌شود. ابتدا سفارش فعال این وعده را لغو کنید.',
       );
     }
     throw error;

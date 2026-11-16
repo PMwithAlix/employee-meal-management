@@ -15,7 +15,7 @@ export function presentOrder(order: {
   currentCycle: {
     id: string;
     cycleNumber: number;
-    menuItemId: string;
+    menuItemId: string | null;
     usernameSnapshot: string;
     buildingIdSnapshot: string | null;
     buildingNameSnapshot: string | null;
@@ -24,7 +24,7 @@ export function presentOrder(order: {
     mealTypeSnapshot: MealType;
     status: OrderCycleStatus;
     createdAt: Date;
-    menuItem: { menuVersionId: string; title: string };
+    menuItem: { menuVersionId: string; title: string } | null;
     groupSnapshots: { groupId: string; groupNameSnapshot: string }[];
     statusHistory?: {
       id: string;
@@ -38,7 +38,7 @@ export function presentOrder(order: {
   cycles?: {
     id: string;
     cycleNumber: number;
-    menuItemId: string;
+    menuItemId: string | null;
     status: OrderCycleStatus;
     mealTitleSnapshot: string;
     createdAt: Date;
@@ -68,7 +68,7 @@ export function presentOrder(order: {
           id: cycle.id,
           cycleNumber: cycle.cycleNumber,
           menuItemId: cycle.menuItemId,
-          menuVersionId: cycle.menuItem.menuVersionId,
+          menuVersionId: cycle.menuItem?.menuVersionId ?? null,
           optionTitle: cycle.mealTitleSnapshot,
           usernameSnapshot: cycle.usernameSnapshot,
           buildingIdSnapshot: cycle.buildingIdSnapshot,

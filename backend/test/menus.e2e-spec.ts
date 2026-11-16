@@ -314,6 +314,59 @@ describe('Menus (e2e)', () => {
     expect(JSON.stringify(adminLunch.body.meals)).toContain('خوراک ادمین');
   });
 
+  it('rejects removing a menu option with an active order and allows it after cancel', async () => {
+    const lunch = await prisma.menuItem.findFirst({
+      where: {
+        menuVersionId: draftId,
+        mealType: MealType.LUNCH,
+      },
+      orderBy: { mealDate: 'asc' },
+    });
+    expect(lunch).toBeTruthy();
+    const mealDate = formatDateOnly(lunch!.mealDate);
+
+    const created = await request(app.getHttpServer())
+      .post('/api/v1/orders')
+      .set('Cookie', employeeCookie)
+      .send({
+        mealDate,
+        mealType: MealType.LUNCH,
+        menuItemId: lunch!.id,
+      });
+    expect(created.status).toBe(201);
+
+    const blocked = await request(app.getHttpServer())
+      .patch(`/api/v1/menus/${menuId}/versions/${draftId}`)
+      .set('Cookie', adminCookie)
+      .send({
+        mealDate,
+        mealType: MealType.LUNCH,
+        options: [],
+      });
+    expect(blocked.status).toBe(422);
+    expect(String(blocked.body.message ?? '')).toContain('سفارش فعال');
+    expect(await prisma.menuItem.findUnique({ where: { id: lunch!.id } })).not.toBeNull();
+
+    expect(
+      (
+        await request(app.getHttpServer())
+          .post(`/api/v1/orders/me/${created.body.id as string}/cancel`)
+          .set('Cookie', employeeCookie)
+      ).status,
+    ).toBe(200);
+
+    const allowed = await request(app.getHttpServer())
+      .patch(`/api/v1/menus/${menuId}/versions/${draftId}`)
+      .set('Cookie', adminCookie)
+      .send({
+        mealDate,
+        mealType: MealType.LUNCH,
+        options: [],
+      });
+    expect(allowed.status).toBe(200);
+    expect(await prisma.menuItem.findUnique({ where: { id: lunch!.id } })).toBeNull();
+  });
+
   it('does not expose a publish endpoint', async () => {
     expect(
       (

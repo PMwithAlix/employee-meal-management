@@ -223,7 +223,7 @@ model Order {
 model OrderCycle {
   id                   String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   orderId              String           @db.Uuid
-  menuItemId           String           @db.Uuid
+  menuItemId           String?          @db.Uuid
   cycleNumber          Int
   usernameSnapshot     String
   buildingIdSnapshot   String?          @db.Uuid
@@ -237,7 +237,7 @@ model OrderCycle {
 
   order          Order                @relation("OrderCycles", fields: [orderId], references: [id], onDelete: Restrict, onUpdate: Restrict)
   currentFor     Order?               @relation("OrderCurrentCycle")
-  menuItem       MenuItem             @relation(fields: [menuItemId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  menuItem       MenuItem?            @relation(fields: [menuItemId], references: [id], onDelete: SetNull, onUpdate: Restrict)
   statusHistory  OrderStatusHistory[]
   groupSnapshots OrderGroupSnapshot[]
   rating         Rating?
@@ -297,7 +297,7 @@ model GuestOrder {
   updatedAt            DateTime         @updatedAt @db.Timestamptz(6)
 
   building Building            @relation(fields: [buildingId], references: [id], onDelete: Restrict, onUpdate: Restrict)
-  menuItem MenuItem?           @relation(fields: [menuItemId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  menuItem MenuItem?           @relation(fields: [menuItemId], references: [id], onDelete: SetNull, onUpdate: Restrict)
   creator  User                @relation(fields: [createdBy], references: [id], onDelete: Restrict, onUpdate: Restrict)
   history  GuestOrderHistory[]
 

@@ -90,7 +90,6 @@ function DailyMenu({ managed }: { managed: ReturnType<typeof useManagedMenu> }) 
           <p className="text-xs text-muted" aria-live="polite">
             {managed.saveStatus === 'saving' && 'در حال ذخیره‌سازی'}
             {managed.saveStatus === 'saved' && 'ذخیره شد'}
-            {managed.saveStatus === 'error' && (managed.saveMessage || 'خطا در ذخیره‌سازی')}
             {managed.saveStatus === 'idle' && 'اعلام منو به کاربران جدا از ذخیره است و فقط با تأیید شما ارسال می‌شود.'}
           </p>
         </div>
@@ -111,6 +110,11 @@ function DailyMenu({ managed }: { managed: ReturnType<typeof useManagedMenu> }) 
           </Button>
         </div>
       </div>
+      {managed.saveStatus === 'error' && (
+        <p className="rounded-md bg-dangerbg px-3 py-2 text-sm text-danger" role="alert">
+          {managed.saveMessage || 'ذخیره وعده انجام نشد.'}
+        </p>
+      )}
       {managed.message && <p className="rounded-md bg-dangerbg px-3 py-2 text-sm text-danger" role="alert">{managed.message}</p>}
       {announceNotice && <p className="rounded-md bg-okbg px-3 py-2 text-sm text-ok" role="status">{announceNotice}</p>}
       {managed.issues.length > 0 && (
@@ -303,7 +307,7 @@ function OptionEditor({
         <Button type="submit" variant="secondary" disabled={disabled || items.length >= 3}>افزودن</Button>
       </form>
       <Dialog open={Boolean(removing)} title={`حذف از ${label}`} onClose={() => setRemoving(null)}>
-        <p className="text-sm">«{removing?.title}» از {label} این روز حذف شود؟ سفارش‌هایی که قبلاً این نام را ثبت کرده‌اند عوض نمی‌شوند.</p>
+        <p className="text-sm">«{removing?.title}» از {label} این روز حذف شود؟ اگر سفارش فعال روی این غذا باشد حذف انجام نمی‌شود. سفارش‌های لغوشده با نام ثبت‌شدهٔ قبلی می‌مانند.</p>
         <div className="mt-3 flex justify-end gap-2">
           <Button variant="secondary" onClick={() => setRemoving(null)}>انصراف</Button>
           <Button
