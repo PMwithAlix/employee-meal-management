@@ -62,6 +62,14 @@ export const groupApi = {
     return authRequest<unknown>(`/groups/${id}/deactivate`, { ...session, method: 'POST', signal }).then(requireGroup)
   },
 
+  remove(id: string, signal?: AbortSignal) {
+    return authRequest<unknown>(`/groups/${id}`, { ...session, method: 'DELETE', signal }).then((value) => {
+      const body = value && typeof value === 'object' ? (value as { ok?: unknown }) : null
+      if (body?.ok !== true) throw new AuthRequestError('http', 'حذف گروه تأیید نشد.')
+      return { ok: true as const }
+    })
+  },
+
   members(id: string, signal?: AbortSignal) {
     return this.listMembers(id, signal).then((rows) => rows.map((row) => row.userId))
   },

@@ -43,6 +43,61 @@ function setup(options?: { activeUsers?: number; locked?: Array<{ id: string }>;
   };
 }
 
+describe('BuildingsService unique names', () => {
+  it('rejects a second building with the same name', async () => {
+    const tx = {
+      building: {
+        findFirst: jest.fn().mockResolvedValue({ id: buildingId }),
+        create: jest.fn(),
+      },
+    };
+    const prisma = {
+      $transaction: jest.fn((callback: (client: typeof tx) => unknown) => callback(tx)),
+    };
+    const audit = { record: jest.fn() };
+    const service = new BuildingsService(prisma as never, audit as never);
+
+    await expect(
+      service.create(actor, { name: '  دهقان  ' }),
+    ).rejects.toBeInstanceOf(ConflictException);
+    expect(tx.building.create).not.toHaveBeenCalled();
+    expect(audit.record).not.toHaveBeenCalled();
+  });
+
+  it('allows renaming a building to its current name', async () => {
+    const current = {
+      id: buildingId,
+      name: 'دهقان',
+      isActive: true,
+    };
+    const tx = {
+      building: {
+        findFirst: jest.fn().mockResolvedValue(null),
+        update: jest.fn().mockResolvedValue(current),
+      },
+    };
+    const prisma = {
+      $transaction: jest.fn((callback: (client: typeof tx) => unknown) => callback(tx)),
+      building: {
+        findUnique: jest.fn().mockResolvedValue(current),
+      },
+    };
+    const audit = { record: jest.fn().mockResolvedValue(undefined) };
+    const service = new BuildingsService(prisma as never, audit as never);
+
+    await expect(
+      service.update(actor, buildingId, { name: 'دهقان' }),
+    ).resolves.toMatchObject({ id: buildingId, name: 'دهقان' });
+    expect(tx.building.findFirst).toHaveBeenCalledWith({
+      where: {
+        name: { equals: 'دهقان', mode: 'insensitive' },
+        id: { not: buildingId },
+      },
+      select: { id: true },
+    });
+  });
+});
+
 describe('BuildingsService activation lifecycle', () => {
   it('blocks deactivation while active users are assigned', async () => {
     const { service, tx, audit } = setup({ activeUsers: 2 });

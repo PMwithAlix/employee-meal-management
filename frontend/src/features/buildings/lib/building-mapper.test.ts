@@ -1,5 +1,15 @@
 import { describe, expect, it } from 'vitest'
+import { isDuplicateBuildingName, normalizeBuildingName } from './building-name'
 import { activeMemberCount, parseBuilding, parseBuildingDetail } from './building-mapper'
+
+describe('building names', () => {
+  it('treats trimmed and case-insensitive repeats as duplicates', () => {
+    expect(normalizeBuildingName('  دهقان   ')).toBe('دهقان')
+    expect(isDuplicateBuildingName('دهقان', [{ id: 'b1', name: 'دهقان' }])).toBe(true)
+    expect(isDuplicateBuildingName('  دهقان  ', [{ id: 'b1', name: 'دهقان' }], 'b1')).toBe(false)
+    expect(isDuplicateBuildingName('شمال', [{ id: 'b1', name: 'دهقان' }])).toBe(false)
+  })
+})
 
 describe('parseBuilding', () => {
   it('keeps id and name from the backend payload', () => {

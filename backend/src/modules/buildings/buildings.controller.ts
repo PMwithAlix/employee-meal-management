@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   HttpCode,
   HttpStatus,
@@ -74,5 +75,16 @@ export class BuildingsController {
     @Body() dto: UpdateBuildingDto,
   ) {
     return this.buildings.update(actor, id, dto);
+  }
+
+  @Delete(':id')
+  @Roles(Role.ADMIN)
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'حذف دائمی ساختمان توسط ادمین' })
+  remove(
+    @CurrentUser() actor: AuthUser,
+    @Param('id', ParseUUIDPipe) id: string,
+  ) {
+    return this.buildings.remove(actor, id);
   }
 }

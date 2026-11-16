@@ -60,6 +60,9 @@ describe('groupApi', () => {
       if (method === 'POST' && path.endsWith('/groups/g1/deactivate')) {
         return new Response(JSON.stringify({ ...group, isActive: false }), { status: 200 })
       }
+      if (method === 'DELETE' && path.endsWith('/groups/g1')) {
+        return new Response(JSON.stringify({ ok: true }), { status: 200 })
+      }
       return new Response('missing', { status: 404 })
     }))
     expect((await groupApi.get('g1')).memberCount).toBe(1)
@@ -71,6 +74,7 @@ describe('groupApi', () => {
     await groupApi.addMember('g1', 'u2')
     await groupApi.removeMember('g1', 'u1')
     expect((await groupApi.deactivate('g1')).isActive).toBe(false)
+    await expect(groupApi.remove('g1')).resolves.toEqual({ ok: true })
   })
 
   it('treats empty members and empty history as valid, not as failure', async () => {

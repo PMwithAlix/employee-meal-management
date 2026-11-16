@@ -11,6 +11,7 @@ const mutating: Capability[] = [
   'employee.edit',
   'building.edit',
   'group.edit',
+  'org.delete',
   'settings.meals',
 ]
 
@@ -56,6 +57,8 @@ describe('management observer access', () => {
     expect(can('admin', 'employee.edit')).toBe(true)
     expect(can('admin', 'building.edit')).toBe(true)
     expect(can('admin', 'group.edit')).toBe(true)
+    expect(can('admin', 'org.delete')).toBe(true)
+    expect(can('hr', 'org.delete')).toBe(false)
     expect(can('hr', 'group.edit')).toBe(true)
     expect(can('support', 'group.edit')).toBe(false)
     expect(can('management', 'group.edit')).toBe(false)

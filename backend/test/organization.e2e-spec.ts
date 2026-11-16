@@ -183,7 +183,7 @@ describe('Organization (e2e)', () => {
     await prisma.$disconnect();
   });
 
-  it('creates buildings, including duplicate names, and rejects employee access', async () => {
+  it('creates buildings, rejects duplicate names, and rejects employee access', async () => {
     const created = await request(app.getHttpServer())
       .post('/api/v1/buildings')
       .set('Cookie', adminCookie)
@@ -193,7 +193,7 @@ describe('Organization (e2e)', () => {
       .set('Cookie', adminCookie)
       .send({ name: 'e2e-org-dup' });
     expect(created.status).toBe(201);
-    expect(dup.status).toBe(201);
+    expect(dup.status).toBe(409);
     otherBuildingId = created.body.id as string;
     expect(
       (

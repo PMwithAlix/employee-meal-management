@@ -7,6 +7,8 @@ import { AuditAction, AuditEntity } from '../audit/audit.actions';
 import { AuditService } from '../audit/audit.service';
 import type { AuthUser } from '../../common/types/auth-user';
 import { PrismaService } from '../../database/prisma.service';
+import { Prisma } from '@prisma/client';
+import { normalizeBuildingName } from './building-name';
 import { CreateBuildingDto } from './dto/create-building.dto';
 import { UpdateBuildingDto } from './dto/update-building.dto';
 
@@ -18,21 +20,27 @@ export class BuildingsService {
   ) {}
 
   async create(actor: AuthUser, dto: CreateBuildingDto) {
-    const name = dto.name.trim();
-    return this.prisma.$transaction(async (tx) => {
-      const building = await tx.building.create({ data: { name } });
-      await this.audit.record(
-        {
-          actorId: actor.id,
-          action: AuditAction.BuildingCreated,
-          entityType: AuditEntity.Building,
-          entityId: building.id,
-          afterData: building,
-        },
-        tx,
-      );
-      return building;
-    });
+    const name = normalizeBuildingName(dto.name);
+    try {
+      return await this.prisma.$transaction(async (tx) => {
+        await this.assertUniqueName(tx, name);
+        const building = await tx.building.create({ data: { name } });
+        await this.audit.record(
+          {
+            actorId: actor.id,
+            action: AuditAction.BuildingCreated,
+            entityType: AuditEntity.Building,
+            entityId: building.id,
+            afterData: building,
+          },
+          tx,
+        );
+        return building;
+      });
+    } catch (error) {
+      this.throwIfUnique(error);
+      throw error;
+    }
   }
 
   list() {
@@ -128,24 +136,91 @@ export class BuildingsService {
     if (!current) {
       throw new NotFoundException('ساختمان پیدا نشد.');
     }
-    const name = dto.name.trim();
-    return this.prisma.$transaction(async (tx) => {
-      const building = await tx.building.update({
-        where: { id },
-        data: { name },
+    const name = normalizeBuildingName(dto.name);
+    try {
+      return await this.prisma.$transaction(async (tx) => {
+        await this.assertUniqueName(tx, name, id);
+        const building = await tx.building.update({
+          where: { id },
+          data: { name },
+        });
+        await this.audit.record(
+          {
+            actorId: actor.id,
+            action: AuditAction.BuildingUpdated,
+            entityType: AuditEntity.Building,
+            entityId: id,
+            beforeData: current,
+            afterData: building,
+          },
+          tx,
+        );
+        return building;
       });
+    } catch (error) {
+      this.throwIfUnique(error);
+      throw error;
+    }
+  }
+
+  async remove(actor: AuthUser, id: string) {
+    const current = await this.get(id);
+    const assigned = await this.prisma.user.count({ where: { buildingId: id } });
+    if (assigned > 0) {
+      throw new ConflictException(
+        `ابتدا ${assigned} کاربر این ساختمان را به ساختمان دیگری منتقل یا حذف کنید.`,
+      );
+    }
+    await this.prisma.$transaction(async (tx) => {
+      const guests = await tx.guestOrder.findMany({
+        where: { buildingId: id },
+        select: { id: true },
+      });
+      const guestIds = guests.map((guest) => guest.id);
+      if (guestIds.length > 0) {
+        await tx.guestOrderHistory.deleteMany({
+          where: { guestOrderId: { in: guestIds } },
+        });
+        await tx.guestOrder.deleteMany({ where: { id: { in: guestIds } } });
+      }
       await this.audit.record(
         {
           actorId: actor.id,
-          action: AuditAction.BuildingUpdated,
+          action: AuditAction.BuildingDeleted,
           entityType: AuditEntity.Building,
           entityId: id,
           beforeData: current,
-          afterData: building,
         },
         tx,
       );
-      return building;
+      await tx.building.delete({ where: { id } });
     });
+    return { ok: true as const };
+  }
+
+  private async assertUniqueName(
+    tx: Prisma.TransactionClient,
+    name: string,
+    excludeId?: string,
+  ) {
+    const existing = await tx.building.findFirst({
+      where: {
+        name: { equals: name, mode: 'insensitive' },
+        ...(excludeId ? { id: { not: excludeId } } : {}),
+      },
+      select: { id: true },
+    });
+    if (existing) {
+      throw new ConflictException('نام ساختمان تکراری است.');
+    }
+  }
+
+  private throwIfUnique(error: unknown): void {
+    if (
+      error instanceof Prisma.PrismaClientKnownRequestError &&
+      error.code === 'P2002'
+    ) {
+      throw new ConflictException('نام ساختمان تکراری است.');
+    }
   }
 }

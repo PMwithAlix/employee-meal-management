@@ -98,7 +98,7 @@ model Session {
 
 model Building {
   id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  name      String
+  name      String   @unique
   isActive  Boolean  @default(true)
   createdAt DateTime @default(now()) @db.Timestamptz(6)
   updatedAt DateTime @updatedAt @db.Timestamptz(6)

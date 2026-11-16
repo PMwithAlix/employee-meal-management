@@ -108,4 +108,15 @@ export class GroupsController {
   history(@Param('id', ParseUUIDPipe) id: string) {
     return this.groups.history(id);
   }
+
+  @Delete(':id')
+  @Roles(Role.ADMIN)
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'حذف دائمی گروه توسط ادمین' })
+  remove(
+    @CurrentUser() actor: AuthUser,
+    @Param('id', ParseUUIDPipe) id: string,
+  ) {
+    return this.groups.remove(actor, id);
+  }
 }

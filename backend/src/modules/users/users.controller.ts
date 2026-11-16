@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   HttpCode,
   HttpStatus,
@@ -95,5 +96,16 @@ export class UsersController {
     @Body() dto: ResetPasswordDto,
   ) {
     return this.users.resetPassword(actor, id, dto);
+  }
+
+  @Delete(':id')
+  @Roles(Role.ADMIN)
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'حذف دائمی کاربر توسط ادمین' })
+  remove(
+    @CurrentUser() actor: AuthUser,
+    @Param('id', ParseUUIDPipe) id: string,
+  ) {
+    return this.users.remove(actor, id);
   }
 }

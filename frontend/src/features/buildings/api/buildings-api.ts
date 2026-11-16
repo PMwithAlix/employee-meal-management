@@ -62,4 +62,12 @@ export const buildingApi = {
       signal,
     }).then(requireBuilding)
   },
+
+  remove(id: string, signal?: AbortSignal) {
+    return authRequest<unknown>(`/buildings/${id}`, { ...session, method: 'DELETE', signal }).then((value) => {
+      const body = value && typeof value === 'object' ? (value as { ok?: unknown }) : null
+      if (body?.ok !== true) throw new AuthRequestError('http', 'حذف ساختمان تأیید نشد.')
+      return { ok: true as const }
+    })
+  },
 }

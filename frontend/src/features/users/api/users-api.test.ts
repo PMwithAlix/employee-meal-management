@@ -88,6 +88,9 @@ describe('userApi', () => {
       if (method === 'GET' && path.endsWith('/users/u1')) {
         return new Response(JSON.stringify(user('u1')), { status: 200 })
       }
+      if (method === 'DELETE' && path.endsWith('/users/u1')) {
+        return new Response(JSON.stringify({ ok: true }), { status: 200 })
+      }
       return new Response('missing', { status: 404 })
     }))
     expect((await userApi.create({ username: 'new.emp', password: 'Kavosh-1405', role: 'EMPLOYEE', buildingId: 'b1' })).id).toBe('new')
@@ -95,6 +98,7 @@ describe('userApi', () => {
     expect((await userApi.deactivate('u1')).isActive).toBe(false)
     expect((await userApi.reactivate('u1')).isActive).toBe(true)
     await expect(userApi.resetPassword('u1', 'Newpass12')).resolves.toEqual({ ok: true })
+    await expect(userApi.remove('u1')).resolves.toEqual({ ok: true })
     expect((await userApi.get('u1')).username).toBe('emp.u1')
   })
 

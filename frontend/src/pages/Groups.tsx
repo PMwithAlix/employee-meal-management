@@ -26,6 +26,7 @@ function apiMessage(error: unknown, fallback: string) {
 function LiveGroupsPage() {
   const app = useApp()
   const canEdit = can(app.role, 'group.edit')
+  const canDelete = can(app.role, 'org.delete')
   const [openId, setOpenId] = useState('')
   const [creating, setCreating] = useState('')
   const [createBusy, setCreateBusy] = useState(false)
@@ -42,6 +43,9 @@ function LiveGroupsPage() {
   const [deactivating, setDeactivating] = useState(false)
   const [deactivateBusy, setDeactivateBusy] = useState(false)
   const [deactivateError, setDeactivateError] = useState('')
+  const [deleting, setDeleting] = useState(false)
+  const [deleteBusy, setDeleteBusy] = useState(false)
+  const [deleteError, setDeleteError] = useState('')
   const [notice, setNotice] = useState('')
   const [boot, setBoot] = useState(0)
   const [status, setStatus] = useState<'loading' | 'ready' | 'error'>('loading')
@@ -149,6 +153,31 @@ function LiveGroupsPage() {
     setBoot((value) => value + 1)
   }
 
+  function bumpMemberCount(groupId: string, delta: number) {
+    setCounts((current) => ({ ...current, [groupId]: Math.max(0, (current[groupId] ?? 0) + delta) }))
+    setDetail((current) => (
+      current && current.id === groupId && current.memberCount !== null
+        ? { ...current, memberCount: Math.max(0, current.memberCount + delta) }
+        : current
+    ))
+  }
+
+  async function reloadMembership(groupId: string) {
+    const [loaded, listedMembers, rows] = await Promise.all([
+      groupApi.get(groupId),
+      groupApi.listMembers(groupId),
+      groupApi.history(groupId),
+    ])
+    setDetail(loaded)
+    setMembers(listedMembers)
+    setHistory(rows)
+    setHistoryStatus('ready')
+    setDetailStatus('ready')
+    if (loaded.memberCount !== null) {
+      setCounts((current) => ({ ...current, [loaded.id]: loaded.memberCount as number }))
+    }
+  }
+
   async function createGroup(event: { preventDefault: () => void }) {
     event.preventDefault()
     if (!creating.trim() || createBusy || !canEdit) return
@@ -199,10 +228,38 @@ function LiveGroupsPage() {
     setAddError('')
     setNotice('')
     try {
-      await groupApi.addMember(group.id, adding)
+      const userId = adding
+      const person = users.find((item) => item.id === userId)
+      await groupApi.addMember(group.id, userId)
       setAdding('')
+      if (person && !members.some((item) => item.userId === person.id)) {
+        const startedAt = new Date().toISOString()
+        setMembers((list) => [{
+          membershipId: `local-${person.id}`,
+          groupId: group.id,
+          userId: person.id,
+          username: person.username,
+          role: person.role,
+          isActive: person.isActive,
+          startedAt,
+        }, ...list])
+        setHistory((list) => [{
+          membershipId: `local-${person.id}`,
+          groupId: group.id,
+          userId: person.id,
+          username: person.username,
+          role: person.role,
+          startedAt,
+          endedAt: null,
+        }, ...list])
+        bumpMemberCount(group.id, 1)
+      }
       setNotice('عضو به گروه اضافه شد.')
-      refresh()
+      try {
+        await reloadMembership(group.id)
+      } catch {
+        // فهرست محلی مانده است؛ بارگذاری کامل لازم نیست.
+      }
     } catch (error: unknown) {
       setAddError(apiMessage(error, 'افزودن عضو انجام نشد.'))
     } finally {
@@ -216,14 +273,40 @@ function LiveGroupsPage() {
     setRemoveError('')
     setNotice('')
     try {
-      await groupApi.removeMember(group.id, removing)
+      const userId = removing
+      await groupApi.removeMember(group.id, userId)
       setRemoving('')
+      const existed = members.some((item) => item.userId === userId)
+      setMembers((list) => list.filter((item) => item.userId !== userId))
+      if (existed) bumpMemberCount(group.id, -1)
       setNotice('عضو از گروه خارج شد.')
-      refresh()
+      try {
+        await reloadMembership(group.id)
+      } catch {
+        // فهرست محلی مانده است؛ بارگذاری کامل لازم نیست.
+      }
     } catch (error: unknown) {
       setRemoveError(apiMessage(error, 'حذف عضو انجام نشد.'))
     } finally {
       setRemoveBusy(false)
+    }
+  }
+
+  async function confirmDeleteGroup() {
+    if (!group || deleteBusy) return
+    setDeleteBusy(true)
+    setDeleteError('')
+    setNotice('')
+    try {
+      await groupApi.remove(group.id)
+      setDeleting(false)
+      setOpenId('')
+      setNotice('گروه حذف شد.')
+      refresh()
+    } catch (error: unknown) {
+      setDeleteError(apiMessage(error, 'حذف گروه انجام نشد.'))
+    } finally {
+      setDeleteBusy(false)
     }
   }
 
@@ -286,14 +369,14 @@ function LiveGroupsPage() {
           )}
           {renameError && <p className="mt-1 text-sm text-danger">{renameError}</p>}
           <p className="mt-3 text-xs text-muted">یک کارمند می‌تواند در چند گروه باشد. گروه‌ها از پیش تعیین‌شده نیستند.</p>
-          {detailStatus === 'loading' && <p className="mt-3 text-sm text-muted">در حال خواندن اعضای گروه…</p>}
+          {detailStatus === 'loading' && members.length === 0 && <p className="mt-3 text-sm text-muted">در حال خواندن اعضای گروه…</p>}
           {detailStatus === 'error' && (
             <div className="mt-3 space-y-2">
               <p className="text-sm text-danger">{detailMessage}</p>
               <Button variant="secondary" onClick={refresh}>تلاش دوباره</Button>
             </div>
           )}
-          {detailStatus === 'ready' && (
+          {(detailStatus === 'ready' || members.length > 0) && detailStatus !== 'error' && (
             <ul className="mt-3 divide-y divide-line text-sm">
               {members.length === 0 && <li className="py-3 text-muted">عضوی در این گروه نیست.</li>}
               {members.map((employee) => (
@@ -335,11 +418,16 @@ function LiveGroupsPage() {
               </ul>
             )}
           </div>
-          {canEdit && group.isActive && (
-            <div className="mt-4 border-t border-line pt-4">
-              <Button variant="danger" onClick={() => { setDeactivating(true); setDeactivateError('') }}>غیرفعال‌سازی گروه</Button>
+          {(canEdit && group.isActive) || canDelete ? (
+            <div className="mt-4 flex flex-wrap gap-2 border-t border-line pt-4">
+              {canEdit && group.isActive && (
+                <Button variant="danger" onClick={() => { setDeactivating(true); setDeactivateError('') }}>غیرفعال‌سازی گروه</Button>
+              )}
+              {canDelete && (
+                <Button variant="danger" onClick={() => { setDeleting(true); setDeleteError('') }}>حذف گروه</Button>
+              )}
             </div>
-          )}
+          ) : null}
           {notice && <p className="mt-3 text-sm text-ok" role="status">{notice}</p>}
           <Dialog open={Boolean(removing)} title="حذف از گروه" onClose={() => !removeBusy && setRemoving('')}>
             <p className="text-sm">این کارمند از گروه «{group.name}» خارج شود؟ ساختمان و سفارش‌های او تغییر نمی‌کند.</p>
@@ -347,6 +435,14 @@ function LiveGroupsPage() {
             <div className="mt-3 flex justify-end gap-2">
               <Button variant="secondary" disabled={removeBusy} onClick={() => setRemoving('')}>انصراف</Button>
               <Button variant="danger" disabled={removeBusy} onClick={() => void confirmRemove()}>{removeBusy ? 'در حال حذف' : 'حذف از گروه'}</Button>
+            </div>
+          </Dialog>
+          <Dialog open={deleting} title="حذف گروه" onClose={() => !deleteBusy && setDeleting(false)}>
+            <p className="text-sm">گروه «{group.name}» برای همیشه حذف شود؟ عضویت‌ها و اتصال این گروه به سفارش‌های قبلی برداشته می‌شود.</p>
+            {deleteError && <p className="mt-2 text-sm text-danger">{deleteError}</p>}
+            <div className="mt-3 flex justify-end gap-2">
+              <Button variant="secondary" disabled={deleteBusy} onClick={() => setDeleting(false)}>انصراف</Button>
+              <Button variant="danger" disabled={deleteBusy} onClick={() => void confirmDeleteGroup()}>{deleteBusy ? 'در حال حذف' : 'حذف دائمی'}</Button>
             </div>
           </Dialog>
           <Dialog open={deactivating} title="غیرفعال‌سازی گروه" onClose={() => !deactivateBusy && setDeactivating(false)}>

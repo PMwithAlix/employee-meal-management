@@ -233,6 +233,26 @@ export class GroupsService {
     });
   }
 
+  async remove(actor: AuthUser, id: string) {
+    const current = await this.requireGroup(id);
+    await this.prisma.$transaction(async (tx) => {
+      await tx.groupMembership.deleteMany({ where: { groupId: id } });
+      await tx.orderGroupSnapshot.deleteMany({ where: { groupId: id } });
+      await this.audit.record(
+        {
+          actorId: actor.id,
+          action: AuditAction.GroupDeleted,
+          entityType: AuditEntity.Group,
+          entityId: id,
+          beforeData: current,
+        },
+        tx,
+      );
+      await tx.group.delete({ where: { id } });
+    });
+    return { ok: true as const };
+  }
+
   private async requireGroup(id: string) {
     const group = await this.prisma.group.findUnique({ where: { id } });
     if (!group) {

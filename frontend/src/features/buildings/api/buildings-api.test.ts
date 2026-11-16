@@ -74,4 +74,11 @@ describe('buildingApi', () => {
     expect(fetchMock).toHaveBeenNthCalledWith(1, '/api/v1/buildings/b1/deactivate', expect.objectContaining({ method: 'POST' }))
     expect(fetchMock).toHaveBeenNthCalledWith(2, '/api/v1/buildings/b1/reactivate', expect.objectContaining({ method: 'POST' }))
   })
+
+  it('deletes a building through DELETE /buildings/:id', async () => {
+    const fetchMock = vi.fn(async () => new Response(JSON.stringify({ ok: true }), { status: 200 }))
+    vi.stubGlobal('fetch', fetchMock)
+    await expect(buildingApi.remove('b1')).resolves.toEqual({ ok: true })
+    expect(fetchMock).toHaveBeenCalledWith('/api/v1/buildings/b1', expect.objectContaining({ method: 'DELETE' }))
+  })
 })

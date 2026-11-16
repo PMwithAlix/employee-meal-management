@@ -575,8 +575,16 @@ export function StoreProvider({
 
   function saveBuilding(name: string, id?: string) {
     if (!can(role, 'building.edit')) return
-    const clean = name.trim()
+    const clean = name.trim().replace(/\s+/g, ' ')
     if (!clean) return
+    const taken = buildings.some((item) => (
+      item.id !== id
+      && item.name.trim().replace(/\s+/g, ' ').toLocaleLowerCase('fa-IR') === clean.toLocaleLowerCase('fa-IR')
+    ))
+    if (taken) {
+      toast('نام ساختمان تکراری است.')
+      return
+    }
     if (id) {
       const previous = buildings.find((item) => item.id === id)
       setBuildings((list) => list.map((item) => (item.id === id ? { ...item, name: clean } : item)))

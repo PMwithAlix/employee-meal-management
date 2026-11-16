@@ -9,6 +9,7 @@ import { groupApi } from '../features/groups/api/groups-api'
 import { generatePassword, normalizeUsername, passwordIssue, sanitizeUsernameInput, usernameIssue } from '../shared/lib/credentials'
 import { can } from '../shared/config/permissions'
 import { cn, fa } from '../shared/lib/persian-text'
+import { useAuth } from '../app/providers/AuthProvider'
 import { useApp } from '../app/providers/app-store'
 import { ADMIN_DIRECTORY_ROLES, isDirectoryRole, usesLiveEmployeesPage, type DirectoryRole } from '../features/users/lib/user-access'
 import { userApi } from '../features/users/api/users-api'
@@ -29,7 +30,9 @@ function apiMessage(error: unknown, fallback: string) {
 
 function LiveEmployeesPage() {
   const app = useApp()
+  const auth = useAuth()
   const canEdit = can(app.role, 'employee.edit')
+  const canDelete = can(app.role, 'org.delete')
   const isAdmin = app.role === 'admin'
   const [q, setQ] = useState('')
   const [buildingId, setBuildingId] = useState('all')
@@ -54,6 +57,7 @@ function LiveEmployeesPage() {
   const [editing, setEditing] = useState<string | 'new' | null>(null)
   const [resetting, setResetting] = useState(false)
   const [confirming, setConfirming] = useState<ManagedUser | null>(null)
+  const [deleting, setDeleting] = useState<ManagedUser | null>(null)
   const [mutating, setMutating] = useState(false)
   const [actionError, setActionError] = useState('')
   const [resetHandoff, setResetHandoff] = useState<{ username: string; password: string } | null>(null)
@@ -190,6 +194,24 @@ function LiveEmployeesPage() {
     }
   }
 
+  async function confirmDelete() {
+    if (!deleting || mutating) return
+    setMutating(true)
+    setActionError('')
+    try {
+      await userApi.remove(deleting.id)
+      setDeleting(null)
+      setItems((list) => list.filter((item) => item.id !== deleting.id))
+      setTotal((count) => Math.max(0, count - 1))
+      setSelected((currentId) => currentId === deleting.id ? null : currentId)
+      refreshList()
+    } catch (error: unknown) {
+      setActionError(apiMessage(error, 'حذف حساب انجام نشد.'))
+    } finally {
+      setMutating(false)
+    }
+  }
+
   const groupsOf = (id: string) => groupNames[id]?.join('، ') || '—'
   const filteredEmpty = Boolean(q.trim() || buildingId !== 'all' || status !== 'all')
 
@@ -294,8 +316,11 @@ function LiveEmployeesPage() {
                 {current.isActive ? 'غیرفعال‌سازی' : 'فعال‌سازی'}
               </Button>
             )}
+            {canDelete && current.id !== auth.user?.id && (
+              <Button variant="danger" onClick={() => { setDeleting(current); setActionError('') }}>حذف حساب</Button>
+            )}
           </div>
-          <p className="mt-3 text-xs text-muted">حذف حساب انجام نمی‌شود. وضعیت حساب بین فعال و غیرفعال عوض می‌شود.</p>
+          <p className="mt-3 text-xs text-muted">{canDelete ? 'غیرفعال‌سازی حساب را حفظ می‌کند. حذف حساب دائمی است و سفارش‌های همان کاربر پاک می‌شود.' : 'حذف حساب انجام نمی‌شود. وضعیت حساب بین فعال و غیرفعال عوض می‌شود.'}</p>
         </aside>
       )}
       {editing && (
@@ -317,6 +342,16 @@ function LiveEmployeesPage() {
             setResetHandoff({ username, password })
           }}
         />
+      )}
+      {deleting && (
+        <Dialog open title="حذف حساب" onClose={() => !mutating && setDeleting(null)}>
+          <p className="text-sm">حساب <span dir="ltr">{deleting.username}</span> برای همیشه حذف شود؟ این کار برگشت‌پذیر نیست.</p>
+          {actionError && <p className="mt-2 text-sm text-danger">{actionError}</p>}
+          <div className="mt-4 flex justify-end gap-2">
+            <Button variant="secondary" disabled={mutating} onClick={() => setDeleting(null)}>انصراف</Button>
+            <Button variant="danger" disabled={mutating} onClick={() => void confirmDelete()}>{mutating ? 'در حال حذف' : 'حذف دائمی'}</Button>
+          </div>
+        </Dialog>
       )}
       {confirming && (
         <Dialog open title={confirming.isActive ? 'غیرفعال‌سازی حساب' : 'فعال‌سازی حساب'} onClose={() => !mutating && setConfirming(null)}>

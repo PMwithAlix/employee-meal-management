@@ -111,6 +111,15 @@ export const userApi = {
     return authRequest<unknown>(`/users/${id}/reactivate`, { ...session, method: 'POST', signal }).then(requireUser)
   },
 
+  remove(id: string, signal?: AbortSignal) {
+    return authRequest<unknown>(`/users/${id}`, { ...session, method: 'DELETE', signal }).then((value) => {
+      if (!parseResetPasswordResult(value)) {
+        throw new AuthRequestError('http', 'حذف کاربر تأیید نشد.')
+      }
+      return { ok: true as const }
+    })
+  },
+
   resetPassword(id: string, newPassword: string, signal?: AbortSignal) {
     return authRequest<unknown>(`/users/${id}/reset-password`, {
       ...session,

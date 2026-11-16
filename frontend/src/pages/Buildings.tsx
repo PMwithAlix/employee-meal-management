@@ -3,6 +3,7 @@ import { AuthRequestError } from '../features/auth/lib/auth-errors'
 import { buildingApi, type BuildingDetail, type BuildingSummary } from '../features/buildings/api/buildings-api'
 import { activeMemberCount } from '../features/buildings/lib/building-mapper'
 import { usesLiveBuildingsPage } from '../features/buildings/lib/building-access'
+import { isDuplicateBuildingName, normalizeBuildingName } from '../features/buildings/lib/building-name'
 import {
   buildingStatusSuccessNotice,
   buildingTransferSuccessNotice,
@@ -31,6 +32,7 @@ function apiMessage(error: unknown, fallback: string) {
 function LiveBuildingsPage() {
   const app = useApp()
   const canEditBuilding = can(app.role, 'building.edit')
+  const canDelete = can(app.role, 'org.delete')
   const canMoveEmployee = can(app.role, 'employee.edit')
   const [editing, setEditing] = useState<string | 'new' | null>(null)
   const [openId, setOpenId] = useState('')
@@ -49,6 +51,9 @@ function LiveBuildingsPage() {
   const [statusConfirmation, setStatusConfirmation] = useState(false)
   const [statusMutation, setStatusMutation] = useState(false)
   const [statusError, setStatusError] = useState('')
+  const [deleteConfirmation, setDeleteConfirmation] = useState(false)
+  const [deleteBusy, setDeleteBusy] = useState(false)
+  const [deleteError, setDeleteError] = useState('')
 
   useEffect(() => {
     const controller = new AbortController()
@@ -109,6 +114,23 @@ function LiveBuildingsPage() {
 
   function refresh() {
     setBoot((value) => value + 1)
+  }
+
+  async function confirmDeleteBuilding() {
+    if (!building || deleteBusy) return
+    setDeleteBusy(true)
+    setDeleteError('')
+    try {
+      await buildingApi.remove(building.id)
+      setDeleteConfirmation(false)
+      setOpenId('')
+      setNotice('ساختمان حذف شد.')
+      refresh()
+    } catch (error: unknown) {
+      setDeleteError(apiMessage(error, 'حذف ساختمان انجام نشد.'))
+    } finally {
+      setDeleteBusy(false)
+    }
   }
 
   async function changeBuildingStatus() {
@@ -196,6 +218,9 @@ function LiveBuildingsPage() {
                 >
                   {building.isActive ? 'غیرفعال‌سازی' : 'فعال‌سازی'}
                 </Button>
+                {canDelete && (
+                  <Button variant="danger" onClick={() => { setDeleteError(''); setDeleteConfirmation(true) }}>حذف</Button>
+                )}
               </div>
             )}
           </div>
@@ -236,6 +261,16 @@ function LiveBuildingsPage() {
           )}
         </section>
       )}
+      {deleteConfirmation && building && (
+        <Dialog open title="حذف ساختمان" onClose={() => !deleteBusy && setDeleteConfirmation(false)}>
+          <p className="text-sm">ساختمان «{building.name}» برای همیشه حذف شود؟ ابتدا باید هیچ کاربری به آن وصل نباشد. سفارش‌های مهمان همین ساختمان هم پاک می‌شوند.</p>
+          {deleteError && <p className="mt-2 text-sm text-danger">{deleteError}</p>}
+          <div className="mt-4 flex justify-end gap-2">
+            <Button variant="secondary" disabled={deleteBusy} onClick={() => setDeleteConfirmation(false)}>انصراف</Button>
+            <Button variant="danger" disabled={deleteBusy} onClick={() => void confirmDeleteBuilding()}>{deleteBusy ? 'در حال حذف' : 'حذف دائمی'}</Button>
+          </div>
+        </Dialog>
+      )}
       {statusConfirmation && building && (
         <Dialog
           open
@@ -264,6 +299,7 @@ function LiveBuildingsPage() {
         <LiveBuildingForm
           id={editing === 'new' ? undefined : editing}
           currentName={editing === 'new' ? '' : buildings.find((item) => item.id === editing)?.name ?? detail?.name ?? ''}
+          buildings={buildings}
           onClose={() => setEditing(null)}
           onSaved={(id) => {
             setOpenId(id)
@@ -278,11 +314,13 @@ function LiveBuildingsPage() {
 function LiveBuildingForm({
   id,
   currentName,
+  buildings,
   onClose,
   onSaved,
 }: {
   id?: string
   currentName: string
+  buildings: BuildingSummary[]
   onClose: () => void
   onSaved: (id: string) => void
 }) {
@@ -296,9 +334,13 @@ function LiveBuildingForm({
         onSubmit={(event) => {
           event.preventDefault()
           if (saving) return
-          const trimmed = name.trim()
+          const trimmed = normalizeBuildingName(name)
           if (!trimmed) {
             setError('نام ساختمان را وارد کنید.')
+            return
+          }
+          if (isDuplicateBuildingName(trimmed, buildings, id)) {
+            setError('نام ساختمان تکراری است.')
             return
           }
           setSaving(true)
@@ -316,7 +358,7 @@ function LiveBuildingForm({
       >
         <Field label="نام ساختمان"><input className={controlClass} value={name} onChange={(event) => { setName(event.target.value); setError('') }} /></Field>
         {error && <p className="mt-1 text-sm text-danger">{error}</p>}
-        <p className="mt-2 text-xs text-muted">در محدوده فعلی محصول، ساختمان فقط نام دارد.</p>
+        <p className="mt-2 text-xs text-muted">نام ساختمان باید یکتا باشد.</p>
         <div className="mt-4 flex justify-end gap-2">
           <Button variant="secondary" disabled={saving} onClick={onClose}>انصراف</Button>
           <Button type="submit" disabled={saving}>{saving ? 'در حال ذخیره' : 'ذخیره'}</Button>
