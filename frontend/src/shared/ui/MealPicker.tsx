@@ -1,7 +1,10 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { cn } from '../lib/persian-text'
+import { pickerViewBounds, placeMealPicker, samePickerBox, type MealPickerBox } from '../lib/meal-picker-position'
 import type { MealKind, MealOptionChoice } from '../types/domain'
+
+const emptyBox: MealPickerBox = { top: 0, left: 0, width: 0, maxHeight: 80, placeAbove: false }
 
 export function MealPicker({
   open,
@@ -26,7 +29,7 @@ export function MealPicker({
 }) {
   const panelRef = useRef<HTMLDivElement>(null)
   const tokenRef = useRef(`picker-${Math.random().toString(36).slice(2)}`)
-  const [box, setBox] = useState({ top: 0, left: 0, width: 0, maxHeight: 240, placeAbove: false })
+  const [box, setBox] = useState<MealPickerBox>(emptyBox)
   const [saving, setSaving] = useState(false)
   const [failed, setFailed] = useState(false)
   const mealLabel = kind === 'lunch' ? 'ناهار' : 'شام'
@@ -36,45 +39,71 @@ export function MealPicker({
     return trigger.tagName === 'BUTTON' ? trigger : (trigger.querySelector('button') ?? trigger)
   }
 
+  function visibleRect(element: Element | null) {
+    if (!(element instanceof HTMLElement) || element.getClientRects().length === 0) return null
+    return element.getBoundingClientRect()
+  }
+
   function place() {
     const card = cardEl()
+    const panel = panelRef.current
     if (!card) return
     const rect = card.getBoundingClientRect()
-    const vw = window.innerWidth
-    const vh = window.innerHeight
-    const gutter = 8
-    const width = Math.min(rect.width, Math.max(0, vw - gutter * 2))
-    const rtl = document.documentElement.dir === 'rtl'
-    let left = rtl ? rect.right - width : rect.left
-    if (left + width > vw - gutter) left = vw - gutter - width
-    if (left < gutter) left = gutter
-    const spaceBelow = Math.max(80, vh - rect.bottom - 8)
-    const spaceAbove = Math.max(80, rect.top - 8)
-    const placeAbove = spaceBelow < 168 && spaceAbove > spaceBelow
-    const maxHeight = Math.min(280, placeAbove ? spaceAbove : spaceBelow)
-    const top = placeAbove ? Math.max(8, rect.top - maxHeight - 4) : rect.bottom + 4
-    setBox({ top, left, width, maxHeight, placeAbove })
+    const vv = window.visualViewport
+    const header = visibleRect(document.querySelector('header.sticky'))
+    const nav = visibleRect(document.querySelector('nav[aria-label="ناوبری اصلی"]'))
+    const view = pickerViewBounds(
+      vv
+        ? { offsetTop: vv.offsetTop, offsetLeft: vv.offsetLeft, width: vv.width, height: vv.height }
+        : { offsetTop: 0, offsetLeft: 0, width: window.innerWidth, height: window.innerHeight },
+      {
+        headerBottom: header ? header.bottom : null,
+        navTop: nav && nav.height > 0 ? nav.top : null,
+      },
+    )
+    const next = placeMealPicker(
+      { top: rect.top, bottom: rect.bottom, left: rect.left, right: rect.right, width: rect.width },
+      panel ? panel.scrollHeight : 0,
+      view,
+      document.documentElement.dir !== 'ltr',
+    )
+    setBox((current) => (samePickerBox(current, next) ? current : next))
   }
 
   useLayoutEffect(() => {
     if (!open) return
+    let frame = 0
+    function schedule() {
+      if (frame) return
+      frame = window.requestAnimationFrame(() => {
+        frame = 0
+        place()
+      })
+    }
     place()
     const card = cardEl()
-    if (!card || typeof ResizeObserver === 'undefined') return
-    const observer = new ResizeObserver(() => place())
-    observer.observe(card)
-    return () => observer.disconnect()
-  }, [open, trigger])
-
-  useEffect(() => {
-    if (!open) return
-    window.addEventListener('resize', place)
-    window.addEventListener('scroll', place, true)
-    return () => {
-      window.removeEventListener('resize', place)
-      window.removeEventListener('scroll', place, true)
+    const panel = panelRef.current
+    const observers: ResizeObserver[] = []
+    if (typeof ResizeObserver !== 'undefined') {
+      const observer = new ResizeObserver(schedule)
+      if (card) observer.observe(card)
+      if (panel) observer.observe(panel)
+      observers.push(observer)
     }
-  }, [open, trigger])
+    window.addEventListener('resize', schedule)
+    window.addEventListener('scroll', schedule, true)
+    const vv = window.visualViewport
+    vv?.addEventListener('resize', schedule)
+    vv?.addEventListener('scroll', schedule)
+    return () => {
+      if (frame) window.cancelAnimationFrame(frame)
+      observers.forEach((observer) => observer.disconnect())
+      window.removeEventListener('resize', schedule)
+      window.removeEventListener('scroll', schedule, true)
+      vv?.removeEventListener('resize', schedule)
+      vv?.removeEventListener('scroll', schedule)
+    }
+  }, [open, trigger, options.length, currentId, locked, ops, failed, saving])
 
   useEffect(() => {
     if (!open) return

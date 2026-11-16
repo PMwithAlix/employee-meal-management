@@ -26,43 +26,41 @@ export function MealBlock({
   const label = lunch ? 'ناهار' : 'شام'
   const state = !defined ? 'منو تعریف نشده' : choice ? choice : 'انتخاب نشده'
   const deadline = !defined ? '' : locked ? 'مهلت تمام' : 'باز'
-  const action = onSelect ? (choice ? 'تغییر یا حذف' : 'انتخاب غذا') : ''
-  const body = !defined ? (
-    <span className="text-muted">منو تعریف نشده</span>
-  ) : choice ? (
-    <span className="font-medium text-ink">{choice}</span>
-  ) : (
-    <span className="text-muted">انتخاب نشده</span>
-  )
+  const action = onSelect ? (choice ? 'تغییر یا حذف' : 'انتخاب غذا') : 'انتخاب غذا'
+  const title = !defined ? 'منو تعریف نشده' : choice ? choice : 'انتخاب نشده'
 
   const inner = (
     <>
-      <span className="flex items-center justify-between gap-2">
-        <span className={cn('inline-flex items-center gap-1 text-xs font-medium', lunch ? 'text-lunch' : 'text-dinner')}>
-          <Icon size={13} aria-hidden />
+      <span className="flex h-4 items-center justify-between gap-2">
+        <span className={cn('inline-flex min-w-0 items-center gap-1 text-xs font-medium', lunch ? 'text-lunch' : 'text-dinner')}>
+          <Icon size={13} className="shrink-0" aria-hidden />
           {label}
         </span>
-        {defined && (
-          <span className="inline-flex items-center gap-1 text-[11px] text-muted">
-            {locked ? <Lock size={11} aria-hidden /> : null}
-            {deadline}
-          </span>
-        )}
-      </span>
-      <span className={cn('mt-1 flex items-start gap-1 text-sm', dense && 'text-[13px]')}>
-        {defined && choice ? <Check size={14} className="mt-0.5 shrink-0 text-ok" aria-hidden /> : null}
-        {defined && !choice ? <Minus size={14} className="mt-0.5 shrink-0 text-muted" aria-hidden /> : null}
-        <span className="min-w-0 break-words">
-          {body}
-          {orphan && <span className="mt-0.5 block text-[11px] text-warn">در منوی فعلی نیست</span>}
+        <span className={cn('inline-flex h-4 shrink-0 items-center gap-1 text-[11px] text-muted', !defined && 'invisible')}>
+          <Lock size={11} className={cn('shrink-0', locked ? 'visible' : 'invisible')} aria-hidden />
+          {deadline || 'باز'}
         </span>
       </span>
-      {action && !dense && <span className="mt-2 block text-sm font-medium text-link">{action}</span>}
+      <span className={cn('mt-1 flex min-h-10 items-start gap-1 text-sm', dense && 'min-h-8 text-[13px]')}>
+        <span className="mt-0.5 grid h-3.5 w-3.5 shrink-0 place-items-center">
+          {defined && choice ? <Check size={14} className="text-ok" aria-hidden /> : null}
+          {defined && !choice ? <Minus size={14} className="text-muted" aria-hidden /> : null}
+        </span>
+        <span className={cn('min-w-0 flex-1 break-words', dense ? 'line-clamp-2 min-h-8 leading-4' : 'line-clamp-2 min-h-10 leading-5', defined && choice ? 'font-medium text-ink' : 'text-muted')}>
+          {title}
+          {orphan ? ' · در منوی فعلی نیست' : ''}
+        </span>
+      </span>
+      {!dense && (
+        <span className={cn('mt-2 block h-5 truncate text-sm font-medium text-link', !onSelect && 'invisible')}>
+          {action}
+        </span>
+      )}
     </>
   )
 
   const className = cn(
-    'block w-full rounded-md border px-2.5 py-2 text-start',
+    'box-border block w-full min-w-0 overflow-hidden rounded-md border px-2.5 py-2 text-start',
     onSelect && 'min-h-11',
     !defined && 'border-line bg-surface2 text-muted',
     defined && !choice && lunch && 'border-dashed border-lunchline bg-lunchbg',
@@ -72,7 +70,7 @@ export function MealBlock({
     defined && choice && locked && lunch && 'border-lunchline bg-lunchbg',
     defined && choice && locked && !lunch && 'border-dinnerline bg-dinnerbg',
   )
-  const accessible = [label, state, deadline, action].filter(Boolean).join('، ')
+  const accessible = [label, state, deadline, onSelect ? action : ''].filter(Boolean).join('، ')
 
   if (!onSelect) return <div className={className}>{inner}</div>
   return (

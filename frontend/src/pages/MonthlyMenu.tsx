@@ -143,7 +143,14 @@ function DayList({ days, employeeId: id }: { days: DayMenu[]; employeeId: string
   return (
     <>
       <div className="hidden overflow-hidden rounded-md border border-line md:block">
-        <table className="w-full border-collapse text-sm">
+        <table className="w-full table-fixed border-collapse text-sm">
+          <colgroup>
+            <col className="w-[8.5rem]" />
+            <col className="w-[6.5rem]" />
+            <col />
+            <col />
+            <col className="w-[11rem]" />
+          </colgroup>
           <thead className="bg-elevated text-xs text-muted">
             <tr>
               <th className="px-3 py-2 text-start font-medium">تاریخ</th>
@@ -161,8 +168,8 @@ function DayList({ days, employeeId: id }: { days: DayMenu[]; employeeId: string
                 <tr key={day.jd} className={cn('border-t border-divider align-top', isSameDate(day, app.now) && 'bg-brandsubtle')}>
                   <td className="px-3 py-3 font-medium">{fa(day.jd)} {JALALI_MONTHS[day.jm - 1]}</td>
                   <td className="px-3 py-3 text-muted">{day.weekday}</td>
-                  <td className="px-3 py-3"><Cell day={day} meal="lunch" choice={lunch?.choice ?? null} /></td>
-                  <td className="px-3 py-3"><Cell day={day} meal="dinner" choice={dinner?.choice ?? null} /></td>
+                  <td className="min-w-0 px-3 py-3"><Cell day={day} meal="lunch" choice={lunch?.choice ?? null} /></td>
+                  <td className="min-w-0 px-3 py-3"><Cell day={day} meal="dinner" choice={dinner?.choice ?? null} /></td>
                   <td className="px-3 py-3 text-xs leading-5 text-muted">{summary(day, lunch?.choice ?? null, dinner?.choice ?? null, app)}</td>
                 </tr>
               )
@@ -372,7 +379,7 @@ function Cell({ day, meal, choice, dense }: { day: DayMenu; meal: MealKind; choi
   const canEdit = Boolean(id && options?.length) && (orderingOpen ? can(app.role, 'order.self') : can(app.role, 'order.ops'))
   const busy = Boolean(app.orderingKey)
   return (
-    <div ref={triggerRef}>
+    <div ref={triggerRef} className="min-w-0">
       <MealBlock
         kind={meal}
         choice={choice}
