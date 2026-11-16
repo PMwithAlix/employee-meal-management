@@ -657,4 +657,51 @@ describe('Organization (e2e)', () => {
       ).status,
     ).toBe(403);
   });
+
+  it('lets admin delete an HR account and other roles, but not the current admin', async () => {
+    const hash = await app.get(PasswordService).hash(password);
+    const hrToDelete = await prisma.user.create({
+      data: {
+        username: 'e2e.org.hr.delete',
+        passwordHash: hash,
+        role: Role.HR,
+        buildingId,
+      },
+    });
+    const supportToDelete = await prisma.user.create({
+      data: {
+        username: 'e2e.org.support.delete',
+        passwordHash: hash,
+        role: Role.SUPPORT,
+        buildingId,
+      },
+    });
+
+    expect(
+      (
+        await request(app.getHttpServer())
+          .delete(`/api/v1/users/${hrToDelete.id}`)
+          .set('Cookie', hrCookie)
+      ).status,
+    ).toBe(403);
+
+    const deletedHr = await request(app.getHttpServer())
+      .delete(`/api/v1/users/${hrToDelete.id}`)
+      .set('Cookie', adminCookie);
+    expect(deletedHr.status).toBe(200);
+    expect(await prisma.user.findUnique({ where: { id: hrToDelete.id } })).toBeNull();
+
+    const deletedSupport = await request(app.getHttpServer())
+      .delete(`/api/v1/users/${supportToDelete.id}`)
+      .set('Cookie', adminCookie);
+    expect(deletedSupport.status).toBe(200);
+
+    expect(
+      (
+        await request(app.getHttpServer())
+          .delete(`/api/v1/users/${adminId}`)
+          .set('Cookie', adminCookie)
+      ).status,
+    ).toBe(403);
+  });
 });

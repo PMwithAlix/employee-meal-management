@@ -292,15 +292,15 @@ export class UsersService {
         throw new ConflictException('حداقل یک حساب ادمین باید باقی بماند.');
       }
     }
-    const menuVersions = await this.prisma.menuVersion.count({
-      where: { createdBy: id },
-    });
-    if (menuVersions > 0) {
-      throw new ConflictException(
-        'این کاربر نسخه منو ساخته است و قابل حذف نیست.',
-      );
-    }
     await this.prisma.$transaction(async (tx) => {
+      await tx.menuVersion.updateMany({
+        where: { createdBy: id },
+        data: { createdBy: actor.id },
+      });
+      await tx.menu.updateMany({
+        where: { lastAnnouncedBy: id },
+        data: { lastAnnouncedBy: null },
+      });
       await tx.orderStatusHistory.updateMany({
         where: { actorId: id },
         data: { actorId: null },

@@ -32,6 +32,15 @@ describe('users.access', () => {
     expect(() => assertCanManageUser(hr, Role.HR)).toThrow(ForbiddenException);
   });
 
+  it('lets ADMIN manage every role including HR', () => {
+    const admin = actor(Role.ADMIN);
+    expect(() => assertCanManageUser(admin, Role.HR)).not.toThrow();
+    expect(() => assertCanManageUser(admin, Role.EMPLOYEE)).not.toThrow();
+    expect(() => assertCanManageUser(admin, Role.SUPPORT)).not.toThrow();
+    expect(() => assertCanManageUser(admin, Role.MANAGEMENT)).not.toThrow();
+    expect(() => assertCanManageUser(admin, Role.ADMIN)).not.toThrow();
+  });
+
   it('lets ADMIN assign any role and allows ADMIN without a building', () => {
     expect(() =>
       assertCanAssignRole(actor(Role.ADMIN), Role.ADMIN),
