@@ -187,9 +187,10 @@ function LiveGroupsPage() {
     try {
       const created = await groupApi.create(creating.trim())
       setCreating('')
+      setGroups((list) => [created, ...list.filter((item) => item.id !== created.id)])
+      setCounts((current) => ({ ...current, [created.id]: current[created.id] ?? 0 }))
       setOpenId(created.id)
       setNotice('گروه ساخته شد.')
-      refresh()
     } catch (error: unknown) {
       setCreateError(apiMessage(error, 'ایجاد گروه انجام نشد.'))
     } finally {
@@ -298,11 +299,12 @@ function LiveGroupsPage() {
     setDeleteError('')
     setNotice('')
     try {
-      await groupApi.remove(group.id)
+      const removedId = group.id
+      await groupApi.remove(removedId)
       setDeleting(false)
-      setOpenId('')
+      setGroups((list) => list.filter((item) => item.id !== removedId))
+      setOpenId((current) => current === removedId ? '' : current)
       setNotice('گروه حذف شد.')
-      refresh()
     } catch (error: unknown) {
       setDeleteError(apiMessage(error, 'حذف گروه انجام نشد.'))
     } finally {
@@ -316,10 +318,11 @@ function LiveGroupsPage() {
     setDeactivateError('')
     setNotice('')
     try {
-      await groupApi.deactivate(group.id)
+      const updated = await groupApi.deactivate(group.id)
       setDeactivating(false)
+      setGroups((list) => list.map((item) => item.id === updated.id ? updated : item))
+      setDetail((current) => current && current.id === updated.id ? { ...current, ...updated } : current)
       setNotice('گروه غیرفعال شد.')
-      refresh()
     } catch (error: unknown) {
       setDeactivateError(apiMessage(error, 'غیرفعال‌سازی گروه انجام نشد.'))
     } finally {

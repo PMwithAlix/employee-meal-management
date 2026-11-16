@@ -39,6 +39,8 @@ import { OverviewPage } from '../pages/Overview'
 import { MonthlyMenuPage } from '../pages/MonthlyMenu'
 import { MyOrdersPage } from '../pages/MyOrders'
 import { MenuManagementPage } from '../pages/MenuManagement'
+import { ForbiddenPage, NotFoundPage } from '../pages/NotFound'
+import { AppNavLink } from './AppNavLink'
 import { EmployeesPage } from '../pages/Employees'
 import { BuildingsPage } from '../pages/Buildings'
 import { GroupsPage } from '../pages/Groups'
@@ -91,12 +93,13 @@ export function Shell() {
   const notificationItems = notifications.items
   const visible = NAV_ITEMS.filter((item) => canAccess(app.role, item.id))
   const groups = [...new Set(visible.map((item) => item.group))]
-  const Page = PAGES[app.page]
+  const Page = app.routeStatus === 'unknown' ? NotFoundPage : app.routeStatus === 'forbidden' ? ForbiddenPage : PAGES[app.page]
   const iconOnly = app.collapsed && desktop
 
   useEffect(() => {
-    document.title = `${pageTitle(app.page, app.role)} · ${BRAND_NAME}`
-  }, [app.page, app.role])
+    const title = app.routeStatus === 'unknown' ? 'صفحه پیدا نشد' : app.routeStatus === 'forbidden' ? 'دسترسی ندارید' : pageTitle(app.page, app.role)
+    document.title = `${title} · ${BRAND_NAME}`
+  }, [app.page, app.role, app.routeStatus])
 
   useEffect(() => {
     const pending = consumeMenuDeepLink()
@@ -228,12 +231,10 @@ export function Shell() {
                   const Icon = item.icon
                   const active = app.page === item.id
                   return (
-                    <button
+                    <AppNavLink
                       key={item.id}
-                      type="button"
+                      page={item.id}
                       title={pageTitle(item.id, app.role)}
-                      aria-current={active ? 'page' : undefined}
-                      onClick={() => app.setPage(item.id)}
                       className={cn(
                         'mb-0.5 flex min-h-11 w-full items-center gap-2 rounded-md px-2.5 py-2 text-sm',
                         active ? 'bg-selected font-medium text-link shadow-[inset_-2px_0_0_var(--link)]' : 'text-ink hover:bg-surface2',
@@ -242,7 +243,7 @@ export function Shell() {
                     >
                       <Icon size={16} aria-hidden />
                       <span className={cn('truncate', iconOnly && 'md:sr-only')}>{pageTitle(item.id, app.role)}</span>
-                    </button>
+                    </AppNavLink>
                   )
                 })}
             </div>
@@ -275,7 +276,9 @@ export function Shell() {
           </button>
           <BrandIcon className="h-8 w-8 shrink-0 rounded-md md:hidden" />
           <div className="min-w-0 flex-1">
-            <h1 className="truncate text-sm font-semibold">{pageTitle(app.page, app.role)}</h1>
+            <h1 className="truncate text-sm font-semibold">
+              {app.routeStatus === 'unknown' ? 'صفحه پیدا نشد' : app.routeStatus === 'forbidden' ? 'دسترسی ندارید' : pageTitle(app.page, app.role)}
+            </h1>
             <div className="flex items-center gap-1">
               <button type="button" className="min-h-11 rounded-md px-2 text-xs text-link" onClick={() => app.shiftMonth(-1)}>ماه قبل</button>
               <p className="truncate text-[11px] text-muted">{app.monthTitle}</p>
@@ -398,16 +401,14 @@ export function Shell() {
                   </div>
                   <p className="px-2 text-xs text-muted">{ROLE_LABEL[app.role]}</p>
                   <p className="px-2 pb-1 text-xs text-muted">{app.buildingName}</p>
-                  <button
+                  <AppNavLink
+                    page="settings"
                     className="mt-1 flex min-h-11 w-full items-center rounded-md px-2 py-2 hover:bg-surface2"
-                    onClick={() => {
-                      app.setPage('settings')
-                      setProfileOpen(false)
-                    }}
+                    onNavigate={() => setProfileOpen(false)}
                   >
                     حساب کاربری
-                  </button>
-                  <button className="flex min-h-11 w-full items-center gap-2 rounded-md px-2 py-2 hover:bg-surface2" onClick={app.logout}>
+                  </AppNavLink>
+                  <button type="button" className="flex min-h-11 w-full items-center gap-2 rounded-md px-2 py-2 hover:bg-surface2" onClick={app.logout}>
                     <LogOut size={14} /> خروج
                   </button>
                 </div>

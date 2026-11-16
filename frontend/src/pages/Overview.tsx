@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react'
 import { CalendarClock, Moon, Sun, Utensils } from 'lucide-react'
 import { useApp } from '../app/providers/app-store'
+import { AppNavLink } from '../layouts/AppNavLink'
 import { Button } from '../shared/ui/primitives'
 import { formatDeadlineFromInstant } from '../shared/lib/deadlines'
 import { classifyEmployeeDeadline, findOrder, isElapsedDeadlineDay, isOpenDeadlineDay, upcomingChosenMeals } from '../shared/lib/order-rules'
@@ -283,8 +284,8 @@ function LiveOpsOverview({ variant }: { variant: 'support' | 'management' | 'adm
       )}
       <div className="grid gap-4 lg:grid-cols-2">
         <Panel title="مهلت‌های پیش رو" action={variant === 'management'
-          ? <button className="min-h-11 px-2 text-xs text-link" onClick={() => app.setPage('reports')}>گزارش‌ها</button>
-          : <button className="min-h-11 px-2 text-xs text-link" onClick={() => app.setPage('menuMgmt')}>مدیریت منو</button>}
+          ? <AppNavLink page="reports" className="inline-flex min-h-11 items-center px-2 text-xs text-link">گزارش‌ها</AppNavLink>
+          : <AppNavLink page="menuMgmt" className="inline-flex min-h-11 items-center px-2 text-xs text-link">مدیریت منو</AppNavLink>}
         >
           {variant === 'management' ? (
             deadlinesLoading ? <p className="text-sm text-muted">در حال خواندن مهلت‌ها…</p> : managementDeadlinesError ? <p className="text-sm text-danger">{published.message || app.deadlineMessage || 'مهلت‌ها از سامانه خوانده نشد.'}</p> : managementDeadlinesEmpty ? <p className="text-sm text-muted">روز بازی با مهلت ذخیره‌شده نیست.</p> : <UpcomingDeadlines days={openDays} />
@@ -298,7 +299,7 @@ function LiveOpsOverview({ variant }: { variant: 'support' | 'management' | 'adm
             <UpcomingDeadlines days={openDays} />
           )}
         </Panel>
-        <Panel title={variant === 'support' ? 'فعالیت عملیاتی اخیر' : 'فعالیت اخیر'} action={<button className="min-h-11 px-2 text-xs text-link" onClick={() => app.setPage('activity')}>{variant === 'support' ? 'تاریخچه' : 'تاریخچه کامل'}</button>}>
+        <Panel title={variant === 'support' ? 'فعالیت عملیاتی اخیر' : 'فعالیت اخیر'} action={<AppNavLink page="activity" className="inline-flex min-h-11 items-center px-2 text-xs text-link">{variant === 'support' ? 'تاریخچه' : 'تاریخچه کامل'}</AppNavLink>}>
           {recent.status === 'loading' ? <p className="text-sm text-muted">در حال خواندن تاریخچه…</p> : recent.status !== 'ready' ? <p className="text-sm text-danger">{recent.message || 'تاریخچه خوانده نشد.'}</p> : recent.items.length === 0 ? <p className="text-sm text-muted">رویدادی ثبت نشده است.</p> : (
             <ul className="divide-y divide-line text-sm">
               {recent.items.map((item) => {
@@ -343,7 +344,6 @@ function UpcomingDeadlines({ days }: { days: ReturnType<typeof usePublishedMenu>
 }
 
 function HrOverview() {
-  const app = useApp()
   const org = useHrOverviewData()
   const active = org.employees.filter((employee) => employee.isActive).length
   const inactive = org.employees.length - active
@@ -392,9 +392,9 @@ function HrOverview() {
         </Panel>
         <Panel title="میانبرها">
           <div className="grid gap-2">
-            <button className="min-h-11 rounded-md border border-line px-3 py-2 text-start text-sm hover:bg-surface2" onClick={() => app.setPage('employees')}>مدیریت کارکنان</button>
-            <button className="min-h-11 rounded-md border border-line px-3 py-2 text-start text-sm hover:bg-surface2" onClick={() => app.setPage('buildings')}>مدیریت ساختمان‌ها</button>
-            <button className="min-h-11 rounded-md border border-line px-3 py-2 text-start text-sm hover:bg-surface2" onClick={() => app.setPage('groups')}>گروه‌های کارکنان</button>
+            <AppNavLink page="employees" className="flex min-h-11 items-center rounded-md border border-line px-3 py-2 text-start text-sm hover:bg-surface2">مدیریت کارکنان</AppNavLink>
+            <AppNavLink page="buildings" className="flex min-h-11 items-center rounded-md border border-line px-3 py-2 text-start text-sm hover:bg-surface2">مدیریت ساختمان‌ها</AppNavLink>
+            <AppNavLink page="groups" className="flex min-h-11 items-center rounded-md border border-line px-3 py-2 text-start text-sm hover:bg-surface2">گروه‌های کارکنان</AppNavLink>
           </div>
         </Panel>
       </div>
@@ -412,7 +412,6 @@ function ManagementOverview() {
 }
 
 function AdminOverview() {
-  const app = useApp()
   const org = useOrgDirectoryCounts()
   const links: Array<{ label: string; page: 'menuMgmt' | 'employees' | 'buildings' | 'groups' | 'reports' | 'activity' }> = [
     { label: 'مدیریت منو', page: 'menuMgmt' },
@@ -442,9 +441,9 @@ function AdminOverview() {
       <Panel title="بخش‌های سامانه">
         <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
           {links.map((link) => (
-            <button key={link.page} className="min-h-11 rounded-md border border-line px-3 py-3 text-start text-sm hover:bg-surface2" onClick={() => app.setPage(link.page)}>
+            <AppNavLink key={link.page} page={link.page} className="flex min-h-11 items-center rounded-md border border-line px-3 py-3 text-start text-sm hover:bg-surface2">
               {link.label}
-            </button>
+            </AppNavLink>
           ))}
         </div>
       </Panel>

@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { Check, Lock, Minus, Search, X } from 'lucide-react'
 import { MealBlock } from '../shared/ui/MealBlock'
 import { MealPicker } from '../shared/ui/MealPicker'
+import { AppNavLink } from '../layouts/AppNavLink'
 import { Button, Empty, MonthBar, Segmented } from '../shared/ui/primitives'
 import { WEEKDAYS } from '../shared/fixtures/seed-data'
 import { formatGregorianDate } from '../features/menus/lib/menu-mapper'
@@ -26,7 +27,7 @@ export function MonthlyMenuPage() {
           title="سفارش شخصی برای ادمین تعریف نشده"
           body="ادمین به ساختمانی وصل نیست. سفارش کارکنان، منو و مهلت‌ها از مدیریت منو انجام می‌شود."
         />
-        <Button onClick={() => app.setPage('menuMgmt')}>رفتن به مدیریت منو</Button>
+        <AppNavLink page="menuMgmt" className="inline-flex h-11 min-h-11 items-center justify-center rounded-md bg-primary px-3 text-sm text-onprimary">رفتن به مدیریت منو</AppNavLink>
       </div>
     )
   }

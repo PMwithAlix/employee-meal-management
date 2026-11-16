@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react'
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { buildMonthMenu, createSnapshot, fullName, PERSONA_ID, ROLE_LABEL, SEED_MONTH } from '../../shared/fixtures/seed-data'
 import { defaultMonthDeadlines, formatDeadline, isOrderingOpen, summarizeBackendDeadlines, type MealDeadline, type MonthDeadlines } from '../../shared/lib/deadlines'
 import { addMonths, currentDateTime, isValidJalaliDate, JALALI_MONTHS, monthKey, type JalaliDate, type JalaliDateTime } from '../../shared/lib/jalali'
@@ -10,6 +10,7 @@ import { AuthRequestError } from '../../features/auth/lib/auth-errors'
 import { formatGregorianDate } from '../../features/menus/lib/menu-mapper'
 import { orderApi } from '../../features/orders/api/orders-api'
 import { mealDeadlineFromMap, mealServingsFromSettings, toDeadlineMap, uiRatingFromStaff } from '../../features/orders/lib/order-mapper'
+import { buildAppUrl, resolveAppLocation, type RouteStatus } from '../../shared/config/app-routes'
 import { can, canAccess, LANDING_PAGE } from '../../shared/config/permissions'
 import type {
   ActivityItem,
@@ -39,6 +40,8 @@ interface StoreValue {
   role: Role
   theme: 'light' | 'dark'
   page: Page
+  routeStatus: RouteStatus
+  hrefFor: (page: Page) => string
   collapsed: boolean
   mobileNav: boolean
   menuView: MenuView
@@ -151,15 +154,55 @@ export function StoreProvider({
     setRoleState(session.role)
   }, [session.id, session.role])
   const [theme, setThemeState] = useState<'light' | 'dark'>(() => (localStorage.getItem('meal-theme') === 'dark' ? 'dark' : 'light'))
-  const [page, setPageState] = useState<Page>('overview')
+  const todayMonth = useMemo(() => {
+    const today = currentDateTime()
+    return { jy: today.jy, jm: today.jm }
+  }, [])
+  const initialLocation = useMemo(() => {
+    if (typeof window === 'undefined') {
+      return { page: LANDING_PAGE, status: 'ok' as RouteStatus, month: todayMonth }
+    }
+    return resolveAppLocation(window.location.pathname, window.location.search, session.role, todayMonth)
+  }, [session.role, todayMonth])
+  const [page, setPageState] = useState<Page>(initialLocation.page)
+  const [routeStatus, setRouteStatus] = useState<RouteStatus>(initialLocation.status)
   const [collapsed, setCollapsed] = useState(false)
   const [mobileNav, setMobileNav] = useState(false)
   const [menuView, setMenuView] = useState<MenuView>('list')
   const [menuQuery, setMenuQueryState] = useState<MenuQuery>(emptyQuery)
-  const [selectedMonth, setSelectedMonth] = useState(() => {
-    const today = currentDateTime()
-    return { jy: today.jy, jm: today.jm }
-  })
+  const [selectedMonth, setSelectedMonth] = useState(() => initialLocation.month)
+  const pageRef = useRef(page)
+  const monthRef = useRef(selectedMonth)
+  const routeStatusRef = useRef(routeStatus)
+  pageRef.current = page
+  monthRef.current = selectedMonth
+  routeStatusRef.current = routeStatus
+
+  const writeHistory = useCallback((nextPage: Page, month: Pick<JalaliDate, 'jy' | 'jm'>, mode: 'push' | 'replace') => {
+    if (typeof window === 'undefined') return
+    const url = buildAppUrl(nextPage, month)
+    const current = `${window.location.pathname}${window.location.search}`
+    if (current === url) return
+    if (mode === 'replace') window.history.replaceState({ page: nextPage }, '', url)
+    else window.history.pushState({ page: nextPage }, '', url)
+  }, [])
+
+  useEffect(() => {
+    if (initialLocation.status !== 'ok') return
+    writeHistory(initialLocation.page, initialLocation.month, 'replace')
+  }, [initialLocation, writeHistory])
+
+  useEffect(() => {
+    function onPopState() {
+      const next = resolveAppLocation(window.location.pathname, window.location.search, session.role, monthRef.current)
+      setPageState(next.page)
+      setRouteStatus(next.status)
+      setSelectedMonth(next.month)
+      setMobileNav(false)
+    }
+    window.addEventListener('popstate', onPopState)
+    return () => window.removeEventListener('popstate', onPopState)
+  }, [session.role])
   const [menus, setMenus] = useState<Record<string, DayMenu[]>>(() => ({ [monthKey(SEED_MONTH)]: initial.days }))
   const [deadlinesByMonth, setDeadlinesByMonth] = useState<Record<string, MonthDeadlines>>({})
   const [now, setNow] = useState(() => currentDateTime())
@@ -290,28 +333,43 @@ export function StoreProvider({
   function setRole(next: Role) {
     if (!import.meta.env.DEV) return
     setRoleState(next)
-    setPageState((current) => (canAccess(next, current) ? current : LANDING_PAGE))
     setMobileNav(false)
+    if (routeStatusRef.current === 'unknown') return
+    const current = pageRef.current
+    if (canAccess(next, current)) {
+      setRouteStatus('ok')
+      return
+    }
+    setPageState(LANDING_PAGE)
+    setRouteStatus('ok')
+    writeHistory(LANDING_PAGE, monthRef.current, 'replace')
   }
 
   function setPage(next: Page) {
     if (!canAccess(role, next)) return
     setPageState(next)
+    setRouteStatus('ok')
     setMobileNav(false)
+    writeHistory(next, monthRef.current, 'push')
   }
+
+  const hrefFor = useCallback((target: Page) => buildAppUrl(target, monthRef.current), [])
 
   const openMenuMonth = useCallback((jy: number, jm: number) => {
     if (!isValidJalaliDate(jy, jm, 1)) {
       return { ok: false, message: 'ماه مقصد این اعلان نامعتبر است.' }
     }
-    setSelectedMonth({ jy, jm })
+    const month = { jy, jm }
+    setSelectedMonth(month)
     if (!canAccess(role, 'menu')) {
       return { ok: false, message: 'صفحه سفارش این ماه برای نقش شما در دسترس نیست.' }
     }
     setPageState('menu')
+    setRouteStatus('ok')
     setMobileNav(false)
+    writeHistory('menu', month, 'push')
     return { ok: true }
-  }, [role])
+  }, [role, writeHistory])
 
   function mealDeadlineAt(day: Pick<DayMenu, 'jy' | 'jm' | 'jd' | 'gregorianDate'>, meal: MealKind): MealDeadlineState {
     const date = day.gregorianDate ?? formatGregorianDate(day.jy, day.jm, day.jd)
@@ -791,6 +849,8 @@ export function StoreProvider({
     role,
     theme,
     page,
+    routeStatus,
+    hrefFor,
     collapsed,
     mobileNav,
     menuView,
@@ -835,7 +895,11 @@ export function StoreProvider({
     setMenuView,
     setMenuQuery: (query) => setMenuQueryState((current) => ({ ...current, ...query })),
     clearMenuQuery: () => setMenuQueryState(emptyQuery),
-    shiftMonth: (delta) => setSelectedMonth((month) => addMonths(month, delta)),
+    shiftMonth: (delta) => setSelectedMonth((month) => {
+      const next = addMonths(month, delta)
+      if (routeStatusRef.current === 'ok') writeHistory(pageRef.current, next, 'push')
+      return next
+    }),
     setMealServing: async (meal, clock) => {
       if (!can(role, 'settings.meals')) return false
       if (!/^([01]\d|2[0-3]):([0-5]\d)$/.test(clock)) return false

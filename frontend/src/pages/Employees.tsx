@@ -186,7 +186,6 @@ function LiveEmployeesPage() {
       const updated = confirming.isActive ? await userApi.deactivate(confirming.id) : await userApi.reactivate(confirming.id)
       setConfirming(null)
       setItems((list) => list.map((item) => (item.id === updated.id ? updated : item)))
-      refresh()
     } catch (error: unknown) {
       setActionError(apiMessage(error, 'تغییر وضعیت حساب انجام نشد.'))
     } finally {

@@ -165,7 +165,7 @@ function Wheel({
   children,
 }: {
   label: string
-  listRef: RefObject<HTMLDivElement | null>
+  listRef: RefObject<HTMLDivElement>
   children: ReactNode
 }) {
   return (

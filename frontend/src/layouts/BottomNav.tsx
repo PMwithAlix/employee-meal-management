@@ -5,7 +5,8 @@ import { moreNavPages, navIcon, pageTitle, primaryNavPages } from '../shared/con
 import { ROLES } from '../shared/config/permissions'
 import { useApp } from '../app/providers/app-store'
 import { cn } from '../shared/lib/persian-text'
-import type { Page, Role } from '../shared/types/domain'
+import type { Role } from '../shared/types/domain'
+import { AppNavLink } from './AppNavLink'
 
 const FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
 
@@ -94,11 +95,6 @@ export function BottomNav() {
     }
   }, [open])
 
-  function go(page: Page) {
-    app.setPage(page)
-    setOpen(false)
-  }
-
   const slots = more.length ? primary.length + 1 : primary.length
 
   return (
@@ -124,10 +120,9 @@ export function BottomNav() {
               const active = app.page === page
               return (
                 <li key={page}>
-                  <button
-                    type="button"
-                    aria-current={active ? 'page' : undefined}
-                    onClick={() => go(page)}
+                  <AppNavLink
+                    page={page}
+                    onNavigate={() => setOpen(false)}
                     className={cn(
                       'flex min-h-11 w-full items-center gap-2 rounded-md px-3 text-sm',
                       active ? 'bg-selected font-medium text-link' : 'text-ink hover:bg-surface2',
@@ -135,7 +130,7 @@ export function BottomNav() {
                   >
                     <Icon size={16} aria-hidden />
                     {pageTitle(page, app.role)}
-                  </button>
+                  </AppNavLink>
                 </li>
               )
             })}
@@ -169,10 +164,9 @@ export function BottomNav() {
             const active = app.page === page
             return (
               <li key={page}>
-                <button
-                  type="button"
-                  aria-current={active ? 'page' : undefined}
-                  onClick={() => go(page)}
+                <AppNavLink
+                  page={page}
+                  onNavigate={() => setOpen(false)}
                   className={cn(
                     'flex min-h-11 w-full flex-col items-center justify-center gap-0.5 px-1 py-1.5 text-[11px] leading-tight',
                     active ? 'font-medium text-link' : 'text-muted',
@@ -180,7 +174,7 @@ export function BottomNav() {
                 >
                   <Icon size={18} aria-hidden />
                   <span className="line-clamp-2 text-center">{pageTitle(page, app.role)}</span>
-                </button>
+                </AppNavLink>
               </li>
             )
           })}

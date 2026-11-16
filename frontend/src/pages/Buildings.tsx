@@ -136,11 +136,12 @@ function LiveBuildingsPage() {
     setDeleteBusy(true)
     setDeleteError('')
     try {
-      await buildingApi.remove(building.id)
+      const removedId = building.id
+      await buildingApi.remove(removedId)
       setDeleteConfirmation(false)
-      setOpenId('')
+      setBuildings((list) => list.filter((item) => item.id !== removedId))
+      setOpenId((current) => current === removedId ? '' : current)
       setNotice('ساختمان حذف شد.')
-      refresh()
     } catch (error: unknown) {
       setDeleteError(apiMessage(error, 'حذف ساختمان انجام نشد.'))
     } finally {
@@ -398,9 +399,12 @@ function LiveBuildingsPage() {
           currentName={editing === 'new' ? '' : buildings.find((item) => item.id === editing)?.name ?? detail?.name ?? ''}
           buildings={buildings}
           onClose={() => setEditing(null)}
-          onSaved={(id) => {
-            setOpenId(id)
-            refresh()
+          onSaved={(saved) => {
+            setBuildings((list) => {
+              const exists = list.some((item) => item.id === saved.id)
+              return exists ? list.map((item) => item.id === saved.id ? { ...item, ...saved } : item) : [saved, ...list]
+            })
+            setOpenId(saved.id)
           }}
         />
       )}
@@ -419,7 +423,7 @@ function LiveBuildingForm({
   currentName: string
   buildings: BuildingSummary[]
   onClose: () => void
-  onSaved: (id: string) => void
+  onSaved: (saved: BuildingSummary) => void
 }) {
   const [name, setName] = useState(currentName)
   const [error, setError] = useState('')
@@ -444,7 +448,7 @@ function LiveBuildingForm({
           setError('')
           const request = id ? buildingApi.update(id, trimmed) : buildingApi.create(trimmed)
           void request.then((saved) => {
-            onSaved(saved.id)
+            onSaved(saved)
             onClose()
           }).catch((caught: unknown) => {
             setError(apiMessage(caught, id ? 'ویرایش ساختمان انجام نشد.' : 'ایجاد ساختمان انجام نشد.'))
