@@ -29,6 +29,9 @@ import { BaleLoginDto } from './dto/bale-login.dto';
 import { InitDataError, verifyBaleInitData } from './init-data';
 import { ProcessedUpdates } from './processed-updates';
 import {
+  BALE_WEBHOOK_SECRET_HEADER,
+  BALE_WEBHOOK_SECRET_HEADER_ALT,
+  hasBaleWebhookHeader,
   readBaleWebhookSecretHeader,
   webhookSecretsMatch,
 } from './webhook-secret';
@@ -128,11 +131,19 @@ export class BaleService {
     headers: Record<string, string | string[] | undefined>,
   ) {
     const expected = this.config.get('BALE_WEBHOOK_SECRET', { infer: true }).trim();
+    const provided = expected
+      ? readBaleWebhookSecretHeader(headers)
+      : undefined;
+    const secretValid = expected
+      ? webhookSecretsMatch(provided, expected)
+      : false;
+    this.logger.warn(
+      `Bale webhook diagnostic hasTelegramSecretHeader=${hasBaleWebhookHeader(headers, BALE_WEBHOOK_SECRET_HEADER)} hasBaleSecretHeader=${hasBaleWebhookHeader(headers, BALE_WEBHOOK_SECRET_HEADER_ALT)} webhookSecretConfigured=${Boolean(expected)} webhookSecretValid=${secretValid}`,
+    );
     if (!expected) {
       throw new ServiceUnavailableException();
     }
-    const provided = readBaleWebhookSecretHeader(headers);
-    if (!webhookSecretsMatch(provided, expected)) {
+    if (!secretValid) {
       throw new UnauthorizedException();
     }
   }

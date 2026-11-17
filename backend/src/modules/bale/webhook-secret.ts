@@ -14,6 +14,14 @@ function headerValue(
   return value;
 }
 
+export function hasBaleWebhookHeader(
+  headers: Record<string, string | string[] | undefined>,
+  name: string,
+) {
+  const target = name.toLowerCase();
+  return Object.keys(headers).some((key) => key.toLowerCase() === target);
+}
+
 export function readBaleWebhookSecretHeader(
   headers: Record<string, string | string[] | undefined>,
 ) {
