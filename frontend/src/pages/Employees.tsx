@@ -344,7 +344,7 @@ function LiveEmployeesPage() {
       )}
       {deleting && (
         <Dialog open title="حذف حساب" onClose={() => !mutating && setDeleting(null)}>
-          <p className="text-sm">حساب <span dir="ltr">{deleting.username}</span> برای همیشه حذف شود؟ این کار برگشت‌پذیر نیست.</p>
+          <p className="text-sm">حساب <span dir="ltr">{deleting.username}</span> با نقش {roleLabel(deleting.role)} برای همیشه حذف شود؟ سفارش‌ها، امتیازها، نشست‌ها و سوابق وابسته پاک می‌شوند. این کار برگشت‌پذیر نیست.</p>
           {actionError && <p className="mt-2 text-sm text-danger">{actionError}</p>}
           <div className="mt-4 flex justify-end gap-2">
             <Button variant="secondary" disabled={mutating} onClick={() => setDeleting(null)}>انصراف</Button>

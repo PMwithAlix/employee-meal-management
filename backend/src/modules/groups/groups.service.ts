@@ -12,6 +12,7 @@ import { PrismaService } from '../../database/prisma.service';
 import { AddGroupMemberDto } from './dto/add-group-member.dto';
 import { CreateGroupDto } from './dto/create-group.dto';
 import { UpdateGroupDto } from './dto/update-group.dto';
+import { enableAdminPurge } from '../purge/entity-purge';
 import { assertEligibleGroupMemberRole } from './groups.access';
 
 @Injectable()
@@ -46,8 +47,7 @@ export class GroupsService {
 
   list() {
     return this.prisma.group.findMany({
-      where: { isActive: true },
-      orderBy: { name: 'asc' },
+      orderBy: [{ isActive: 'desc' }, { name: 'asc' }],
     });
   }
 
@@ -236,8 +236,33 @@ export class GroupsService {
   async remove(actor: AuthUser, id: string) {
     const current = await this.requireGroup(id);
     await this.prisma.$transaction(async (tx) => {
+      const locked = await tx.$queryRaw<Array<{ id: string }>>`
+        SELECT "id" FROM "groups" WHERE "id" = ${id}::uuid FOR UPDATE
+      `;
+      if (locked.length === 0) {
+        throw new NotFoundException('گروه پیدا نشد.');
+      }
+      await enableAdminPurge(tx);
+      const memberships = await tx.groupMembership.findMany({
+        where: { groupId: id },
+        select: { id: true },
+      });
+      const membershipIds = memberships.map((item) => item.id);
       await tx.groupMembership.deleteMany({ where: { groupId: id } });
       await tx.orderGroupSnapshot.deleteMany({ where: { groupId: id } });
+      await tx.auditLog.deleteMany({
+        where: membershipIds.length
+          ? {
+              OR: [
+                { entityType: AuditEntity.Group, entityId: id },
+                {
+                  entityType: AuditEntity.GroupMembership,
+                  entityId: { in: membershipIds },
+                },
+              ],
+            }
+          : { entityType: AuditEntity.Group, entityId: id },
+      });
       await this.audit.record(
         {
           actorId: actor.id,

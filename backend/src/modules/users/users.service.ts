@@ -14,6 +14,10 @@ import { passwordIssue } from '../auth/password.policy';
 import { PasswordService } from '../auth/password.service';
 import type { AuthUser } from '../../common/types/auth-user';
 import { PrismaService } from '../../database/prisma.service';
+import {
+  enableAdminPurge,
+  purgeUserRecord,
+} from '../purge/entity-purge';
 import { CreateUserDto } from './dto/create-user.dto';
 import { ListUsersQueryDto } from './dto/list-users.query';
 import { ResetPasswordDto } from './dto/reset-password.dto';
@@ -284,102 +288,21 @@ export class UsersService {
     }
     const current = await this.requireUser(id);
     assertCanManageUser(actor, current.role);
-    if (current.role === Role.ADMIN) {
-      const otherAdmins = await this.prisma.user.count({
-        where: { role: Role.ADMIN, id: { not: id } },
-      });
-      if (otherAdmins === 0) {
-        throw new ConflictException('حداقل یک حساب ادمین باید باقی بماند.');
-      }
-    }
     await this.prisma.$transaction(async (tx) => {
-      await tx.menuVersion.updateMany({
-        where: { createdBy: id },
-        data: { createdBy: actor.id },
+      const locked = await tx.$queryRaw<Array<{ id: string }>>`
+        SELECT "id" FROM "users" WHERE "id" = ${id}::uuid FOR UPDATE
+      `;
+      if (locked.length === 0) {
+        throw new NotFoundException('کاربر پیدا نشد.');
+      }
+      await enableAdminPurge(tx);
+      await purgeUserRecord(tx, this.audit, {
+        actorId: actor.id,
+        userId: id,
+        beforeData: current,
       });
-      await tx.menu.updateMany({
-        where: { lastAnnouncedBy: id },
-        data: { lastAnnouncedBy: null },
-      });
-      await tx.orderStatusHistory.updateMany({
-        where: { actorId: id },
-        data: { actorId: null },
-      });
-      await this.deleteUserOrders(tx, id);
-      await tx.session.deleteMany({ where: { userId: id } });
-      await tx.notification.deleteMany({ where: { userId: id } });
-      await tx.groupMembership.deleteMany({ where: { userId: id } });
-      await tx.auditLog.updateMany({
-        where: { actorId: id },
-        data: { actorId: null },
-      });
-      await tx.guestOrderHistory.updateMany({
-        where: { actorId: id },
-        data: { actorId: actor.id },
-      });
-      await tx.guestOrder.updateMany({
-        where: { createdBy: id },
-        data: { createdBy: actor.id },
-      });
-      await tx.systemSetting.updateMany({
-        where: { updatedBy: id },
-        data: { updatedBy: actor.id },
-      });
-      await tx.orderDeadline.updateMany({
-        where: { createdBy: id },
-        data: { createdBy: actor.id },
-      });
-      await tx.orderDeadlinePolicy.updateMany({
-        where: { updatedBy: id },
-        data: { updatedBy: actor.id },
-      });
-      await tx.mealSetting.updateMany({
-        where: { updatedBy: id },
-        data: { updatedBy: actor.id },
-      });
-      await this.audit.record(
-        {
-          actorId: actor.id,
-          action: AuditAction.UserDeleted,
-          entityType: AuditEntity.User,
-          entityId: id,
-          beforeData: current,
-        },
-        tx,
-      );
-      await tx.user.delete({ where: { id } });
     });
     return { ok: true as const };
-  }
-
-  private async deleteUserOrders(tx: Prisma.TransactionClient, userId: string) {
-    const orders = await tx.order.findMany({
-      where: { userId },
-      select: { id: true },
-    });
-    const orderIds = orders.map((order) => order.id);
-    if (orderIds.length === 0) return;
-    await tx.order.updateMany({
-      where: { id: { in: orderIds } },
-      data: { currentCycleId: null },
-    });
-    const cycles = await tx.orderCycle.findMany({
-      where: { orderId: { in: orderIds } },
-      select: { id: true },
-    });
-    const cycleIds = cycles.map((cycle) => cycle.id);
-    if (cycleIds.length > 0) {
-      await tx.rating.deleteMany({ where: { orderCycleId: { in: cycleIds } } });
-      await tx.orderGroupSnapshot.deleteMany({
-        where: { orderCycleId: { in: cycleIds } },
-      });
-      await tx.orderStatusHistory.deleteMany({
-        where: { orderCycleId: { in: cycleIds } },
-      });
-      await tx.orderCycle.deleteMany({ where: { id: { in: cycleIds } } });
-    }
-    await tx.rating.deleteMany({ where: { orderId: { in: orderIds } } });
-    await tx.order.deleteMany({ where: { id: { in: orderIds } } });
   }
 
   private async requireUser(id: string) {

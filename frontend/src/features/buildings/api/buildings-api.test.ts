@@ -35,7 +35,7 @@ describe('buildingApi', () => {
     vi.stubGlobal('fetch', fetchMock)
     const detail = await buildingApi.get('b1')
     expect(String((fetchMock.mock.calls as unknown as Array<[string]>)[0][0])).toContain('/api/v1/buildings/b1')
-    expect(detail).toEqual({ id: 'b1', name: 'اصلی', isActive: true, usersCount: 3 })
+    expect(detail).toEqual({ id: 'b1', name: 'اصلی', isActive: true, usersCount: 3, guestOrdersCount: null })
   })
 
   it('creates and edits buildings with the name DTO only', async () => {

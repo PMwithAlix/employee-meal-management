@@ -32,8 +32,8 @@ describe('parseBuildingDetail', () => {
       id: 'b1',
       name: 'اصلی',
       isActive: true,
-      _count: { users: 4 },
-    })).toEqual({ id: 'b1', name: 'اصلی', isActive: true, usersCount: 4 })
+      _count: { users: 4, guestOrders: 2 },
+    })).toEqual({ id: 'b1', name: 'اصلی', isActive: true, usersCount: 4, guestOrdersCount: 2 })
   })
 
   it('does not invent a member count when _count is missing', () => {

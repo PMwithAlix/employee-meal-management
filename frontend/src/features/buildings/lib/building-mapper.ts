@@ -6,6 +6,7 @@ export interface BuildingSummary {
 
 export interface BuildingDetail extends BuildingSummary {
   usersCount: number | null
+  guestOrdersCount: number | null
 }
 
 function asRecord(value: unknown) {
@@ -31,6 +32,7 @@ export function parseBuildingDetail(value: unknown): BuildingDetail | null {
   return {
     ...building,
     usersCount: typeof count?.users === 'number' && Number.isInteger(count.users) ? count.users : null,
+    guestOrdersCount: typeof count?.guestOrders === 'number' && Number.isInteger(count.guestOrders) ? count.guestOrders : null,
   }
 }
 

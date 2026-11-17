@@ -704,4 +704,117 @@ describe('Organization (e2e)', () => {
       ).status,
     ).toBe(403);
   });
+
+  it('lets admin delete another admin and keeps the acting session', async () => {
+    const hash = await app.get(PasswordService).hash(password);
+    const otherAdmin = await prisma.user.create({
+      data: {
+        username: 'e2e.org.admin.other',
+        passwordHash: hash,
+        role: Role.ADMIN,
+      },
+    });
+    const deleted = await request(app.getHttpServer())
+      .delete(`/api/v1/users/${otherAdmin.id}`)
+      .set('Cookie', adminCookie);
+    expect(deleted.status).toBe(200);
+    expect(await prisma.user.findUnique({ where: { id: otherAdmin.id } })).toBeNull();
+    expect(await prisma.user.findUnique({ where: { id: adminId } })).not.toBeNull();
+    const me = await request(app.getHttpServer())
+      .get('/api/v1/auth/me')
+      .set('Cookie', adminCookie);
+    expect(me.status).toBe(200);
+    expect(me.body.id).toBe(adminId);
+  });
+
+  it('purges sessions and notifications with the user', async () => {
+    const hash = await app.get(PasswordService).hash(password);
+    const target = await prisma.user.create({
+      data: {
+        username: 'e2e.org.purge.user',
+        passwordHash: hash,
+        role: Role.MANAGEMENT,
+        buildingId,
+      },
+    });
+    await prisma.notification.create({
+      data: {
+        userId: target.id,
+        type: 'TEST',
+        title: 'اعلان',
+        body: 'حذف می‌شود',
+      },
+    });
+    const deleted = await request(app.getHttpServer())
+      .delete(`/api/v1/users/${target.id}`)
+      .set('Cookie', adminCookie);
+    expect(deleted.status).toBe(200);
+    expect(await prisma.notification.count({ where: { userId: target.id } })).toBe(0);
+    expect(await prisma.session.count({ where: { userId: target.id } })).toBe(0);
+    expect(await prisma.user.findUnique({ where: { id: target.id } })).toBeNull();
+  });
+
+  it('lets admin delete a group with members without deleting those users', async () => {
+    expect(
+      (
+        await request(app.getHttpServer())
+          .delete(`/api/v1/groups/${groupId}`)
+          .set('Cookie', hrCookie)
+      ).status,
+    ).toBe(403);
+    const removed = await request(app.getHttpServer())
+      .delete(`/api/v1/groups/${groupId}`)
+      .set('Cookie', adminCookie);
+    expect(removed.status).toBe(200);
+    expect(await prisma.group.findUnique({ where: { id: groupId } })).toBeNull();
+    expect(await prisma.groupMembership.count({ where: { groupId } })).toBe(0);
+    expect(await prisma.orderGroupSnapshot.count({ where: { groupId } })).toBe(0);
+    expect(await prisma.user.findUnique({ where: { id: employeeId } })).not.toBeNull();
+  });
+
+  it('lets admin delete a building and its users except the acting admin', async () => {
+    const hash = await app.get(PasswordService).hash(password);
+    const doomed = await prisma.building.create({
+      data: { name: 'e2e-org-purge-building' },
+    });
+    const doomedUser = await prisma.user.create({
+      data: {
+        username: 'e2e.org.building.victim',
+        passwordHash: hash,
+        role: Role.EMPLOYEE,
+        buildingId: doomed.id,
+      },
+    });
+    await prisma.user.update({
+      where: { id: adminId },
+      data: { buildingId: doomed.id },
+    });
+    await prisma.guestOrder.create({
+      data: {
+        buildingId: doomed.id,
+        mealDate: new Date('2026-11-17'),
+        mealType: 'LUNCH',
+        quantity: 2,
+        createdBy: adminId,
+        status: 'ACTIVE',
+      },
+    });
+    expect(
+      (
+        await request(app.getHttpServer())
+          .delete(`/api/v1/buildings/${doomed.id}`)
+          .set('Cookie', hrCookie)
+      ).status,
+    ).toBe(403);
+    const removed = await request(app.getHttpServer())
+      .delete(`/api/v1/buildings/${doomed.id}`)
+      .set('Cookie', adminCookie);
+    expect(removed.status).toBe(200);
+    expect(await prisma.building.findUnique({ where: { id: doomed.id } })).toBeNull();
+    expect(await prisma.user.findUnique({ where: { id: doomedUser.id } })).toBeNull();
+    expect(await prisma.guestOrder.count({ where: { buildingId: doomed.id } })).toBe(0);
+    const acting = await prisma.user.findUniqueOrThrow({ where: { id: adminId } });
+    expect(acting.buildingId).toBeNull();
+    expect(await prisma.user.count({ where: { buildingId: doomed.id } })).toBe(0);
+  });
 });

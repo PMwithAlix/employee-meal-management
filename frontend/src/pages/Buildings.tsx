@@ -13,6 +13,7 @@ import {
 import { Badge, Button, Dialog, Empty, Field, controlClass } from '../shared/ui/primitives'
 import { can } from '../shared/config/permissions'
 import { fa } from '../shared/lib/persian-text'
+import { useAuth } from '../app/providers/AuthProvider'
 import { useApp } from '../app/providers/app-store'
 import { userApi } from '../features/users/api/users-api'
 import { isHrManagedRole, roleLabel, type ManagedUser } from '../features/users/lib/user-mapper'
@@ -32,6 +33,7 @@ function apiMessage(error: unknown, fallback: string) {
 
 function LiveBuildingsPage() {
   const app = useApp()
+  const auth = useAuth()
   const canEditBuilding = can(app.role, 'building.edit')
   const canDelete = can(app.role, 'org.delete')
   const canMoveEmployee = can(app.role, 'employee.edit')
@@ -120,6 +122,7 @@ function LiveBuildingsPage() {
     () => buildings.filter((item) => item.id !== openId && item.isActive),
     [buildings, openId],
   )
+  const authUserInBuilding = people.some((item) => item.id === auth.user?.id)
 
   function canAssign(user: ManagedUser) {
     if (!canMoveEmployee) return false
@@ -140,6 +143,11 @@ function LiveBuildingsPage() {
       await buildingApi.remove(removedId)
       setDeleteConfirmation(false)
       setBuildings((list) => list.filter((item) => item.id !== removedId))
+      setUsers((list) => list.flatMap((item) => {
+        if (item.buildingId !== removedId) return [item]
+        if (item.id === auth.user?.id) return [{ ...item, buildingId: null }]
+        return []
+      }))
       setOpenId((current) => current === removedId ? '' : current)
       setNotice('ساختمان حذف شد.')
     } catch (error: unknown) {
@@ -361,7 +369,12 @@ function LiveBuildingsPage() {
       )}
       {deleteConfirmation && building && (
         <Dialog open title="حذف ساختمان" onClose={() => !deleteBusy && setDeleteConfirmation(false)}>
-          <p className="text-sm">ساختمان «{building.name}» برای همیشه حذف شود؟ ابتدا باید هیچ کاربری به آن وصل نباشد. سفارش‌های مهمان همین ساختمان هم پاک می‌شوند.</p>
+          <p className="text-sm">
+            ساختمان «{building.name}» برای همیشه حذف شود؟
+            {' '}{fa(detail?.usersCount ?? people.length)} کاربر وابسته
+            {authUserInBuilding ? ' (حساب شما جدا می‌شود و حذف نمی‌شود)' : ''}
+            {' '}و {fa(detail?.guestOrdersCount ?? 0)} سفارش مهمان این ساختمان پاک می‌شوند.
+          </p>
           {deleteError && <p className="mt-2 text-sm text-danger">{deleteError}</p>}
           <div className="mt-4 flex justify-end gap-2">
             <Button variant="secondary" disabled={deleteBusy} onClick={() => setDeleteConfirmation(false)}>انصراف</Button>

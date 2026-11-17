@@ -352,7 +352,7 @@ function LiveGroupsPage() {
           const count = counts[item.id]
           return (
             <button key={item.id} className={`min-h-11 w-full rounded-md border px-3 py-2 text-start ${item.id === openId ? 'border-primary bg-surface' : 'border-line bg-surface'}`} onClick={() => { setOpenId(item.id); setRename(item.name) }}>
-              <span className="block text-sm font-medium">{item.name}</span>
+              <span className="block text-sm font-medium">{item.name}{item.isActive ? '' : ' · غیرفعال'}</span>
               <span className="text-xs text-muted">{count === undefined ? '—' : `${fa(count)} عضو`}</span>
             </button>
           )
@@ -441,7 +441,7 @@ function LiveGroupsPage() {
             </div>
           </Dialog>
           <Dialog open={deleting} title="حذف گروه" onClose={() => !deleteBusy && setDeleting(false)}>
-            <p className="text-sm">گروه «{group.name}» برای همیشه حذف شود؟ عضویت‌ها و اتصال این گروه به سفارش‌های قبلی برداشته می‌شود.</p>
+            <p className="text-sm">گروه «{group.name}» با {fa(members.length)} عضو فعال برای همیشه حذف شود؟ عضویت‌ها، تاریخچه و اتصال این گروه به سفارش‌های قبلی پاک می‌شود. حساب کاربران عضو حذف نمی‌شود.</p>
             {deleteError && <p className="mt-2 text-sm text-danger">{deleteError}</p>}
             <div className="mt-3 flex justify-end gap-2">
               <Button variant="secondary" disabled={deleteBusy} onClick={() => setDeleting(false)}>انصراف</Button>
