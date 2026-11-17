@@ -1,6 +1,18 @@
 -- One live monthly menu: the highest versionNumber is the source of truth.
 -- Historical versions and menu items stay in place so order snapshots remain valid.
--- publishedVersionId is synced to the live version as a leftover pointer only.
+-- publishedVersionId is a leftover pointer and must reference a PUBLISHED version
+-- because menus_published_version_guard rejects DRAFT targets.
+
+UPDATE "menu_versions" AS version
+SET
+  "status" = 'PUBLISHED',
+  "publishedAt" = COALESCE(version."publishedAt", NOW())
+WHERE version."versionNumber" = (
+  SELECT MAX(other."versionNumber")
+  FROM "menu_versions" AS other
+  WHERE other."menuId" = version."menuId"
+)
+AND version."status" = 'DRAFT';
 
 UPDATE "menus" AS menu
 SET "publishedVersionId" = live.id
@@ -13,17 +25,6 @@ FROM (
 ) AS live
 WHERE live."menuId" = menu."id"
   AND menu."publishedVersionId" IS DISTINCT FROM live.id;
-
-UPDATE "menu_versions" AS version
-SET
-  "status" = 'PUBLISHED',
-  "publishedAt" = COALESCE(version."publishedAt", NOW())
-WHERE version."versionNumber" = (
-  SELECT MAX(other."versionNumber")
-  FROM "menu_versions" AS other
-  WHERE other."menuId" = version."menuId"
-)
-AND version."status" = 'DRAFT';
 
 CREATE OR REPLACE FUNCTION prevent_published_menu_item_mutation()
 RETURNS trigger AS $$
