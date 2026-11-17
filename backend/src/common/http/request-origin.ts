@@ -49,7 +49,31 @@ export function isBrowserSameOrigin(request: Request) {
 }
 
 export function isLoginRequest(request: Request) {
-  return /\/auth\/login(\?|$)/.test(requestPath(request));
+  const path = requestPath(request).split('?')[0];
+  return (
+    /\/api\/v1\/auth\/login$/.test(path) ||
+    /\/api\/v1\/bale\/auth\/login$/.test(path)
+  );
+}
+
+export function isBaleWebhookRequest(request: Request) {
+  const method = (request.method ?? 'GET').toUpperCase();
+  if (method !== 'POST') {
+    return false;
+  }
+  const path = requestPath(request).split('?')[0];
+  return /\/api\/v1\/bale\/webhook$/.test(path);
+}
+
+export function baleWebhookOriginAllowed(
+  origin: string | undefined,
+  request: Request,
+  allowedOrigins: string[],
+) {
+  if (!origin) {
+    return true;
+  }
+  return isAllowedRequestOrigin(origin, request, allowedOrigins);
 }
 
 export function shouldSkipOriginGuard(request: Request) {

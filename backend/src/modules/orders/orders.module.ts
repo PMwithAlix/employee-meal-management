@@ -27,5 +27,6 @@ import { RatingsService } from './ratings/ratings.service';
     MealSettingsService,
     RatingsService,
   ],
+  exports: [OrdersService],
 })
 export class OrdersModule {}

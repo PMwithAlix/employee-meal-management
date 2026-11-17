@@ -1,3 +1,4 @@
+import './styles.css'
 import { AuthProvider, useAuth } from './providers/AuthProvider'
 import { StoreProvider } from './providers/app-store'
 import { Shell } from '../layouts/AppShell'

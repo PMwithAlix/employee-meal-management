@@ -10,6 +10,7 @@ describe('app routes', () => {
     expect(pageFromPathname('/settings')).toBe('settings')
     expect(pageFromPathname('/settings/system')).toBe('systemSettings')
     expect(pageFromPathname('/unknown')).toBeNull()
+    expect(pageFromPathname('/mini-app')).toBeNull()
   })
 
   it('keeps a jalali month from the query string', () => {
