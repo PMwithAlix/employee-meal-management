@@ -106,7 +106,28 @@ jobs:
             sed -i "s|^KHAAN_WEB_IMAGE=.*|KHAAN_WEB_IMAGE=${FRONTEND_IMAGE}|" .env
             
             docker compose -f compose.yml pull
-            docker compose -f compose.yml up -d --remove-orphans --wait --wait-timeout 120
+            docker compose -f compose.yml up -d --remove-orphans
+            for name in food-khaan-postgres food-khaan-backend food-khaan-frontend; do
+              ok=0
+              n=0
+              while [ "\$n" -lt 24 ]; do
+                n=\$((n + 1))
+                status="\$(docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{else}}{{.State.Status}}{{end}}' "\$name")"
+                if [ "\$status" = "healthy" ]; then
+                  ok=1
+                  break
+                fi
+                if [ "\$status" = "unhealthy" ] || [ "\$status" = "exited" ] || [ "\$status" = "dead" ]; then
+                  echo "Deploy failed: \$name is \$status"
+                  exit 1
+                fi
+                sleep 5
+              done
+              if [ "\$ok" != 1 ]; then
+                echo "Deploy failed: \$name did not become healthy in time"
+                exit 1
+              fi
+            done
             docker compose -f compose.yml ps
             docker image prune -f
           EOF
