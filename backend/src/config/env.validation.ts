@@ -185,5 +185,26 @@ export function validateEnv(config: Record<string, unknown>) {
     throw new Error(`Invalid environment configuration: ${details}`);
   }
 
+  assertBaleRuntimeConfig(validated);
   return validated;
+}
+
+export function assertBaleRuntimeConfig(config: {
+  BALE_MINI_APP_ENABLED: boolean;
+  BALE_BOT_TOKEN: string;
+  BALE_WEBHOOK_SECRET: string;
+}) {
+  if (!config.BALE_MINI_APP_ENABLED) {
+    return;
+  }
+  if (!config.BALE_BOT_TOKEN.trim()) {
+    throw new Error(
+      'Invalid environment configuration: BALE_BOT_TOKEN is required when BALE_MINI_APP_ENABLED is true.',
+    );
+  }
+  if (config.BALE_WEBHOOK_SECRET.trim().length < 16) {
+    throw new Error(
+      'Invalid environment configuration: BALE_WEBHOOK_SECRET is required when BALE_MINI_APP_ENABLED is true.',
+    );
+  }
 }

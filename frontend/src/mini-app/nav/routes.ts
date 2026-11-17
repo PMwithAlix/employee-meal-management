@@ -8,38 +8,16 @@ export type MiniTabItem = {
   label: string
 }
 
-const ROLE_TABS: Record<Role, MiniTabItem[]> = {
-  employee: [
-    { id: 'home', label: 'خانه' },
-    { id: 'menu', label: 'منو' },
-    { id: 'orders', label: 'سفارش‌ها' },
-    { id: 'account', label: 'حساب' },
-  ],
-  hr: [
-    { id: 'home', label: 'خانه' },
-    { id: 'staff', label: 'کارکنان' },
-    { id: 'orders', label: 'سفارش‌ها' },
-    { id: 'account', label: 'حساب' },
-  ],
-  support: [
-    { id: 'home', label: 'خانه' },
-    { id: 'org-orders', label: 'پیگیری' },
-    { id: 'orders', label: 'سفارش‌ها' },
-    { id: 'account', label: 'حساب' },
-  ],
-  management: [
-    { id: 'home', label: 'خانه' },
-    { id: 'reports', label: 'گزارش' },
-    { id: 'activity', label: 'فعالیت' },
-    { id: 'account', label: 'حساب' },
-  ],
-  admin: [
-    { id: 'home', label: 'خانه' },
-    { id: 'org-orders', label: 'سفارش‌ها' },
-    { id: 'reports', label: 'گزارش' },
-    { id: 'account', label: 'حساب' },
-  ],
-}
+const TAB_ITEMS: MiniTabItem[] = [
+  { id: 'home', label: 'خانه' },
+  { id: 'menu', label: 'منو' },
+  { id: 'orders', label: 'سفارش‌ها' },
+  { id: 'staff', label: 'کارکنان' },
+  { id: 'org-orders', label: 'پیگیری' },
+  { id: 'reports', label: 'گزارش' },
+  { id: 'activity', label: 'فعالیت' },
+  { id: 'account', label: 'حساب' },
+]
 
 const TAB_PAGE = {
   home: 'overview',
@@ -52,17 +30,23 @@ const TAB_PAGE = {
   account: 'settings',
 } as const
 
+export function canOpenTab(role: Role, tab: MiniTab) {
+  if (tab === 'home' || tab === 'account') return true
+  if (tab === 'menu') return can(role, 'order.self') && canAccess(role, 'menu')
+  if (tab === 'orders') return can(role, 'order.self') && canAccess(role, 'orders')
+  if (tab === 'org-orders') return can(role, 'order.ops')
+  if (tab === 'staff') {
+    return canAccess(role, 'employees') && can(role, 'employee.edit') && !can(role, 'order.ops')
+  }
+  if (tab === 'reports') return canAccess(role, 'reports') && !can(role, 'order.self')
+  if (tab === 'activity') {
+    return canAccess(role, 'activity') && !can(role, 'order.self') && !can(role, 'order.ops')
+  }
+  return false
+}
+
 export function tabsForRole(role: Role) {
-  return ROLE_TABS[role].filter((tab) => {
-    if (tab.id === 'home' || tab.id === 'account') return true
-    if (tab.id === 'org-orders') return can(role, 'order.ops')
-    if (tab.id === 'staff') return canAccess(role, 'employees')
-    if (tab.id === 'menu') return canAccess(role, 'menu')
-    if (tab.id === 'orders') return canAccess(role, 'orders') && can(role, 'order.self')
-    if (tab.id === 'reports') return canAccess(role, 'reports')
-    if (tab.id === 'activity') return canAccess(role, 'activity')
-    return false
-  })
+  return TAB_ITEMS.filter((tab) => canOpenTab(role, tab.id))
 }
 
 export function canUse(role: Role, capability: Capability) {

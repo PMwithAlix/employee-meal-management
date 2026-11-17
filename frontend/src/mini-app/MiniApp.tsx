@@ -2,14 +2,14 @@ import { useEffect, useMemo, useState } from 'react'
 import { MiniAuthProvider, useMiniAuth } from './auth/MiniAuth'
 import { baleApi } from './api/bale-api'
 import { isBaleMiniAppEnabled } from './lib/flag'
-import { tabsForRole, type MiniTab } from './nav/routes'
+import { canOpenTab, tabsForRole, type MiniTab } from './nav/routes'
 import { AccountScreen } from './screens/AccountScreen'
 import { HomeScreen } from './screens/HomeScreen'
 import { LoginScreen } from './screens/LoginScreen'
 import { MenuScreen } from './screens/MenuScreen'
 import { ActivityScreen, OrgOrdersScreen, ReportsScreen, StaffScreen } from './screens/OpsScreens'
 import { OrdersScreen } from './screens/OrdersScreen'
-import { bootBaleWebApp, getBaleWebApp } from './sdk/bale-webapp'
+import { bootBaleWebApp } from './sdk/bale-webapp'
 import { KmButton, KmScreen, KmSkeleton, KmState, KmToast } from './ui/primitives'
 import './styles.css'
 
@@ -97,15 +97,12 @@ function MiniAppShell() {
       <div className="km-app">
         <main className="km-main">
           <LoginScreen />
-          {!getBaleWebApp()?.initData && backendEnabled === false ? (
-            <p className="km-muted">بازوی بله روی سرور هنوز فعال نیست. ورود آزمایشی از حساب خوان ممکن است.</p>
-          ) : null}
         </main>
       </div>
     )
   }
 
-  const active = tabs.some((item) => item.id === tab) ? tab : 'home'
+  const active = canOpenTab(auth.user.role, tab) ? tab : 'home'
 
   return (
     <div className="km-app">

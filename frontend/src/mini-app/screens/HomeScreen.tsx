@@ -5,7 +5,7 @@ import { ROLE_LABEL } from '../../shared/fixtures/seed-data'
 import { currentDateTime, monthTitle } from '../../shared/lib/jalali'
 import { fa } from '../../shared/lib/persian-text'
 import { useMiniAuth } from '../auth/MiniAuth'
-import { canUse, type MiniTab } from '../nav/routes'
+import { canOpenTab, canUse, type MiniTab } from '../nav/routes'
 import { KmButton, KmScreen, KmSkeleton, KmState } from '../ui/primitives'
 
 export function HomeScreen({ onOpen }: { onOpen: (tab: MiniTab) => void }) {
@@ -40,7 +40,7 @@ export function HomeScreen({ onOpen }: { onOpen: (tab: MiniTab) => void }) {
             : 'عملیات حساس در پنل وب می‌ماند. اینجا وضعیت و گزارش‌های مجاز شماست.'}
         </p>
         <div className="km-actions" style={{ marginTop: 12 }}>
-          {canUse(user.role, 'order.self') ? <KmButton onClick={() => onOpen('menu')}>رفتن به منو</KmButton> : null}
+          {canOpenTab(user.role, 'menu') ? <KmButton onClick={() => onOpen('menu')}>رفتن به منو</KmButton> : null}
           {canUse(user.role, 'order.ops') ? <KmButton variant="ghost" onClick={() => onOpen('org-orders')}>پیگیری سفارش‌ها</KmButton> : null}
         </div>
       </div>

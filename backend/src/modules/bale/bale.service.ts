@@ -1,7 +1,9 @@
 import {
   Injectable,
+  InternalServerErrorException,
   Logger,
   NotFoundException,
+  ServiceUnavailableException,
   UnauthorizedException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
@@ -12,6 +14,7 @@ import type { AuthUser } from '../../common/types/auth-user';
 import { EnvironmentVariables } from '../../config/env.validation';
 import { PrismaService } from '../../database/prisma.service';
 import { AuthService } from '../auth/auth.service';
+import { SessionService } from '../auth/session.service';
 import { MenusService } from '../menus/menus.service';
 import { OrdersService } from '../orders/employee/orders.service';
 import { BaleApiClient } from './bale-api.client';
@@ -20,6 +23,10 @@ import { botHelpText, roleKeyboard, SUPPORT_CONTACT } from './bot-menu';
 import { BaleLoginDto } from './dto/bale-login.dto';
 import { InitDataError, verifyBaleInitData } from './init-data';
 import { ProcessedUpdates } from './processed-updates';
+import {
+  readBaleWebhookSecretHeader,
+  webhookSecretsMatch,
+} from './webhook-secret';
 
 function asRecord(value: unknown) {
   return value && typeof value === 'object' ? (value as Record<string, unknown>) : null;
@@ -33,6 +40,7 @@ export class BaleService {
   constructor(
     private readonly config: ConfigService<EnvironmentVariables, true>,
     private readonly auth: AuthService,
+    private readonly sessions: SessionService,
     private readonly links: BaleLinkStore,
     private readonly api: BaleApiClient,
     private readonly orders: OrdersService,
@@ -67,23 +75,27 @@ export class BaleService {
   async login(dto: BaleLoginDto, request: Request, response: Response) {
     this.requireEnabled();
     const token = this.config.get('BALE_BOT_TOKEN', { infer: true }).trim();
-    let baleUserId: number | null = null;
-    if (token) {
-      try {
-        const verified = verifyBaleInitData(
-          dto.initData,
-          token,
-          Math.floor(Date.now() / 1000),
-          this.config.get('BALE_INIT_DATA_TTL_SECONDS', { infer: true }),
-        );
-        baleUserId = verified.user.id;
-      } catch (error) {
-        const message =
-          error instanceof InitDataError
-            ? error.message
-            : 'اعتبارسنجی بله انجام نشد.';
-        throw new UnauthorizedException(message);
-      }
+    if (!token) {
+      throw new ServiceUnavailableException(
+        'ورود بله پیکربندی نشده است.',
+      );
+    }
+
+    let baleUserId: number;
+    try {
+      const verified = verifyBaleInitData(
+        dto.initData,
+        token,
+        Math.floor(Date.now() / 1000),
+        this.config.get('BALE_INIT_DATA_TTL_SECONDS', { infer: true }),
+      );
+      baleUserId = verified.user.id;
+    } catch (error) {
+      const message =
+        error instanceof InitDataError
+          ? error.message
+          : 'اعتبارسنجی بله انجام نشد.';
+      throw new UnauthorizedException(message);
     }
 
     const clientKey = `${request.ip ?? 'unknown'}:bale:${dto.username}`;
@@ -93,36 +105,39 @@ export class BaleService {
       response,
     );
 
-    if (baleUserId !== null) {
-      await this.links.bind(
-        session.id,
-        baleUserId,
-        dto.chatId ?? String(baleUserId),
-      );
+    try {
+      await this.links.bind(session.id, baleUserId, String(baleUserId));
+    } catch (error) {
+      await this.sessions.revokeAllForUser(session.id);
+      this.sessions.clearCookie(response);
+      throw error;
     }
 
     return {
       ...session,
-      baleLinked: baleUserId !== null,
+      baleLinked: true,
     };
   }
 
-  webhookSecretMatches(headers: Record<string, string | string[] | undefined>, querySecret?: string) {
+  assertWebhookSecret(
+    headers: Record<string, string | string[] | undefined>,
+  ) {
     const expected = this.config.get('BALE_WEBHOOK_SECRET', { infer: true }).trim();
     if (!expected) {
-      return true;
+      throw new ServiceUnavailableException();
     }
-    const header =
-      this.header(headers, 'x-telegram-bot-api-secret-token') ??
-      this.header(headers, 'x-bale-bot-api-secret-token');
-    return header === expected || querySecret === expected;
-  }
-
-  async handleWebhook(body: unknown, headers: Record<string, string | string[] | undefined>, querySecret?: string) {
-    this.requireEnabled();
-    if (!this.webhookSecretMatches(headers, querySecret)) {
+    const provided = readBaleWebhookSecretHeader(headers);
+    if (!webhookSecretsMatch(provided, expected)) {
       throw new UnauthorizedException();
     }
+  }
+
+  async handleWebhook(
+    body: unknown,
+    headers: Record<string, string | string[] | undefined>,
+  ) {
+    this.requireEnabled();
+    this.assertWebhookSecret(headers);
     const update = asRecord(body);
     if (!update) {
       return { ok: true, ignored: true };
@@ -131,17 +146,17 @@ export class BaleService {
     if (updateId === null) {
       return { ok: true, ignored: true };
     }
-    if (!this.processed.remember(updateId)) {
-      return { ok: true, duplicate: true };
-    }
     try {
-      await this.dispatch(update);
+      const result = await this.processed.run(updateId, () =>
+        this.dispatch(update),
+      );
+      return { ok: true, duplicate: result === 'duplicate' };
     } catch (error) {
       this.logger.warn(
         `Bale update ${updateId} failed: ${error instanceof Error ? error.message : 'unknown'}`,
       );
+      throw new InternalServerErrorException();
     }
-    return { ok: true };
   }
 
   async syncWebhook(actor: AuthUser) {
@@ -160,15 +175,6 @@ export class BaleService {
   async webhookInfo() {
     this.requireEnabled();
     return this.api.getWebhookInfo();
-  }
-
-  private header(
-    headers: Record<string, string | string[] | undefined>,
-    name: string,
-  ) {
-    const value = headers[name];
-    if (Array.isArray(value)) return value[0];
-    return value;
   }
 
   private async dispatch(update: Record<string, unknown>) {

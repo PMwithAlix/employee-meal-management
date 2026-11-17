@@ -6,7 +6,6 @@ import {
   HttpCode,
   HttpStatus,
   Post,
-  Query,
   Req,
   Res,
   UseGuards,
@@ -55,9 +54,8 @@ export class BaleController {
   webhook(
     @Body() body: unknown,
     @Headers() headers: Record<string, string | string[] | undefined>,
-    @Query('secret') secret?: string,
   ) {
-    return this.bale.handleWebhook(body, headers, secret);
+    return this.bale.handleWebhook(body, headers);
   }
 
   @Get('webhook/info')

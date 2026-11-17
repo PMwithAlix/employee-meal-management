@@ -68,20 +68,8 @@ export function MiniAuthProvider({ children }: { children: ReactNode }) {
   const login = useCallback(
     async (username: string, password: string) => {
       const initData = getBaleWebApp()?.initData ?? ''
-      try {
-        const payload = await baleApi.login({ initData, username, password })
-        setStatus(apply(payload))
-      } catch (error) {
-        const canFallback =
-          error instanceof AuthRequestError &&
-          (error.status === 404 || (error.status === 401 && !initData))
-        if (canFallback) {
-          const payload = await authApi.login(username, password)
-          setStatus(apply(payload))
-          return
-        }
-        throw error
-      }
+      const payload = await baleApi.login({ initData, username, password })
+      setStatus(apply(payload))
     },
     [apply],
   )
