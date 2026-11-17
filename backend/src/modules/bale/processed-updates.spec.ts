@@ -62,6 +62,13 @@ describe('ProcessedUpdates', () => {
     expect(calls).toBe(2);
   });
 
+  it('forgets successes when a new process starts', async () => {
+    const first = new ProcessedUpdates();
+    await first.run(99, async () => undefined);
+    expect(first.hasSucceeded(99)).toBe(true);
+    expect(new ProcessedUpdates().hasSucceeded(99)).toBe(false);
+  });
+
   it('runs distinct update ids independently', async () => {
     const inbox = new ProcessedUpdates();
     await expect(inbox.run(1, async () => undefined)).resolves.toBe('ok');

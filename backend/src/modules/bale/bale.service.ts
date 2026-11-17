@@ -18,6 +18,11 @@ import { SessionService } from '../auth/session.service';
 import { MenusService } from '../menus/menus.service';
 import { OrdersService } from '../orders/employee/orders.service';
 import { BaleApiClient } from './bale-api.client';
+import {
+  isInvalidBaleTokenFailure,
+  isPermanentBaleFailure,
+  redactBaleLogText,
+} from './bale-api.errors';
 import { BaleLinkStore } from './bale.links';
 import { botHelpText, roleKeyboard, SUPPORT_CONTACT } from './bot-menu';
 import { BaleLoginDto } from './dto/bale-login.dto';
@@ -153,8 +158,19 @@ export class BaleService {
       return { ok: true, duplicate: result === 'duplicate' };
     } catch (error) {
       this.logger.warn(
-        `Bale update ${updateId} failed: ${error instanceof Error ? error.message : 'unknown'}`,
+        `Bale update ${updateId} failed: ${
+          error instanceof Error ? redactBaleLogText(error.message) : 'unknown'
+        }`,
       );
+      if (isPermanentBaleFailure(error)) {
+        this.processed.acknowledge(updateId);
+        return { ok: true, ignored: true };
+      }
+      if (isInvalidBaleTokenFailure(error)) {
+        this.logger.error(
+          `Bale update ${updateId} failed because the bot token was rejected (401). The update was not acknowledged.`,
+        );
+      }
       throw new InternalServerErrorException();
     }
   }

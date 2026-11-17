@@ -5,6 +5,7 @@ import {
   ServiceUnavailableException,
   UnauthorizedException,
 } from '@nestjs/common';
+import { BaleApiError } from './bale-api.errors';
 import { computeInitDataHash, verifyBaleInitData } from './init-data';
 import { BaleService } from './bale.service';
 
@@ -138,6 +139,183 @@ describe('BaleService webhook', () => {
         headers,
       ),
     ).resolves.toEqual({ ok: true, duplicate: false });
+  });
+
+  it('does not mark a timeout as processed', async () => {
+    const { instance } = service({
+      dispatch: async () => {
+        throw new BaleApiError('Bale sendMessage timed out.', {
+          retryable: true,
+          kind: 'transient',
+        });
+      },
+    });
+    await expect(
+      instance.handleWebhook({ update_id: 55, message: { text: '/start', chat: { id: 1 } } }, headers),
+    ).rejects.toBeInstanceOf(InternalServerErrorException);
+    expect(instance['processed'].hasSucceeded(55)).toBe(false);
+  });
+
+  it('does not mark a network failure as processed', async () => {
+    const { instance } = service({
+      dispatch: async () => {
+        throw new BaleApiError('Bale sendMessage network error.', {
+          retryable: true,
+          kind: 'transient',
+        });
+      },
+    });
+    await expect(
+      instance.handleWebhook({ update_id: 56, message: { text: '/start', chat: { id: 1 } } }, headers),
+    ).rejects.toBeInstanceOf(InternalServerErrorException);
+    expect(instance['processed'].hasSucceeded(56)).toBe(false);
+  });
+
+  it('does not mark a retryable Bale API failure as processed', async () => {
+    const { instance } = service({
+      dispatch: async () => {
+        throw new BaleApiError('Bale sendMessage failed: Internal Server Error', {
+          retryable: true,
+          kind: 'transient',
+          errorCode: 500,
+        });
+      },
+    });
+    await expect(
+      instance.handleWebhook({ update_id: 46, message: { text: '/start', chat: { id: 1 } } }, headers),
+    ).rejects.toBeInstanceOf(InternalServerErrorException);
+    expect(instance['processed'].hasSucceeded(46)).toBe(false);
+  });
+
+  it('does not mark a 429 Too Many Requests failure as processed', async () => {
+    const { instance } = service({
+      dispatch: async () => {
+        throw new BaleApiError('Bale sendMessage failed: Too Many Requests', {
+          retryable: true,
+          kind: 'transient',
+          errorCode: 429,
+        });
+      },
+    });
+    await expect(
+      instance.handleWebhook({ update_id: 49, message: { text: '/start', chat: { id: 1 } } }, headers),
+    ).rejects.toBeInstanceOf(InternalServerErrorException);
+    expect(instance['processed'].hasSucceeded(49)).toBe(false);
+  });
+
+  it('does not acknowledge a 401 InvalidToken failure', async () => {
+    const { instance } = service({
+      dispatch: async () => {
+        throw new BaleApiError('Bale sendMessage failed: Unauthorized', {
+          retryable: true,
+          kind: 'invalid_token',
+          errorCode: 401,
+        });
+      },
+    });
+    await expect(
+      instance.handleWebhook({ update_id: 48, message: { text: '/start', chat: { id: 1 } } }, headers),
+    ).rejects.toBeInstanceOf(InternalServerErrorException);
+    expect(instance['processed'].hasSucceeded(48)).toBe(false);
+  });
+
+  it('acknowledges a blocked-user 403 so Bale is not asked to retry forever', async () => {
+    const { instance } = service({
+      dispatch: async () => {
+        throw new BaleApiError('Bale sendMessage failed: Forbidden: bot was blocked by the user', {
+          retryable: false,
+          kind: 'permanent_user',
+          errorCode: 403,
+        });
+      },
+    });
+    await expect(
+      instance.handleWebhook({ update_id: 47, message: { text: '/start', chat: { id: 1 } } }, headers),
+    ).resolves.toEqual({ ok: true, ignored: true });
+    expect(instance['processed'].hasSucceeded(47)).toBe(true);
+    await expect(
+      instance.handleWebhook({ update_id: 47, message: { text: '/start', chat: { id: 1 } } }, headers),
+    ).resolves.toEqual({ ok: true, duplicate: true });
+  });
+
+  it('does not acknowledge a 403 without blocked-destination evidence', async () => {
+    const { instance } = service({
+      dispatch: async () => {
+        throw new BaleApiError('Bale sendMessage failed: Forbidden', {
+          retryable: true,
+          kind: 'transient',
+          errorCode: 403,
+        });
+      },
+    });
+    await expect(
+      instance.handleWebhook({ update_id: 51, message: { text: '/start', chat: { id: 1 } } }, headers),
+    ).rejects.toBeInstanceOf(InternalServerErrorException);
+    expect(instance['processed'].hasSucceeded(51)).toBe(false);
+  });
+
+  it('acknowledges a 404 when the chat is gone', async () => {
+    const { instance } = service({
+      dispatch: async () => {
+        throw new BaleApiError('Bale sendMessage failed: Not Found: chat not found', {
+          retryable: false,
+          kind: 'permanent_user',
+          errorCode: 404,
+        });
+      },
+    });
+    await expect(
+      instance.handleWebhook({ update_id: 50, message: { text: '/start', chat: { id: 1 } } }, headers),
+    ).resolves.toEqual({ ok: true, ignored: true });
+    expect(instance['processed'].hasSucceeded(50)).toBe(true);
+  });
+
+  it('does not acknowledge a 404 without destination detail', async () => {
+    const { instance } = service({
+      dispatch: async () => {
+        throw new BaleApiError('Bale sendMessage failed: Not Found', {
+          retryable: true,
+          kind: 'transient',
+          errorCode: 404,
+        });
+      },
+    });
+    await expect(
+      instance.handleWebhook({ update_id: 52, message: { text: '/start', chat: { id: 1 } } }, headers),
+    ).rejects.toBeInstanceOf(InternalServerErrorException);
+    expect(instance['processed'].hasSucceeded(52)).toBe(false);
+  });
+
+  it('acknowledges a 400 for empty message text on that update', async () => {
+    const { instance } = service({
+      dispatch: async () => {
+        throw new BaleApiError('Bale sendMessage failed: Bad Request: message text is empty', {
+          retryable: false,
+          kind: 'permanent_user',
+          errorCode: 400,
+        });
+      },
+    });
+    await expect(
+      instance.handleWebhook({ update_id: 53, message: { text: '/start', chat: { id: 1 } } }, headers),
+    ).resolves.toEqual({ ok: true, ignored: true });
+    expect(instance['processed'].hasSucceeded(53)).toBe(true);
+  });
+
+  it('does not acknowledge a 400 caused by an internally malformed request', async () => {
+    const { instance } = service({
+      dispatch: async () => {
+        throw new BaleApiError("Bale sendMessage failed: Bad Request: can't parse entities", {
+          retryable: true,
+          kind: 'transient',
+          errorCode: 400,
+        });
+      },
+    });
+    await expect(
+      instance.handleWebhook({ update_id: 54, message: { text: '/start', chat: { id: 1 } } }, headers),
+    ).rejects.toBeInstanceOf(InternalServerErrorException);
+    expect(instance['processed'].hasSucceeded(54)).toBe(false);
   });
 });
 

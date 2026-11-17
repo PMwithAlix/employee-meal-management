@@ -8,6 +8,10 @@ export class ProcessedUpdates {
     return this.succeeded.has(updateId);
   }
 
+  acknowledge(updateId: number) {
+    this.markSucceeded(updateId);
+  }
+
   async run(
     updateId: number,
     work: () => Promise<void>,

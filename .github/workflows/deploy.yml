@@ -60,6 +60,8 @@ jobs:
           context: ./frontend
           file: ./frontend/Dockerfile
           push: true
+          build-args: |
+            VITE_BALE_MINI_APP_ENABLED=true
           tags: |
             ${{ steps.meta.outputs.frontend_image }}
             ${{ steps.meta.outputs.frontend_latest }}
@@ -68,6 +70,8 @@ jobs:
     needs: build-and-push
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v4
+
       - name: Configure SSH
         env:
           SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
@@ -89,16 +93,20 @@ jobs:
           BACKEND_IMAGE: ${{ needs.build-and-push.outputs.backend_image }}
           FRONTEND_IMAGE: ${{ needs.build-and-push.outputs.frontend_image }}
         run: |
+          set -euo pipefail
+          APP_DIR="/home/develop/food-khaan"
+          scp -i "$HOME/.ssh/id_deploy" -P "$SSH_PORT" -o StrictHostKeyChecking=yes \
+            compose.yml "$SSH_USER@$SSH_HOST:$APP_DIR/compose.yml"
           ssh -i "$HOME/.ssh/id_deploy" -p "$SSH_PORT" -o StrictHostKeyChecking=yes \
             "$SSH_USER@$SSH_HOST" "bash -s" <<EOF
-            set -e
-            APP_DIR="/home/develop/food-khaan"
-            cd "\$APP_DIR"
+            set -euo pipefail
+            cd "$APP_DIR"
             
             sed -i "s|^KHAAN_BACKEND_IMAGE=.*|KHAAN_BACKEND_IMAGE=${BACKEND_IMAGE}|" .env
             sed -i "s|^KHAAN_WEB_IMAGE=.*|KHAAN_WEB_IMAGE=${FRONTEND_IMAGE}|" .env
             
-            docker compose pull
-            docker compose up -d --remove-orphans
+            docker compose -f compose.yml pull
+            docker compose -f compose.yml up -d --remove-orphans --wait --wait-timeout 120
+            docker compose -f compose.yml ps
             docker image prune -f
           EOF
