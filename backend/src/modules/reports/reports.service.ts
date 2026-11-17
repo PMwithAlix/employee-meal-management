@@ -14,6 +14,7 @@ import { DailyReportQueryDto } from './dto/daily-report.query';
 import { MonthlyReportQueryDto } from './dto/monthly-report.query';
 import { buildMonthlyReport } from './monthly-report';
 import { buildMonthlyWorkbook, monthlyWorkbookFilename } from './monthly-workbook';
+import { liveVersionInclude } from '../menus/live-menu';
 import { itemsFromCurrentMenu } from './published-menu';
 import type { ReportMealFilter } from './report-common';
 
@@ -29,16 +30,7 @@ export class ReportsService {
       ? await this.prisma.menu.findUnique({
           where: { year_month: { year: jalali.year, month: jalali.month } },
           include: {
-            versions: {
-              orderBy: { versionNumber: 'desc' },
-              take: 1,
-              include: {
-                items: {
-                  where: { mealDate },
-                  orderBy: [{ mealType: 'asc' }, { displayOrder: 'asc' }],
-                },
-              },
-            },
+            versions: liveVersionInclude({ mealDate }),
           },
         })
       : null;
@@ -70,15 +62,7 @@ export class ReportsService {
     const menu = await this.prisma.menu.findUnique({
       where: { year_month: { year: query.year, month: query.month } },
       include: {
-        versions: {
-          orderBy: { versionNumber: 'desc' },
-          take: 1,
-          include: {
-            items: {
-              orderBy: [{ mealType: 'asc' }, { displayOrder: 'asc' }],
-            },
-          },
-        },
+        versions: liveVersionInclude(),
       },
     });
     const loaded = await this.loadActiveOrders(from, to, meal);

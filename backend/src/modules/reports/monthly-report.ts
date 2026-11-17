@@ -3,6 +3,7 @@ import {
   UNASSIGNED_BUILDING_KEY,
   allowsReportMeal,
   compareFa,
+  matchLiveMenuItem,
   reportBuildingKey,
   reportBuildingName,
   reportFoodTitle,
@@ -44,9 +45,8 @@ export type MonthlyCount = {
 
 export type MonthlyFoodRow = MonthlyCount & {
   key: string;
-  menuItemId: string | null;
+  menuItemId: string;
   title: string;
-  onMenu: boolean;
   lunchCount: number;
   dinnerCount: number;
   staffCount: number;
@@ -102,46 +102,27 @@ export type MonthlyReport = {
 
 type CountBucket = MonthlyCount & {
   key: string;
-  onMenu: boolean;
-  menuItemId: string | null;
+  menuItemId: string;
   title: string;
 };
 
 type FoodIdentity = {
   key: string;
-  menuItemId: string | null;
+  menuItemId: string;
   title: string;
-  onMenu: boolean;
 };
 
 function identityFor(
   menuById: Map<string, MonthlyMenuItem>,
   menuItemId: string | null,
-  snapshotTitle: string,
   mealType: MealType,
-): FoodIdentity {
-  if (menuItemId && menuById.has(menuItemId)) {
-    const item = menuById.get(menuItemId)!;
-    return {
-      key: `id:${menuItemId}`,
-      menuItemId,
-      title: reportFoodTitle(item.title),
-      onMenu: true,
-    };
-  }
-  if (menuItemId) {
-    return {
-      key: `id:${menuItemId}`,
-      menuItemId,
-      title: reportFoodTitle(snapshotTitle),
-      onMenu: false,
-    };
-  }
+): FoodIdentity | null {
+  const item = matchLiveMenuItem(menuById, menuItemId, mealType);
+  if (!item) return null;
   return {
-    key: `orphan:${mealType}:${reportFoodTitle(snapshotTitle)}`,
-    menuItemId: null,
-    title: reportFoodTitle(snapshotTitle),
-    onMenu: false,
+    key: `id:${item.id}`,
+    menuItemId: item.id,
+    title: reportFoodTitle(item.title),
   };
 }
 
@@ -202,22 +183,27 @@ function sumCounts(rows: MonthlyCount[]): MonthlyTotals {
   return withDerived(total);
 }
 
+function mergeCounts(left: MonthlyCount, right: MonthlyCount): MonthlyCount {
+  return {
+    lunchStaff: left.lunchStaff + right.lunchStaff,
+    lunchGuest: left.lunchGuest + right.lunchGuest,
+    dinnerStaff: left.dinnerStaff + right.dinnerStaff,
+    dinnerGuest: left.dinnerGuest + right.dinnerGuest,
+  };
+}
+
 function ensureBucket(
   map: Map<string, CountBucket>,
   identity: FoodIdentity,
 ) {
   const current = map.get(identity.key);
   if (current) {
-    if (identity.onMenu) {
-      current.onMenu = true;
-      current.title = identity.title;
-    }
+    current.title = identity.title;
     return current;
   }
   const created: CountBucket = {
     ...emptyCount(),
     key: identity.key,
-    onMenu: identity.onMenu,
     menuItemId: identity.menuItemId,
     title: identity.title,
   };
@@ -226,12 +212,11 @@ function ensureBucket(
 }
 
 function toFoodRow(bucket: CountBucket): MonthlyFoodRow {
-  const { key, onMenu, menuItemId, title, ...counts } = bucket;
+  const { key, menuItemId, title, ...counts } = bucket;
   return {
     key,
     menuItemId,
     title,
-    onMenu,
     ...withDerived(counts),
   };
 }
@@ -260,12 +245,14 @@ export function buildMonthlyReport(input: {
   );
 
   const foods = new Map<string, CountBucket>();
+  const unmatched = emptyCount();
   const buildings = new Map<
     string,
     {
       buildingId: string | null;
       buildingName: string;
       foods: Map<string, CountBucket>;
+      unmatched: MonthlyCount;
     }
   >();
 
@@ -285,6 +272,7 @@ export function buildMonthlyReport(input: {
       buildingId: key === UNASSIGNED_BUILDING_KEY ? null : buildingId,
       buildingName: reportBuildingName(buildingId, name),
       foods: new Map<string, CountBucket>(),
+      unmatched: emptyCount(),
     };
     buildings.set(key, created);
     return created;
@@ -294,16 +282,20 @@ export function buildMonthlyReport(input: {
     buildingId: string | null,
     buildingName: string | null,
     menuItemId: string | null,
-    title: string,
     mealType: MealType,
     kind: 'staff' | 'guest',
     amount: number,
   ) {
     if (!allowsReportMeal(meal, mealType)) return;
     if (amount <= 0) return;
-    const identity = identityFor(menuById, menuItemId, title, mealType);
-    addPortion(ensureBucket(foods, identity), mealType, kind, amount);
+    const identity = identityFor(menuById, menuItemId, mealType);
     const building = ensureBuilding(buildingId, buildingName);
+    if (!identity) {
+      addPortion(unmatched, mealType, kind, amount);
+      addPortion(building.unmatched, mealType, kind, amount);
+      return;
+    }
+    addPortion(ensureBucket(foods, identity), mealType, kind, amount);
     addPortion(ensureBucket(building.foods, identity), mealType, kind, amount);
   }
 
@@ -315,7 +307,6 @@ export function buildMonthlyReport(input: {
       order.buildingId,
       order.buildingName,
       order.menuItemId,
-      order.title,
       order.mealType,
       'staff',
       1,
@@ -331,7 +322,6 @@ export function buildMonthlyReport(input: {
       order.buildingId,
       order.buildingName,
       order.menuItemId,
-      order.title,
       order.mealType,
       'guest',
       quantity,
@@ -360,17 +350,18 @@ export function buildMonthlyReport(input: {
       }))
       .filter((row) => row.total > 0)
       .sort(compareFoodRows);
-    if (rows.length === 0) continue;
+    const buildingTotal = withDerived(mergeCounts(sumCounts(rows), building.unmatched));
+    if (rows.length === 0 && buildingTotal.total === 0) continue;
     buildingRows.push(...rows);
     buildingTotals.push({
       buildingId: building.buildingId,
       buildingName: building.buildingName,
-      ...sumCounts(rows),
+      ...buildingTotal,
     });
   }
 
-  const foodsTotal = sumCounts(foodRows);
-  const buildingsAggregate = sumCounts(buildingRows);
+  const foodsTotal = withDerived(mergeCounts(sumCounts(foodRows), unmatched));
+  const buildingsAggregate = sumCounts(buildingTotals);
   const supply = foodRows;
   const supplyTotal = foodsTotal;
   const difference = foodsTotal.total - buildingsAggregate.total;

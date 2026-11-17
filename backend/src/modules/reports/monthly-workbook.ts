@@ -25,7 +25,6 @@ export async function buildMonthlyWorkbook(report: MonthlyReport): Promise<Buffe
     'مجموع',
     'سفارش کاربران',
     'سفارش مهمان‌ها',
-    'وضعیت منو',
   ]);
   for (const food of report.foods) {
     foods.addRow([
@@ -35,7 +34,6 @@ export async function buildMonthlyWorkbook(report: MonthlyReport): Promise<Buffe
       food.total,
       food.staffCount,
       food.guestCount,
-      food.onMenu ? 'منوی جاری' : 'خارج از منوی جاری',
     ]);
   }
   addHeader(foods, [
@@ -45,7 +43,6 @@ export async function buildMonthlyWorkbook(report: MonthlyReport): Promise<Buffe
     report.foodsTotal.total,
     report.foodsTotal.staffCount,
     report.foodsTotal.guestCount,
-    '',
   ]);
 
   buildings.addRow(['گزارش ماهانه به تفکیک ساختمان']);

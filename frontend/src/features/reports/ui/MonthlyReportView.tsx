@@ -59,7 +59,7 @@ export function MonthlyReportView({
               ]}
               rows={report.buildingRows.map((row) => [
                 row.buildingName,
-                `${row.title}${row.onMenu ? '' : ' · خارج از منوی جاری'}`,
+                row.title,
                 ...(lunch ? [fa(row.lunchCount)] : []),
                 ...(dinner ? [fa(row.dinnerCount)] : []),
                 fa(row.total),
@@ -139,7 +139,7 @@ function MonthlyFoodTable({
           'مجموع',
         ]}
         rows={foods.map((food) => [
-          `${food.title}${food.onMenu ? '' : ' · خارج از منوی جاری'}`,
+          food.title,
           ...(lunch ? [fa(food.lunchCount)] : []),
           ...(dinner ? [fa(food.dinnerCount)] : []),
           fa(food.total),

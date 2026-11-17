@@ -100,7 +100,6 @@ describe('buildMonthlyReport', () => {
       staffCount: 1,
       guestCount: 4,
       total: 5,
-      onMenu: true,
     });
     expect(result.foods.find((item) => item.menuItemId === 'dinner-1')).toMatchObject({
       title: 'چلو جوجه',
@@ -109,7 +108,6 @@ describe('buildMonthlyReport', () => {
       staffCount: 1,
       guestCount: 0,
       total: 1,
-      onMenu: true,
     });
     expect(result.foods.find((item) => item.menuItemId === 'lunch-2')).toMatchObject({
       title: 'قیمه',
@@ -131,7 +129,7 @@ describe('buildMonthlyReport', () => {
     ]);
   });
 
-  it('does not merge different titles, keeps off-menu ordered foods, and includes unassigned buildings', () => {
+  it('keeps unmatched orders in totals without creating snapshot foods, and includes unassigned buildings', () => {
     const result = report(
       [
         {
@@ -157,16 +155,17 @@ describe('buildMonthlyReport', () => {
       },
     );
 
-    expect(result.foods.find((item) => item.menuItemId === 'x')).toMatchObject({
-      title: 'آش',
-      onMenu: false,
+    expect(result.foods).toEqual([]);
+    expect(result.foodsTotal.total).toBe(2);
+    expect(result.buildingRows).toEqual([]);
+    expect(result.buildingTotals.some((row) => row.buildingId === null && row.total === 1)).toBe(true);
+    expect(result.buildingTotals.some((row) => row.buildingName === 'مرکزی' && row.total === 1)).toBe(true);
+    expect(result.reconciliation).toEqual({
+      foodsTotal: 2,
+      buildingsTotal: 2,
+      difference: 0,
+      matched: true,
     });
-    expect(result.foods.find((item) => item.menuItemId === 'y')).toMatchObject({
-      title: 'چلو جوجه',
-      onMenu: false,
-    });
-    expect(result.buildingRows.some((row) => row.buildingId === null && row.title === 'آش')).toBe(true);
-    expect(result.reconciliation.matched).toBe(true);
   });
 
   it('omits zero-order foods and applies the meal filter to every total', () => {
@@ -202,7 +201,7 @@ describe('buildMonthlyReport', () => {
     expect(dinnerOnly.buildingTotals[0]?.total).toBe(1);
   });
 
-  it('attributes renamed foods by menu item id and keeps snapshot-only orders separate', () => {
+  it('attributes renamed foods by menu item id and does not invent a snapshot-only food', () => {
     const result = report(
       [
         {
@@ -233,17 +232,15 @@ describe('buildMonthlyReport', () => {
         ],
       },
     );
-    expect(result.foods.find((item) => item.menuItemId === 'MENU_ITEM_123')).toMatchObject({
-      title: 'چلو جوجه زعفرانی',
-      onMenu: true,
-      total: 1,
-    });
-    expect(result.foods.find((item) => item.menuItemId === null)).toMatchObject({
-      title: 'چلو جوجه زعفرانی',
-      onMenu: false,
-      total: 1,
-    });
+    expect(result.foods).toEqual([
+      expect.objectContaining({
+        menuItemId: 'MENU_ITEM_123',
+        title: 'چلو جوجه زعفرانی',
+        total: 1,
+      }),
+    ]);
     expect(result.foodsTotal.total).toBe(2);
+    expect(result.buildingTotals[0]?.total).toBe(2);
     expect(result.reconciliation.matched).toBe(true);
   });
 });

@@ -98,47 +98,29 @@ describe('buildDailyReport', () => {
       ],
     });
 
-    const lunchJoojeh = report.lunch.foods.find((item) => item.onMenu);
-    const lunchOrphan = report.lunch.foods.find((item) => !item.onMenu);
-    expect(lunchJoojeh).toEqual({
-      menuItemId: 'lunch-1',
-      title: 'جوجه',
-      onMenu: true,
-      staffCount: 1,
-      guestCount: 3,
-      total: 4,
-    });
-    expect(lunchOrphan).toEqual({
-      menuItemId: null,
-      title: 'جوجه',
-      onMenu: false,
-      staffCount: 1,
-      guestCount: 0,
-      total: 1,
-    });
+    expect(report.lunch.foods).toEqual([
+      {
+        menuItemId: 'lunch-1',
+        title: 'جوجه',
+        staffCount: 1,
+        guestCount: 3,
+        total: 4,
+      },
+    ]);
     expect(report.lunch.staffTotal).toBe(2);
     expect(report.lunch.guestTotal).toBe(3);
     expect(report.lunch.total).toBe(5);
-    expect(report.dinner.foods).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({
-          menuItemId: 'dinner-1',
-          title: 'کوکو',
-          onMenu: true,
-          staffCount: 1,
-          guestCount: 0,
-          total: 1,
-        }),
-        expect.objectContaining({
-          menuItemId: null,
-          title: 'کوکو',
-          onMenu: false,
-          staffCount: 0,
-          guestCount: 2,
-          total: 2,
-        }),
-      ]),
-    );
+    expect(report.dinner.foods).toEqual([
+      {
+        menuItemId: 'dinner-1',
+        title: 'کوکو',
+        staffCount: 1,
+        guestCount: 0,
+        total: 1,
+      },
+    ]);
+    expect(report.dinner.staffTotal).toBe(1);
+    expect(report.dinner.guestTotal).toBe(2);
     expect(report.dinner.total).toBe(3);
     expect(report.buildings.map((item) => item.buildingName)).toEqual(['دهقان', 'مرکزی']);
     expect(report.buildings[0].users).toHaveLength(2);
@@ -146,11 +128,11 @@ describe('buildDailyReport', () => {
       { id: 'g1', mealType: MealType.LUNCH, title: 'جوجه', quantity: 3, note: 'جلسه' },
     ]);
     expect(report.unassignedGuests).toEqual([
-      { id: 'g2', mealType: MealType.DINNER, title: 'کوکو', quantity: 2, note: null },
+      { id: 'g2', mealType: MealType.DINNER, title: '—', quantity: 2, note: null },
     ]);
   });
 
-  it('keeps orphan foods and users without a building, and hides empty buildings', () => {
+  it('keeps unmatched active orders in totals without inventing a snapshot food', () => {
     const report = buildDailyReport({
       mealDate: '2026-11-16',
       jalaliDate: '1405/08/25',
@@ -181,13 +163,15 @@ describe('buildDailyReport', () => {
       guestOrders: [],
     });
 
-    expect(report.lunch.foods.map((item) => item.title)).toEqual(['غذای حذف‌شده']);
-    expect(report.lunch.foods[0]?.onMenu).toBe(false);
+    expect(report.lunch.foods).toEqual([]);
+    expect(report.lunch.staffTotal).toBe(1);
     expect(report.lunch.total).toBe(1);
+    expect(report.dinner.foods).toEqual([]);
+    expect(report.dinner.staffTotal).toBe(1);
     expect(report.buildings).toHaveLength(1);
     expect(report.buildings[0].buildingId).toBeNull();
-    expect(report.buildings[0].users[0].lunch).toEqual(['غذای حذف‌شده']);
-    expect(report.buildings[0].users[0].dinner).toEqual(['آش']);
+    expect(report.buildings[0].users[0].lunch).toEqual([]);
+    expect(report.buildings[0].users[0].dinner).toEqual([]);
   });
 
   it('hides zero-order foods independently for lunch and dinner without changing meal totals', () => {
@@ -270,7 +254,7 @@ describe('buildDailyReport', () => {
     expect(report.buildings[0]?.users[0]?.dinner).toEqual([]);
   });
 
-  it('keeps identity when the current title differs from the order snapshot', () => {
+  it('uses the live menu title when it differs from the order snapshot', () => {
     const report = buildDailyReport({
       mealDate: '2026-11-22',
       jalaliDate: '1405/09/01',
@@ -301,15 +285,15 @@ describe('buildDailyReport', () => {
       {
         menuItemId: 'MENU_ITEM_123',
         title: 'چلو جوجه زعفرانی',
-        onMenu: true,
         staffCount: 1,
         guestCount: 0,
         total: 1,
       },
     ]);
+    expect(report.buildings[0]?.users[0]?.lunch).toEqual(['چلو جوجه زعفرانی']);
   });
 
-  it('reports a deleted item by id without merging another food of the same title', () => {
+  it('does not merge a deleted item into another food with the same snapshot title', () => {
     const report = buildDailyReport({
       mealDate: '2026-11-22',
       jalaliDate: '1405/09/01',
@@ -346,22 +330,45 @@ describe('buildDailyReport', () => {
       ],
       guestOrders: [],
     });
-    expect(report.lunch.foods).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({
-          menuItemId: 'current',
-          onMenu: true,
-          staffCount: 1,
-          total: 1,
-        }),
-        expect.objectContaining({
-          menuItemId: 'removed',
-          onMenu: false,
-          staffCount: 1,
-          total: 1,
-        }),
-      ]),
-    );
+    expect(report.lunch.foods).toEqual([
+      {
+        menuItemId: 'current',
+        title: 'چلو جوجه لاری',
+        staffCount: 1,
+        guestCount: 0,
+        total: 1,
+      },
+    ]);
+    expect(report.lunch.staffTotal).toBe(2);
     expect(report.lunch.total).toBe(2);
+    expect(JSON.stringify(report)).not.toContain('خارج از منوی جاری');
+  });
+
+  it('does not attach a lunch order to a dinner menu item with the same id mismatch', () => {
+    const report = buildDailyReport({
+      mealDate: '2026-11-16',
+      jalaliDate: '1405/08/25',
+      generatedAt: '2026-11-16T12:00:00.000Z',
+      menuItems: [
+        { id: 'dinner-1', mealType: MealType.DINNER, title: 'کوکو', displayOrder: 1 },
+      ],
+      staffOrders: [
+        {
+          id: 'o1',
+          userId: 'u1',
+          mealType: MealType.LUNCH,
+          username: 'کاربر',
+          buildingId: 'b1',
+          buildingName: 'دهقان',
+          menuItemId: 'dinner-1',
+          title: 'کوکو',
+        },
+      ],
+      guestOrders: [],
+    });
+    expect(report.lunch.foods).toEqual([]);
+    expect(report.lunch.total).toBe(1);
+    expect(report.dinner.foods).toEqual([]);
+    expect(report.dinner.total).toBe(0);
   });
 });

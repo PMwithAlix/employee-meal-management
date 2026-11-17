@@ -233,11 +233,8 @@ function MealSummaryBlock({ title, meal }: { title: string; meal: DailyReportMea
           </thead>
           <tbody>
             {foods.map((food) => (
-              <tr key={`${food.menuItemId ?? 'extra'}-${food.title}`}>
-                <td>
-                  {food.title}
-                  {!food.onMenu ? <span className="ms-1 text-xs text-muted">· خارج از منوی جاری</span> : null}
-                </td>
+              <tr key={`${food.menuItemId}-${food.title}`}>
+                <td>{food.title}</td>
                 <td>{fa(food.staffCount)}</td>
                 <td>{fa(food.guestCount)}</td>
                 <td className="font-medium">{fa(food.total)}</td>

@@ -25,7 +25,7 @@ describe('itemsFromCurrentMenu', () => {
 });
 
 describe('current menu with extra ordered foods', () => {
-  it('keeps ordered foods missing from the live menu as off-menu rows', () => {
+  it('does not invent a snapshot food when the order is missing from the live menu', () => {
     const report = buildDailyReport({
       mealDate: '2026-11-16',
       jalaliDate: '1405/08/25',
@@ -47,10 +47,8 @@ describe('current menu with extra ordered foods', () => {
       ],
       guestOrders: [],
     });
-    expect(report.lunch.foods.map((item) => item.title)).toEqual(['قیمه']);
-    expect(report.lunch.foods.find((item) => item.title === 'قیمه')?.onMenu).toBe(
-      false,
-    );
+    expect(report.lunch.foods.map((item) => item.title)).toEqual([]);
+    expect(report.lunch.staffTotal).toBe(1);
     expect(report.lunch.total).toBe(1);
   });
 });

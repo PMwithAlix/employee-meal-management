@@ -37,10 +37,10 @@ function parseFood(value: unknown): DailyReportFoodRow | null {
   const body = asRecord(value)
   if (!body || typeof body.title !== 'string') return null
   if (typeof body.staffCount !== 'number' || typeof body.guestCount !== 'number' || typeof body.total !== 'number') return null
+  if (typeof body.menuItemId !== 'string') return null
   return {
-    menuItemId: typeof body.menuItemId === 'string' ? body.menuItemId : null,
+    menuItemId: body.menuItemId,
     title: body.title,
-    onMenu: body.onMenu === true,
     staffCount: body.staffCount,
     guestCount: body.guestCount,
     total: body.total,
@@ -147,13 +147,8 @@ function parseMonthlyFood(value: unknown): MonthlyFoodRow | null {
   return {
     ...counts,
     ...(typeof body.key === 'string' ? { key: body.key } : {}),
-    ...(typeof body.menuItemId === 'string'
-      ? { menuItemId: body.menuItemId }
-      : body.menuItemId === null
-        ? { menuItemId: null }
-        : {}),
+    ...(typeof body.menuItemId === 'string' ? { menuItemId: body.menuItemId } : {}),
     title: body.title,
-    onMenu: body.onMenu === true,
   }
 }
 

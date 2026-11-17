@@ -3,9 +3,8 @@ export type ReportMealFilter = 'ALL' | 'LUNCH' | 'DINNER'
 export type ReportPeriod = 'daily' | 'monthly'
 
 export type DailyReportFoodRow = {
-  menuItemId: string | null
+  menuItemId: string
   title: string
-  onMenu: boolean
   staffCount: number
   guestCount: number
   total: number
@@ -66,9 +65,8 @@ export type MonthlyCountRow = {
 
 export type MonthlyFoodRow = MonthlyCountRow & {
   key?: string
-  menuItemId?: string | null
+  menuItemId?: string
   title: string
-  onMenu: boolean
 }
 
 export type MonthlyBuildingFoodRow = MonthlyFoodRow & {

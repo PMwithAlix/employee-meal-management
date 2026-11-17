@@ -36,6 +36,17 @@ export function reportFoodTitle(title: string | null | undefined) {
   return value || 'بدون عنوان';
 }
 
+export function matchLiveMenuItem<T extends { id: string; mealType: MealType }>(
+  menuById: Map<string, T>,
+  menuItemId: string | null | undefined,
+  mealType: MealType,
+): T | null {
+  if (!menuItemId) return null;
+  const item = menuById.get(menuItemId);
+  if (!item || item.mealType !== mealType) return null;
+  return item;
+}
+
 export function reportMealLabel(filter: ReportMealFilter) {
   if (filter === 'LUNCH') return 'فقط ناهار';
   if (filter === 'DINNER') return 'فقط شام';

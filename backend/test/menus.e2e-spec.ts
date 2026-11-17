@@ -843,8 +843,8 @@ describe('Menus (e2e)', () => {
       .set('Cookie', managementCookie);
     expect(daily.status).toBe(200);
     expect(
-      (daily.body.lunch.foods as Array<{ menuItemId: string; onMenu: boolean }>).some(
-        (food) => food.menuItemId === option.id && food.onMenu === true,
+      (daily.body.lunch.foods as Array<{ menuItemId: string; title: string }>).some(
+        (food) => food.menuItemId === option.id && food.title === 'چلو جوجه زعفرانی',
       ),
     ).toBe(true);
 
@@ -854,8 +854,8 @@ describe('Menus (e2e)', () => {
     expect(monthly.status).toBe(200);
     expect(monthly.body.reconciliation.matched).toBe(true);
     expect(
-      (monthly.body.foods as Array<{ menuItemId: string; onMenu: boolean }>).some(
-        (food) => food.menuItemId === option.id && food.onMenu === true,
+      (monthly.body.foods as Array<{ menuItemId: string; title: string }>).some(
+        (food) => food.menuItemId === option.id && food.title === 'چلو جوجه زعفرانی',
       ),
     ).toBe(true);
   });

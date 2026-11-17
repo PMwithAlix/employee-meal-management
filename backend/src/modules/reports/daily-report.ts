@@ -3,6 +3,7 @@ import {
   UNASSIGNED_BUILDING_KEY,
   allowsReportMeal,
   compareFa,
+  matchLiveMenuItem,
   reportBuildingKey,
   reportBuildingName,
   reportFoodTitle,
@@ -41,9 +42,8 @@ export type DailyReportGuestOrder = {
 };
 
 export type DailyReportFoodRow = {
-  menuItemId: string | null;
+  menuItemId: string;
   title: string;
-  onMenu: boolean;
   staffCount: number;
   guestCount: number;
   total: number;
@@ -93,59 +93,22 @@ export type DailyReport = {
 type MealBucket = {
   mealType: MealType;
   foods: Map<string, DailyReportFoodRow>;
-  extras: Map<string, DailyReportFoodRow>;
+  unmatchedStaff: number;
+  unmatchedGuest: number;
 };
-
-function foodKey(menuItemId: string | null, title: string) {
-  return menuItemId ? `id:${menuItemId}` : `orphan:${title}`;
-}
 
 function emptyMeal(mealType: MealType, menuItems: DailyReportMenuItem[]): MealBucket {
   const foods = new Map<string, DailyReportFoodRow>();
   for (const item of [...menuItems].sort((a, b) => a.displayOrder - b.displayOrder)) {
-    foods.set(foodKey(item.id, item.title), {
+    foods.set(item.id, {
       menuItemId: item.id,
-      title: item.title,
-      onMenu: true,
+      title: reportFoodTitle(item.title),
       staffCount: 0,
       guestCount: 0,
       total: 0,
     });
   }
-  return { mealType, foods, extras: new Map() };
-}
-
-function matchFood(bucket: MealBucket, menuItemId: string | null, title: string) {
-  if (menuItemId) {
-    const byId = bucket.foods.get(foodKey(menuItemId, title));
-    if (byId) return byId;
-    const extraKey = foodKey(menuItemId, title);
-    const existing = bucket.extras.get(extraKey);
-    if (existing) return existing;
-    const created: DailyReportFoodRow = {
-      menuItemId,
-      title: title || 'بدون عنوان',
-      onMenu: false,
-      staffCount: 0,
-      guestCount: 0,
-      total: 0,
-    };
-    bucket.extras.set(extraKey, created);
-    return created;
-  }
-  const extraKey = foodKey(null, title || 'بدون عنوان');
-  const existing = bucket.extras.get(extraKey);
-  if (existing) return existing;
-  const created: DailyReportFoodRow = {
-    menuItemId: null,
-    title: title || 'بدون عنوان',
-    onMenu: false,
-    staffCount: 0,
-    guestCount: 0,
-    total: 0,
-  };
-  bucket.extras.set(extraKey, created);
-  return created;
+  return { mealType, foods, unmatchedStaff: 0, unmatchedGuest: 0 };
 }
 
 function addCount(food: DailyReportFoodRow, kind: 'staff' | 'guest', amount: number) {
@@ -156,13 +119,17 @@ function addCount(food: DailyReportFoodRow, kind: 'staff' | 'guest', amount: num
 }
 
 function summarize(bucket: MealBucket): DailyReportMealSummary {
-  const foods = [...bucket.foods.values(), ...bucket.extras.values()];
+  const foods = [...bucket.foods.values()];
+  const staffTotal =
+    foods.reduce((sum, food) => sum + food.staffCount, 0) + bucket.unmatchedStaff;
+  const guestTotal =
+    foods.reduce((sum, food) => sum + food.guestCount, 0) + bucket.unmatchedGuest;
   return {
     mealType: bucket.mealType,
     foods: foods.filter((food) => food.total > 0),
-    staffTotal: foods.reduce((sum, food) => sum + food.staffCount, 0),
-    guestTotal: foods.reduce((sum, food) => sum + food.guestCount, 0),
-    total: foods.reduce((sum, food) => sum + food.total, 0),
+    staffTotal,
+    guestTotal,
+    total: staffTotal + guestTotal,
   };
 }
 
@@ -176,6 +143,7 @@ export function buildDailyReport(input: {
   guestOrders: DailyReportGuestOrder[];
 }): DailyReport {
   const meal = input.meal ?? 'ALL';
+  const menuById = new Map(input.menuItems.map((item) => [item.id, item]));
   const lunch = emptyMeal(
     MealType.LUNCH,
     input.menuItems.filter((item) => item.mealType === MealType.LUNCH),
@@ -185,6 +153,33 @@ export function buildDailyReport(input: {
     input.menuItems.filter((item) => item.mealType === MealType.DINNER),
   );
   const meals = { [MealType.LUNCH]: lunch, [MealType.DINNER]: dinner };
+
+  function resolveMenuItem(menuItemId: string | null, mealType: MealType) {
+    return matchLiveMenuItem(menuById, menuItemId, mealType);
+  }
+
+  function countOrder(
+    mealType: MealType,
+    menuItemId: string | null,
+    kind: 'staff' | 'guest',
+    amount: number,
+  ) {
+    const bucket = meals[mealType];
+    const item = resolveMenuItem(menuItemId, mealType);
+    if (!item) {
+      if (kind === 'staff') bucket.unmatchedStaff += amount;
+      else bucket.unmatchedGuest += amount;
+      return null;
+    }
+    const food = bucket.foods.get(item.id);
+    if (!food) {
+      if (kind === 'staff') bucket.unmatchedStaff += amount;
+      else bucket.unmatchedGuest += amount;
+      return null;
+    }
+    addCount(food, kind, amount);
+    return food.title;
+  }
 
   const seenStaff = new Set<string>();
   const users = new Map<
@@ -216,8 +211,7 @@ export function buildDailyReport(input: {
     if (seenStaff.has(order.id)) continue;
     seenStaff.add(order.id);
     if (!allowsReportMeal(meal, order.mealType)) continue;
-    const bucket = meals[order.mealType];
-    addCount(matchFood(bucket, order.menuItemId, order.title), 'staff', 1);
+    const title = countOrder(order.mealType, order.menuItemId, 'staff', 1);
     const userKey = `${reportBuildingKey(order.buildingId)}:${order.userId}`;
     const row =
       users.get(userKey) ??
@@ -229,8 +223,10 @@ export function buildDailyReport(input: {
         buildingId: order.buildingId,
         buildingName: reportBuildingName(order.buildingId, order.buildingName),
       } satisfies DailyReportUserRow & { buildingId: string | null; buildingName: string });
-    if (order.mealType === MealType.LUNCH) row.lunch.push(reportFoodTitle(order.title));
-    else row.dinner.push(reportFoodTitle(order.title));
+    if (title) {
+      if (order.mealType === MealType.LUNCH) row.lunch.push(title);
+      else row.dinner.push(title);
+    }
     users.set(userKey, row);
   }
 
@@ -242,12 +238,11 @@ export function buildDailyReport(input: {
     if (!allowsReportMeal(meal, order.mealType)) continue;
     const quantity = Number.isInteger(order.quantity) ? order.quantity : 0;
     if (quantity <= 0) continue;
-    const bucket = meals[order.mealType];
-    addCount(matchFood(bucket, order.menuItemId, order.title), 'guest', quantity);
+    const title = countOrder(order.mealType, order.menuItemId, 'guest', quantity);
     const guestRow: DailyReportGuestRow = {
       id: order.id,
       mealType: order.mealType,
-      title: reportFoodTitle(order.title),
+      title: title ?? '—',
       quantity,
       note: order.note,
     };
