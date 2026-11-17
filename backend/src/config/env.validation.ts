@@ -106,6 +106,36 @@ export class EnvironmentVariables {
   @IsString()
   @IsNotEmpty()
   BOOTSTRAP_ADMIN_PASSWORD!: string;
+
+  @Transform(({ value }) => {
+    if (typeof value === 'boolean') {
+      return value;
+    }
+    return value === 'true' || value === '1';
+  })
+  @IsBoolean()
+  BALE_MINI_APP_ENABLED!: boolean;
+
+  @IsString()
+  BALE_BOT_TOKEN!: string;
+
+  @IsString()
+  @IsNotEmpty()
+  BALE_API_BASE_URL!: string;
+
+  @IsString()
+  @IsNotEmpty()
+  BALE_MINI_APP_URL!: string;
+
+  @IsString()
+  BALE_WEBHOOK_URL!: string;
+
+  @IsString()
+  BALE_WEBHOOK_SECRET!: string;
+
+  @IsInt()
+  @Min(60)
+  BALE_INIT_DATA_TTL_SECONDS!: number;
 }
 
 const defaultsFor = (config: Record<string, unknown>) => {
@@ -126,6 +156,13 @@ const defaultsFor = (config: Record<string, unknown>) => {
     BOOTSTRAP_ADMIN_ENABLED: !isTest,
     BOOTSTRAP_ADMIN_USERNAME: DEFAULT_ADMIN_USERNAME,
     BOOTSTRAP_ADMIN_PASSWORD: DEFAULT_ADMIN_PASSWORD,
+    BALE_MINI_APP_ENABLED: false,
+    BALE_BOT_TOKEN: '',
+    BALE_API_BASE_URL: 'https://tapi.bale.ai/bot',
+    BALE_MINI_APP_URL: 'https://food.kavosh.site/mini-app',
+    BALE_WEBHOOK_URL: '',
+    BALE_WEBHOOK_SECRET: '',
+    BALE_INIT_DATA_TTL_SECONDS: 86400,
   };
 };
 

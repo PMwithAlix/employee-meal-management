@@ -4,11 +4,24 @@ import '@fontsource/vazirmatn/600.css'
 import '@fontsource/vazirmatn/700.css'
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
-import { App } from './app/App'
-import './app/styles.css'
+import { isBaleMiniAppEnabled, isMiniAppPath } from './mini-app/lib/flag'
 
-createRoot(document.getElementById('root')!).render(
-  <StrictMode>
-    <App />
-  </StrictMode>,
-)
+const root = createRoot(document.getElementById('root')!)
+
+if (isBaleMiniAppEnabled() && isMiniAppPath()) {
+  void import('./mini-app/MiniApp').then(({ MiniApp }) => {
+    root.render(
+      <StrictMode>
+        <MiniApp />
+      </StrictMode>,
+    )
+  })
+} else {
+  void import('./app/App').then(({ App }) => {
+    root.render(
+      <StrictMode>
+        <App />
+      </StrictMode>,
+    )
+  })
+}

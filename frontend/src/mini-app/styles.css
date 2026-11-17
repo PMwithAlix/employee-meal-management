@@ -1,0 +1,268 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --km-bg: #f4f1ea;
+  --km-ink: #1c1913;
+  --km-muted: #6b6458;
+  --km-line: #e4ddd2;
+  --km-card: #fffcf7;
+  --km-accent: #c45c26;
+  --km-accent-ink: #fff8f3;
+  --km-ok: #1f7a5c;
+  --km-danger: #b42318;
+  --km-lunch: #1f4ea3;
+  --km-dinner: #5b4588;
+  --km-safe-top: env(safe-area-inset-top, 0px);
+  --km-safe-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+html,
+body,
+#root {
+  min-height: 100%;
+  background: var(--km-bg);
+  color: var(--km-ink);
+}
+
+body {
+  margin: 0;
+  font-family: Vazirmatn, Tahoma, sans-serif;
+  text-size-adjust: 100%;
+  overflow: hidden;
+}
+
+.km-app {
+  height: 100dvh;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  padding-top: var(--km-safe-top);
+  background:
+    radial-gradient(1200px 400px at 100% 0%, rgba(196, 92, 38, 0.08), transparent 55%),
+    var(--km-bg);
+}
+
+.km-main {
+  flex: 1;
+  overflow: auto;
+  overscroll-behavior: contain;
+  padding: 16px 16px 24px;
+}
+
+.km-screen {
+  display: grid;
+  gap: 16px;
+  padding-bottom: 8px;
+}
+
+.km-header h1 {
+  margin: 4px 0 0;
+  font-size: 26px;
+  letter-spacing: -0.03em;
+  line-height: 1.25;
+}
+
+.km-kicker {
+  margin: 0;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--km-accent);
+  letter-spacing: 0.16em;
+}
+
+.km-sub,
+.km-muted {
+  margin: 6px 0 0;
+  color: var(--km-muted);
+  font-size: 13px;
+  line-height: 1.7;
+}
+
+.km-stack,
+.km-list {
+  display: grid;
+  gap: 10px;
+}
+
+.km-card,
+.km-field,
+.km-state {
+  background: var(--km-card);
+  border: 1px solid var(--km-line);
+  border-radius: 18px;
+  padding: 14px 16px;
+}
+
+.km-card h2,
+.km-state h2 {
+  margin: 0;
+  font-size: 16px;
+}
+
+.km-card p,
+.km-state p {
+  margin: 6px 0 0;
+  color: var(--km-muted);
+  font-size: 13px;
+  line-height: 1.7;
+}
+
+.km-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.km-chip {
+  display: inline-flex;
+  align-items: center;
+  min-height: 28px;
+  padding: 0 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  background: #efe8dc;
+  color: var(--km-ink);
+}
+
+.km-chip-lunch { background: #e8eefc; color: var(--km-lunch); }
+.km-chip-dinner { background: #eee8f8; color: var(--km-dinner); }
+.km-chip-ok { background: #e7f5ef; color: var(--km-ok); }
+.km-chip-warn { background: #fbecea; color: var(--km-danger); }
+
+.km-btn {
+  min-height: 48px;
+  border: 0;
+  border-radius: 14px;
+  padding: 0 16px;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.km-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.km-btn-primary { background: var(--km-ink); color: #fffaf3; }
+.km-btn-ghost { background: transparent; color: var(--km-ink); border: 1px solid var(--km-line); }
+.km-btn-danger { background: #fbecea; color: var(--km-danger); }
+.km-btn-quiet { background: #efe8dc; color: var(--km-ink); }
+
+.km-field {
+  display: grid;
+  gap: 6px;
+}
+
+.km-field span {
+  font-size: 12px;
+  color: var(--km-muted);
+}
+
+.km-field input,
+.km-field select {
+  min-height: 46px;
+  width: 100%;
+  border: 0;
+  background: transparent;
+  font: inherit;
+  color: inherit;
+  outline: none;
+}
+
+.km-tabs {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: 1fr;
+  gap: 4px;
+  padding: 8px 10px calc(8px + var(--km-safe-bottom));
+  border-top: 1px solid var(--km-line);
+  background: rgba(255, 252, 247, 0.92);
+  backdrop-filter: blur(16px);
+}
+
+.km-tab {
+  min-height: 48px;
+  border: 0;
+  background: transparent;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--km-muted);
+  border-radius: 12px;
+}
+
+.km-tab.is-on {
+  background: var(--km-ink);
+  color: #fffaf3;
+}
+
+.km-skel {
+  height: 14px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #ece6db, #f7f2ea, #ece6db);
+  background-size: 200% 100%;
+  animation: km-shimmer 1.2s ease-in-out infinite;
+}
+
+.km-sheet {
+  position: fixed;
+  inset: 0;
+  background: rgba(28, 25, 19, 0.46);
+  display: flex;
+  align-items: flex-end;
+  z-index: 20;
+}
+
+.km-sheet-card {
+  width: 100%;
+  background: var(--km-card);
+  border-radius: 24px 24px 0 0;
+  padding: 18px 16px calc(20px + var(--km-safe-bottom));
+  display: grid;
+  gap: 12px;
+}
+
+.km-option {
+  min-height: 52px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border: 1px solid var(--km-line);
+  border-radius: 14px;
+  padding: 0 14px;
+  background: #fff;
+  font: inherit;
+}
+
+.km-option.is-on {
+  border-color: var(--km-ink);
+  background: #1c1913;
+  color: #fffaf3;
+}
+
+.km-toast {
+  position: fixed;
+  left: 16px;
+  right: 16px;
+  bottom: calc(76px + var(--km-safe-bottom));
+  background: var(--km-ink);
+  color: #fffaf3;
+  border-radius: 14px;
+  padding: 12px 14px;
+  text-align: center;
+  z-index: 30;
+}
+
+.km-actions {
+  display: grid;
+  gap: 8px;
+}
+
+@keyframes km-shimmer {
+  0% { background-position: 100% 0; }
+  100% { background-position: -100% 0; }
+}

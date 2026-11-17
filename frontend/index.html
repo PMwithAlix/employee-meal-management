@@ -3,6 +3,11 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <script>
+      if (location.pathname === '/mini-app' || location.pathname.indexOf('/mini-app/') === 0) {
+        document.write('<script src="https://tapi.bale.ai/miniapp.js?3"><\/script>')
+      }
+    </script>
     <title>خوان</title>
     <link rel="icon" type="image/png" href="/favicon.png" />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />

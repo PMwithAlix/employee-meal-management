@@ -20,6 +20,7 @@ import { RolesGuard } from '../../common/guards/roles.guard';
     RolesGuard,
   ],
   exports: [
+    AuthService,
     PasswordService,
     SessionService,
     AuthGuard,

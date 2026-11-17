@@ -1,0 +1,123 @@
+import { createHmac, timingSafeEqual } from 'crypto';
+
+export type BaleWebAppUser = {
+  id: number;
+  first_name?: string;
+  username?: string;
+  allows_write_to_pm?: boolean;
+};
+
+export type VerifiedBaleInitData = {
+  user: BaleWebAppUser;
+  authDate: number;
+  queryId: string | null;
+};
+
+export class InitDataError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'InitDataError';
+  }
+}
+
+function asRecord(value: unknown) {
+  return value && typeof value === 'object' ? (value as Record<string, unknown>) : null;
+}
+
+function parseUser(raw: string | null): BaleWebAppUser {
+  if (!raw) {
+    throw new InitDataError('دادهٔ کاربر بله در initData موجود نیست.');
+  }
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    throw new InitDataError('دادهٔ کاربر بله نامعتبر است.');
+  }
+  const body = asRecord(parsed);
+  if (!body || typeof body.id !== 'number' || !Number.isInteger(body.id)) {
+    throw new InitDataError('شناسهٔ کاربر بله نامعتبر است.');
+  }
+  return {
+    id: body.id,
+    first_name: typeof body.first_name === 'string' ? body.first_name : undefined,
+    username: typeof body.username === 'string' ? body.username : undefined,
+    allows_write_to_pm:
+      typeof body.allows_write_to_pm === 'boolean'
+        ? body.allows_write_to_pm
+        : undefined,
+  };
+}
+
+function hmacSha256(key: string | Buffer, data: string) {
+  return createHmac('sha256', key).update(data);
+}
+
+function hexEquals(left: string, right: string) {
+  const a = Buffer.from(left, 'utf8');
+  const b = Buffer.from(right, 'utf8');
+  if (a.length !== b.length) {
+    return false;
+  }
+  return timingSafeEqual(a, b);
+}
+
+export function buildDataCheckString(pairs: Array<[string, string]>) {
+  return pairs
+    .filter(([key]) => key !== 'hash')
+    .sort(([left], [right]) => left.localeCompare(right))
+    .map(([key, value]) => `${key}=${value}`)
+    .join('\n');
+}
+
+export function computeInitDataHash(botToken: string, dataCheckString: string) {
+  const secretKey = hmacSha256(botToken, 'WebAppData').digest();
+  return hmacSha256(secretKey, dataCheckString).digest('hex');
+}
+
+export function verifyBaleInitData(
+  initData: string,
+  botToken: string,
+  nowSeconds = Math.floor(Date.now() / 1000),
+  ttlSeconds = 86400,
+): VerifiedBaleInitData {
+  if (!botToken) {
+    throw new InitDataError('توکن بازوی بله پیکربندی نشده است.');
+  }
+  const trimmed = initData.trim();
+  if (!trimmed) {
+    throw new InitDataError('initData خالی است.');
+  }
+
+  const params = new URLSearchParams(trimmed);
+  const hash = params.get('hash');
+  if (!hash) {
+    throw new InitDataError('امضای initData موجود نیست.');
+  }
+
+  const pairs: Array<[string, string]> = [];
+  for (const [key, value] of params.entries()) {
+    pairs.push([key, value]);
+  }
+
+  const dataCheckString = buildDataCheckString(pairs);
+  const expected = computeInitDataHash(botToken, dataCheckString);
+  if (!hexEquals(expected, hash)) {
+    throw new InitDataError('امضای دادهٔ بله معتبر نیست.');
+  }
+
+  const authDateRaw = params.get('auth_date');
+  const authDate = authDateRaw ? Number(authDateRaw) : NaN;
+  if (!Number.isInteger(authDate) || authDate <= 0) {
+    throw new InitDataError('زمان اعتبارسنجی بله نامعتبر است.');
+  }
+  if (Math.abs(nowSeconds - authDate) > ttlSeconds) {
+    throw new InitDataError('نشست مینی‌اپ منقضی شده است. مینی‌اپ را ببندید و دوباره باز کنید.');
+  }
+
+  return {
+    user: parseUser(params.get('user')),
+    authDate,
+    queryId: params.get('query_id'),
+  };
+}
