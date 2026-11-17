@@ -107,26 +107,31 @@ jobs:
             
             docker compose -f compose.yml pull
             docker compose -f compose.yml up -d --remove-orphans
-            for name in food-khaan-postgres food-khaan-backend food-khaan-frontend; do
-              ok=0
-              n=0
-              while [ "\$n" -lt 24 ]; do
-                n=\$((n + 1))
-                status="\$(docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{else}}{{.State.Status}}{{end}}' "\$name")"
-                if [ "\$status" = "healthy" ]; then
-                  ok=1
-                  break
+            deadline=\$(( \$(date +%s) + 120 ))
+            while :; do
+              all_healthy=1
+              for name in food-khaan-postgres food-khaan-backend food-khaan-frontend; do
+                if ! status="\$(docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{else}}{{.State.Status}}{{end}}' "\$name")"; then
+                  echo "Deploy failed: \$name is missing or docker inspect failed"
+                  exit 1
                 fi
                 if [ "\$status" = "unhealthy" ] || [ "\$status" = "exited" ] || [ "\$status" = "dead" ]; then
                   echo "Deploy failed: \$name is \$status"
                   exit 1
                 fi
-                sleep 5
+                if [ "\$status" != "healthy" ]; then
+                  all_healthy=0
+                fi
               done
-              if [ "\$ok" != 1 ]; then
-                echo "Deploy failed: \$name did not become healthy in time"
+              if [ "\$all_healthy" = 1 ]; then
+                break
+              fi
+              now=\$(date +%s)
+              if [ "\$now" -ge "\$deadline" ]; then
+                echo "Deploy failed: containers did not become healthy within 120s"
                 exit 1
               fi
+              sleep 5
             done
             docker compose -f compose.yml ps
             docker image prune -f
