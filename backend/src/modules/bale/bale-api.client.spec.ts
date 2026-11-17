@@ -1,11 +1,14 @@
+import { Logger } from '@nestjs/common';
 import { BaleApiClient } from './bale-api.client';
 import { BaleApiError } from './bale-api.errors';
+import { baleWebhookPathToken } from './webhook-secret';
 
-function client() {
+function client(secret = '') {
   return new BaleApiClient({
     get: (key: string) => {
       if (key === 'BALE_BOT_TOKEN') return '100:test-token';
       if (key === 'BALE_API_BASE_URL') return 'https://tapi.bale.ai/bot';
+      if (key === 'BALE_WEBHOOK_SECRET') return secret;
       return '';
     },
   } as never);
@@ -16,6 +19,43 @@ describe('BaleApiClient', () => {
 
   afterEach(() => {
     global.fetch = originalFetch;
+  });
+
+  it('registers a webhook with only the documented url parameter', async () => {
+    const fetchMock = jest.fn().mockResolvedValue({
+      status: 200,
+      json: async () => ({ ok: true, result: true }),
+    });
+    global.fetch = fetchMock as never;
+    const url = 'https://food.kavosh.site/api/v1/bale/webhook/path-token';
+    await expect(client().setWebhook(url)).resolves.toEqual({ ok: true, result: true });
+    const body = JSON.parse(String(fetchMock.mock.calls[0][1].body)) as Record<string, unknown>;
+    expect(body).toEqual({ url });
+    expect(body).not.toHaveProperty('secret_token');
+  });
+
+  it('does not keep the webhook secret in a setWebhook error', async () => {
+    const secret = 'webhook-secret-value';
+    const token = baleWebhookPathToken(secret);
+    const url = `https://food.kavosh.site/api/v1/bale/webhook/${token}`;
+    global.fetch = jest.fn().mockResolvedValue({
+      status: 400,
+      json: async () => ({
+        ok: false,
+        error_code: 400,
+        description: `bad url ${url} secret ${secret}`,
+      }),
+    }) as never;
+    const warn = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined);
+    const error = await client(secret)
+      .setWebhook(url)
+      .catch((caught: unknown) => caught);
+    expect(error).toBeInstanceOf(BaleApiError);
+    expect(String((error as BaleApiError).message)).not.toContain(token);
+    expect(String((error as BaleApiError).message)).not.toContain(secret);
+    expect(warn.mock.calls.flat().join(' ')).not.toContain(token);
+    expect(warn.mock.calls.flat().join(' ')).not.toContain(secret);
+    warn.mockRestore();
   });
 
   it('returns the payload when Bale reports ok', async () => {

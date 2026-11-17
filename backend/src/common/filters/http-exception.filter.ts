@@ -7,6 +7,7 @@ import {
   Logger,
 } from '@nestjs/common';
 import { Request, Response } from 'express';
+import { redactWebhookPath, redactWebhookPaths } from '../../modules/bale/webhook-secret';
 
 @Catch()
 export class HttpExceptionFilter implements ExceptionFilter {
@@ -38,16 +39,18 @@ export class HttpExceptionFilter implements ExceptionFilter {
           };
 
     if (!(exception instanceof HttpException)) {
-      this.logger.error(
-        exception instanceof Error ? exception.stack : String(exception),
-      );
+      const detail =
+        exception instanceof Error ? (exception.stack ?? exception.message) : String(exception);
+      this.logger.error(redactWebhookPath(detail));
     }
 
-    response.status(status).json({
-      ...body,
-      statusCode: status,
-      timestamp: new Date().toISOString(),
-      path: request.url,
-    });
+    response.status(status).json(
+      redactWebhookPaths({
+        ...body,
+        statusCode: status,
+        timestamp: new Date().toISOString(),
+        path: request.url ?? '',
+      }),
+    );
   }
 }

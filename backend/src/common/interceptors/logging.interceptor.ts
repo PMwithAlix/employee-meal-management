@@ -7,6 +7,7 @@ import {
 } from '@nestjs/common';
 import { Request, Response } from 'express';
 import { Observable, tap } from 'rxjs';
+import { redactWebhookPath } from '../../modules/bale/webhook-secret';
 
 @Injectable()
 export class LoggingInterceptor implements NestInterceptor {
@@ -20,7 +21,7 @@ export class LoggingInterceptor implements NestInterceptor {
 
     return next.handle().pipe(
       tap(() => {
-        const path = request.originalUrl.split('?')[0];
+        const path = redactWebhookPath(request.originalUrl.split('?')[0]);
         this.logger.log(
           `${request.method} ${path} ${response.statusCode} ${Date.now() - started}ms`,
         );

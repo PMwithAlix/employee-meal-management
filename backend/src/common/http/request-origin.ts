@@ -1,4 +1,5 @@
 import type { Request } from 'express';
+import { isBaleWebhookPath } from '../../modules/bale/webhook-secret';
 
 const SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
 
@@ -61,8 +62,7 @@ export function isBaleWebhookRequest(request: Request) {
   if (method !== 'POST') {
     return false;
   }
-  const path = requestPath(request).split('?')[0];
-  return /\/api\/v1\/bale\/webhook$/.test(path);
+  return isBaleWebhookPath(requestPath(request));
 }
 
 export function baleWebhookOriginAllowed(

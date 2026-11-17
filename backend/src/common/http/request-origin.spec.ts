@@ -1,4 +1,5 @@
 import type { Request } from 'express';
+import { baleWebhookPathToken } from '../../modules/bale/webhook-secret';
 import {
   baleWebhookOriginAllowed,
   isAllowedRequestOrigin,
@@ -65,10 +66,13 @@ describe('request origin', () => {
   });
 
   it('does not treat the Bale webhook as a login skip', () => {
-    const webhook = req({}, { url: '/api/v1/bale/webhook' });
+    const token = baleWebhookPathToken('webhook-secret-value');
+    const webhook = req({}, { url: `/api/v1/bale/webhook/${token}` });
     expect(isLoginRequest(webhook)).toBe(false);
     expect(shouldSkipOriginGuard(webhook)).toBe(false);
     expect(isBaleWebhookRequest(webhook)).toBe(true);
+    expect(isBaleWebhookRequest(req({}, { url: '/api/v1/bale/webhook' }))).toBe(false);
+    expect(isBaleWebhookRequest(req({}, { url: '/api/v1/bale/webhook/sync' }))).toBe(false);
   });
 
   it('does not skip origin for other POST endpoints without a browser same-origin signal', () => {
@@ -97,7 +101,11 @@ describe('request origin', () => {
   });
 
   it('allows the Bale webhook without Origin and rejects a hostile Origin', () => {
-    const webhook = req({ host: 'food.kavosh.site' }, { url: '/api/v1/bale/webhook' });
+    const token = baleWebhookPathToken('webhook-secret-value');
+    const webhook = req(
+      { host: 'food.kavosh.site' },
+      { url: `/api/v1/bale/webhook/${token}` },
+    );
     expect(baleWebhookOriginAllowed(undefined, webhook, ['https://food.kavosh.site'])).toBe(true);
     expect(
       baleWebhookOriginAllowed('https://evil.example', webhook, ['https://food.kavosh.site']),

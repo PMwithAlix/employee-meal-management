@@ -6,6 +6,7 @@ import {
   classifyBaleApiFailure,
   redactBaleLogText,
 } from './bale-api.errors';
+import { redactKnownWebhookSecrets } from './webhook-secret';
 
 type BaleApiResult<T> = {
   ok: boolean;
@@ -36,15 +37,17 @@ export class BaleApiClient {
     return this.call('getWebhookInfo');
   }
 
-  async setWebhook(url: string, secretToken: string) {
-    return this.call('setWebhook', {
-      url,
-      secret_token: secretToken || undefined,
-    });
+  async setWebhook(url: string) {
+    return this.call('setWebhook', { url });
   }
 
   async deleteWebhook() {
     return this.call('deleteWebhook');
+  }
+
+  private scrub(value: string) {
+    const secret = this.config.get('BALE_WEBHOOK_SECRET', { infer: true });
+    return redactBaleLogText(redactKnownWebhookSecrets(value, secret));
   }
 
   async sendMessage(
@@ -108,7 +111,7 @@ export class BaleApiClient {
           payload.description ?? '',
           method,
         );
-        const description = redactBaleLogText(
+        const description = this.scrub(
           payload.description ?? `HTTP ${response.status}`,
         );
         if (classification.kind === 'invalid_token') {
@@ -136,7 +139,7 @@ export class BaleApiClient {
         (error.name === 'TimeoutError' || error.name === 'AbortError');
       this.logger.warn(
         `Bale ${method} ${timedOut ? 'timeout' : 'network error'}: ${
-          error instanceof Error ? redactBaleLogText(error.message) : 'unknown'
+          error instanceof Error ? this.scrub(error.message) : 'unknown'
         }`,
       );
       throw new BaleApiError(
