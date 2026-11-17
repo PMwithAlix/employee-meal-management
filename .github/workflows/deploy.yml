@@ -105,8 +105,24 @@ jobs:
             sed -i "s|^KHAAN_BACKEND_IMAGE=.*|KHAAN_BACKEND_IMAGE=${BACKEND_IMAGE}|" .env
             sed -i "s|^KHAAN_WEB_IMAGE=.*|KHAAN_WEB_IMAGE=${FRONTEND_IMAGE}|" .env
             
+            if ! docker compose -f compose.yml config --quiet; then
+              echo "Deploy preflight failed: compose configuration is invalid"
+              exit 1
+            fi
             docker compose -f compose.yml pull
-            docker compose -f compose.yml up -d --remove-orphans
+            if ! docker compose -f compose.yml up -d --remove-orphans; then
+              echo "Deploy failed while starting services. Collecting safe diagnostics..."
+              docker compose -f compose.yml ps -a || true
+              echo "Backend container state:"
+              docker inspect -f 'status={{.State.Status}} exit={{.State.ExitCode}} error={{.State.Error}} health={{if .State.Health}}{{.State.Health.Status}}{{else}}not-configured{{end}}' food-khaan-backend || true
+              echo "Backend healthcheck history:"
+              docker inspect -f '{{if .State.Health}}{{range .State.Health.Log}}{{printf "time=%s exit=%d output=%s\\n" .End .ExitCode .Output}}{{end}}{{end}}' food-khaan-backend || true
+              echo "Backend startup logs (last 160 lines):"
+              docker logs --tail 160 food-khaan-backend 2>&1 || true
+              echo "PostgreSQL logs (last 60 lines):"
+              docker logs --tail 60 food-khaan-postgres 2>&1 || true
+              exit 1
+            fi
             deadline=\$(( \$(date +%s) + 120 ))
             while :; do
               all_healthy=1
