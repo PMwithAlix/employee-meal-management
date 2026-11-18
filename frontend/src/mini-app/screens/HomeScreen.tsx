@@ -13,6 +13,7 @@ export function HomeScreen({ onOpen }: { onOpen: (tab: MiniTab) => void }) {
   const today = currentDateTime()
   const [notes, setNotes] = useState<NotificationItem[] | null>(null)
   const [error, setError] = useState('')
+  const [retry, setRetry] = useState(0)
 
   useEffect(() => {
     const controller = new AbortController()
@@ -26,7 +27,7 @@ export function HomeScreen({ onOpen }: { onOpen: (tab: MiniTab) => void }) {
         setError(caught instanceof AuthRequestError ? caught.message : 'اعلان‌ها بارگذاری نشد.')
       })
     return () => controller.abort()
-  }, [])
+  }, [retry])
 
   if (!user) return null
 
@@ -47,8 +48,8 @@ export function HomeScreen({ onOpen }: { onOpen: (tab: MiniTab) => void }) {
       <div className="km-card">
         <h2>اعلان‌ها</h2>
         {!notes && !error ? <KmSkeleton /> : null}
-        {error ? <KmState title="اعلان‌ها در دسترس نیست" body={error} /> : null}
-        {notes && notes.length === 0 ? <p>اعلان جدیدی نیست.</p> : null}
+        {error ? <KmState title="اعلان‌ها در دسترس نیست" body={error} action={<KmButton variant="ghost" onClick={() => setRetry((value) => value + 1)}>تلاش دوباره</KmButton>} /> : null}
+        {notes && notes.length === 0 ? <div className="km-notice-empty"><span aria-hidden="true">✓</span><p>اعلان جدیدی نیست</p></div> : null}
         {notes?.map((item) => (
           <p key={item.id}>
             <strong>{item.title}</strong>
