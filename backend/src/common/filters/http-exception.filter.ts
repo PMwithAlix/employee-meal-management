@@ -7,6 +7,17 @@ import {
   Logger,
 } from '@nestjs/common';
 import { Request, Response } from 'express';
+import {
+  ensureRequestId,
+  isBaleLoginRequest,
+  wasBaleLoginDiagnosed,
+} from '../http/request-id';
+import {
+  classifyUnhandledBaleLoginError,
+  diagnosticUsernameNormalized,
+  emitBaleLoginDiagnostic,
+  initDataPresence,
+} from '../../modules/bale/bale-login-diagnostics';
 import { redactWebhookPath, redactWebhookPaths } from '../../modules/bale/webhook-secret';
 
 @Catch()
@@ -42,6 +53,23 @@ export class HttpExceptionFilter implements ExceptionFilter {
       const detail =
         exception instanceof Error ? (exception.stack ?? exception.message) : String(exception);
       this.logger.error(redactWebhookPath(detail));
+    }
+
+    if (isBaleLoginRequest(request) && !wasBaleLoginDiagnosed(request)) {
+      ensureRequestId(request);
+      const body = request.body as { initData?: unknown; username?: unknown } | undefined;
+      const presence = initDataPresence(body?.initData);
+      const classified = classifyUnhandledBaleLoginError(exception);
+      emitBaleLoginDiagnostic(this.logger, request, {
+        status,
+        category: classified.category,
+        initDataPresent: presence.initDataPresent,
+        initDataLength: presence.initDataLength,
+        reachedAuthLogin: false,
+        authResult: classified.authResult,
+        usernameNormalized: diagnosticUsernameNormalized(body?.username),
+        reason: classified.reason,
+      });
     }
 
     response.status(status).json(

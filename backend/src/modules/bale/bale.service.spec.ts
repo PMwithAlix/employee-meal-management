@@ -1,5 +1,7 @@
 import {
   ForbiddenException,
+  HttpException,
+  HttpStatus,
   InternalServerErrorException,
   Logger,
   NotFoundException,
@@ -7,6 +9,7 @@ import {
   UnauthorizedException,
 } from '@nestjs/common';
 import { BaleApiError } from './bale-api.errors';
+import { BALE_LOGIN_DIAGNOSTIC_EVENT } from './bale-login-diagnostics';
 import { computeInitDataHash, verifyBaleInitData } from './init-data';
 import { BaleService } from './bale.service';
 import { baleWebhookPathToken } from './webhook-secret';
@@ -427,10 +430,27 @@ describe('BaleService webhook', () => {
   });
 });
 
+function diagnosticEvents(log: jest.SpyInstance) {
+  return log.mock.calls
+    .map((call) => call[0])
+    .filter((value): value is string => typeof value === 'string' && value.includes(BALE_LOGIN_DIAGNOSTIC_EVENT))
+    .map((value) => JSON.parse(value) as Record<string, unknown>);
+}
+
 describe('BaleService login', () => {
   const token = '100:test-token';
   const user = JSON.stringify({ id: 42, first_name: 'Ali' });
   const now = 1_700_000_000;
+  const passwordSentinel = 'login-secret-password-value';
+  let logSpy: jest.SpyInstance;
+
+  beforeEach(() => {
+    logSpy = jest.spyOn(Logger.prototype, 'log').mockImplementation(() => undefined);
+  });
+
+  afterEach(() => {
+    logSpy.mockRestore();
+  });
 
   it('rejects login when the bot token is missing', async () => {
     const { instance } = service({ token: '' });
@@ -445,14 +465,30 @@ describe('BaleService login', () => {
 
   it('rejects login without initData', async () => {
     const { instance, auth } = service();
+    const request = { ip: '127.0.0.1', headers: { 'x-request-id': 'corr-empty' } };
     await expect(
       instance.login(
-        { initData: '', username: 'demo', password: 'secret' },
-        { ip: '127.0.0.1' } as never,
+        { initData: '', username: 'demo', password: passwordSentinel },
+        request as never,
         {} as never,
       ),
-    ).rejects.toBeInstanceOf(UnauthorizedException);
+    ).rejects.toMatchObject({
+      response: { message: 'initData خالی است.', statusCode: 401 },
+    });
     expect(auth.login).not.toHaveBeenCalled();
+    expect(diagnosticEvents(logSpy)).toEqual([
+      expect.objectContaining({
+        requestId: 'corr-empty',
+        category: 'init_data_empty',
+        status: 401,
+        initDataPresent: false,
+        initDataLength: 0,
+        reachedAuthLogin: false,
+        authResult: 'not_reached',
+        reason: 'empty',
+      }),
+    ]);
+    expect(JSON.stringify(diagnosticEvents(logSpy))).not.toContain(passwordSentinel);
   });
 
   it('rejects expired initData', async () => {
@@ -461,13 +497,26 @@ describe('BaleService login', () => {
       auth_date: '1000',
       user,
     });
+    const request = { ip: '127.0.0.1', headers: { 'x-request-id': 'corr-expired' } };
     await expect(
       instance.login(
-        { initData, username: 'demo', password: 'secret' },
-        { ip: '127.0.0.1' } as never,
+        { initData, username: 'demo', password: passwordSentinel },
+        request as never,
         {} as never,
       ),
     ).rejects.toBeInstanceOf(UnauthorizedException);
+    expect(diagnosticEvents(logSpy)).toEqual([
+      expect.objectContaining({
+        requestId: 'corr-expired',
+        category: 'init_data_expired',
+        status: 401,
+        reachedAuthLogin: false,
+        initDataPresent: true,
+        initDataLength: initData.length,
+        reason: 'expired',
+      }),
+    ]);
+    expect(JSON.stringify(diagnosticEvents(logSpy))).not.toContain(initData);
   });
 
   it('rejects tampered initData', async () => {
@@ -476,14 +525,27 @@ describe('BaleService login', () => {
       auth_date: String(now),
       user,
     }).replace(/hash=[^&]+/, 'hash=deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef');
+    const request = { ip: '127.0.0.1', headers: { 'x-request-id': 'corr-invalid' } };
     await expect(
       instance.login(
-        { initData, username: 'demo', password: 'secret' },
-        { ip: '127.0.0.1' } as never,
+        { initData, username: 'demo', password: passwordSentinel },
+        request as never,
         {} as never,
       ),
-    ).rejects.toBeInstanceOf(UnauthorizedException);
+    ).rejects.toMatchObject({
+      response: { message: 'امضای دادهٔ بله معتبر نیست.', statusCode: 401 },
+    });
     expect(auth.login).not.toHaveBeenCalled();
+    expect(diagnosticEvents(logSpy)).toEqual([
+      expect.objectContaining({
+        requestId: 'corr-invalid',
+        category: 'init_data_invalid',
+        reason: 'invalid_signature',
+        reachedAuthLogin: false,
+        authResult: 'not_reached',
+      }),
+    ]);
+    expect(JSON.stringify(diagnosticEvents(logSpy))).not.toContain(initData);
   });
 
   it('does not keep a session when the Khaan account is inactive', async () => {
@@ -497,14 +559,91 @@ describe('BaleService login', () => {
       auth_date: String(now),
       user,
     });
+    const request = { ip: '127.0.0.1', headers: { 'x-request-id': 'corr-inactive' } };
     await expect(
       instance.login(
-        { initData, username: 'demo', password: 'secret' },
-        { ip: '127.0.0.1' } as never,
+        { initData, username: 'demo', password: passwordSentinel },
+        request as never,
         {} as never,
       ),
     ).rejects.toBeInstanceOf(ForbiddenException);
     expect(links.bind).not.toHaveBeenCalled();
+    expect(diagnosticEvents(logSpy)).toEqual([
+      expect.objectContaining({
+        requestId: 'corr-inactive',
+        category: 'account_inactive',
+        status: 403,
+        reachedAuthLogin: true,
+        authResult: 'account_inactive',
+      }),
+    ]);
+    jest.spyOn(Date, 'now').mockRestore();
+  });
+
+  it('logs invalid credentials after initData succeeds', async () => {
+    const { instance, auth, links } = service({
+      login: async () => {
+        throw new UnauthorizedException('نام کاربری یا رمز عبور صحیح نیست.');
+      },
+    });
+    jest.spyOn(Date, 'now').mockReturnValue(now * 1000);
+    const initData = signedInitData(token, {
+      auth_date: String(now),
+      user,
+    });
+    const request = { ip: '127.0.0.1', headers: { 'x-request-id': 'corr-creds' } };
+    await expect(
+      instance.login(
+        { initData, username: 'demo', password: passwordSentinel },
+        request as never,
+        {} as never,
+      ),
+    ).rejects.toMatchObject({
+      response: { message: 'نام کاربری یا رمز عبور صحیح نیست.', statusCode: 401 },
+    });
+    expect(auth.login).toHaveBeenCalled();
+    expect(links.bind).not.toHaveBeenCalled();
+    expect(diagnosticEvents(logSpy)).toEqual([
+      expect.objectContaining({
+        requestId: 'corr-creds',
+        category: 'credentials_invalid',
+        status: 401,
+        reachedAuthLogin: true,
+        authResult: 'credentials_invalid',
+        initDataPresent: true,
+      }),
+    ]);
+    expect(JSON.stringify(diagnosticEvents(logSpy))).not.toContain(passwordSentinel);
+    jest.spyOn(Date, 'now').mockRestore();
+  });
+
+  it('logs rate limiting after initData succeeds', async () => {
+    const { instance } = service({
+      login: async () => {
+        throw new HttpException('rate', HttpStatus.TOO_MANY_REQUESTS);
+      },
+    });
+    jest.spyOn(Date, 'now').mockReturnValue(now * 1000);
+    const initData = signedInitData(token, {
+      auth_date: String(now),
+      user,
+    });
+    await expect(
+      instance.login(
+        { initData, username: 'demo', password: passwordSentinel },
+        { ip: '127.0.0.1', headers: { 'x-request-id': 'corr-rate' } } as never,
+        {} as never,
+      ),
+    ).rejects.toBeInstanceOf(HttpException);
+    expect(diagnosticEvents(logSpy)).toEqual([
+      expect.objectContaining({
+        requestId: 'corr-rate',
+        category: 'rate_limited',
+        status: 429,
+        reachedAuthLogin: true,
+        authResult: 'rate_limited',
+      }),
+    ]);
     jest.spyOn(Date, 'now').mockRestore();
   });
 
@@ -517,12 +656,25 @@ describe('BaleService login', () => {
     });
     expect(verifyBaleInitData(initData, token, now, 60).user.id).toBe(42);
     await instance.login(
-      { initData, username: 'demo', password: 'secret' },
-      { ip: '127.0.0.1' } as never,
+      { initData, username: 'demo', password: passwordSentinel },
+      { ip: '127.0.0.1', headers: { 'x-request-id': 'corr-ok' } } as never,
       {} as never,
     );
     expect(auth.login).toHaveBeenCalled();
     expect(links.bind).toHaveBeenCalledWith('user-1', 42, '42');
+    expect(diagnosticEvents(logSpy)).toEqual([
+      expect.objectContaining({
+        requestId: 'corr-ok',
+        category: 'login_success',
+        status: 200,
+        reachedAuthLogin: true,
+        authResult: 'success',
+        initDataPresent: true,
+        usernameNormalized: true,
+      }),
+    ]);
+    expect(JSON.stringify(diagnosticEvents(logSpy))).not.toContain(passwordSentinel);
+    expect(JSON.stringify(diagnosticEvents(logSpy))).not.toContain(initData);
     jest.spyOn(Date, 'now').mockRestore();
   });
 });

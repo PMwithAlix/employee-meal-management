@@ -26,6 +26,14 @@ import {
 } from './bale-api.errors';
 import { BaleLinkStore } from './bale.links';
 import { botHelpText, roleKeyboard, SUPPORT_CONTACT } from './bot-menu';
+import {
+  classifyAuthError,
+  classifyBindError,
+  classifyInitDataError,
+  diagnosticUsernameNormalized,
+  emitBaleLoginDiagnostic,
+  initDataPresence,
+} from './bale-login-diagnostics';
 import { BaleLoginDto } from './dto/bale-login.dto';
 import { InitDataError, verifyBaleInitData } from './init-data';
 import { ProcessedUpdates } from './processed-updates';
@@ -81,9 +89,37 @@ export class BaleService implements OnModuleInit {
   }
 
   async login(dto: BaleLoginDto, request: Request, response: Response) {
-    this.requireEnabled();
+    const presence = initDataPresence(dto.initData);
+    const usernameNormalized = diagnosticUsernameNormalized(dto.username);
+    let reachedAuthLogin = false;
+    const log = (
+      category: Parameters<typeof emitBaleLoginDiagnostic>[2]['category'],
+      status: number,
+      authResult: Parameters<typeof emitBaleLoginDiagnostic>[2]['authResult'],
+      reason?: Parameters<typeof emitBaleLoginDiagnostic>[2]['reason'],
+    ) => {
+      emitBaleLoginDiagnostic(this.logger, request, {
+        status,
+        category,
+        initDataPresent: presence.initDataPresent,
+        initDataLength: presence.initDataLength,
+        reachedAuthLogin,
+        authResult,
+        usernameNormalized,
+        reason,
+      });
+    };
+
+    try {
+      this.requireEnabled();
+    } catch (error) {
+      log('mini_app_disabled', 404, 'not_reached');
+      throw error;
+    }
+
     const token = this.config.get('BALE_BOT_TOKEN', { infer: true }).trim();
     if (!token) {
+      log('bot_unconfigured', 503, 'not_reached');
       throw new ServiceUnavailableException(
         'ورود بله پیکربندی نشده است.',
       );
@@ -99,6 +135,8 @@ export class BaleService implements OnModuleInit {
       );
       baleUserId = verified.user.id;
     } catch (error) {
+      const classified = classifyInitDataError(error);
+      log(classified.category, 401, 'not_reached', classified.reason);
       const message =
         error instanceof InitDataError
           ? error.message
@@ -107,20 +145,31 @@ export class BaleService implements OnModuleInit {
     }
 
     const clientKey = `${request.ip ?? 'unknown'}:bale:${dto.username}`;
-    const session = await this.auth.login(
-      { username: dto.username, password: dto.password },
-      clientKey,
-      response,
-    );
+    let session: Awaited<ReturnType<AuthService['login']>>;
+    try {
+      reachedAuthLogin = true;
+      session = await this.auth.login(
+        { username: dto.username, password: dto.password },
+        clientKey,
+        response,
+      );
+    } catch (error) {
+      const classified = classifyAuthError(error);
+      log(classified.category, classified.status, classified.authResult);
+      throw error;
+    }
 
     try {
       await this.links.bind(session.id, baleUserId, String(baleUserId));
     } catch (error) {
       await this.sessions.revokeAllForUser(session.id);
       this.sessions.clearCookie(response);
+      const classified = classifyBindError(error);
+      log(classified.category, classified.status, 'success', classified.reason);
       throw error;
     }
 
+    log('login_success', 200, 'success');
     return {
       ...session,
       baleLinked: true,

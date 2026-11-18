@@ -2,6 +2,7 @@ import { createHmac } from 'crypto';
 import {
   buildDataCheckString,
   computeInitDataHash,
+  InitDataError,
   verifyBaleInitData,
 } from './init-data';
 
@@ -37,6 +38,11 @@ describe('verifyBaleInitData', () => {
     expect(() => verifyBaleInitData(initData, token, 1700000000, 60)).toThrow(
       'امضای دادهٔ بله معتبر نیست.',
     );
+    try {
+      verifyBaleInitData(initData, token, 1700000000, 60);
+    } catch (error) {
+      expect(error).toMatchObject({ name: 'InitDataError', code: 'invalid_signature' });
+    }
   });
 
   it('rejects stale auth_date', () => {
@@ -47,6 +53,23 @@ describe('verifyBaleInitData', () => {
     expect(() => verifyBaleInitData(initData, token, 1700000000, 60)).toThrow(
       'نشست مینی‌اپ منقضی شده است',
     );
+    try {
+      verifyBaleInitData(initData, token, 1700000000, 60);
+    } catch (error) {
+      expect(error).toBeInstanceOf(InitDataError);
+      expect((error as InitDataError).code).toBe('expired');
+    }
+  });
+
+  it('rejects empty initData with the empty code', () => {
+    try {
+      verifyBaleInitData('  ', token, 1700000000, 60);
+      throw new Error('expected InitDataError');
+    } catch (error) {
+      expect(error).toBeInstanceOf(InitDataError);
+      expect((error as InitDataError).code).toBe('empty');
+      expect((error as InitDataError).message).toBe('initData خالی است.');
+    }
   });
 
   it('uses HMAC(bot_token, "WebAppData") as documented by Bale, not Telegram\'s reversed key', () => {

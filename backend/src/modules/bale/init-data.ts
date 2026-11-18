@@ -13,8 +13,22 @@ export type VerifiedBaleInitData = {
   queryId: string | null;
 };
 
+export type InitDataFailureCode =
+  | 'empty'
+  | 'missing_hash'
+  | 'invalid_signature'
+  | 'invalid_auth_date'
+  | 'expired'
+  | 'missing_user'
+  | 'invalid_user_json'
+  | 'invalid_user_id'
+  | 'missing_bot_token';
+
 export class InitDataError extends Error {
-  constructor(message: string) {
+  constructor(
+    message: string,
+    readonly code: InitDataFailureCode,
+  ) {
     super(message);
     this.name = 'InitDataError';
   }
@@ -26,17 +40,17 @@ function asRecord(value: unknown) {
 
 function parseUser(raw: string | null): BaleWebAppUser {
   if (!raw) {
-    throw new InitDataError('دادهٔ کاربر بله در initData موجود نیست.');
+    throw new InitDataError('دادهٔ کاربر بله در initData موجود نیست.', 'missing_user');
   }
   let parsed: unknown;
   try {
     parsed = JSON.parse(raw);
   } catch {
-    throw new InitDataError('دادهٔ کاربر بله نامعتبر است.');
+    throw new InitDataError('دادهٔ کاربر بله نامعتبر است.', 'invalid_user_json');
   }
   const body = asRecord(parsed);
   if (!body || typeof body.id !== 'number' || !Number.isInteger(body.id)) {
-    throw new InitDataError('شناسهٔ کاربر بله نامعتبر است.');
+    throw new InitDataError('شناسهٔ کاربر بله نامعتبر است.', 'invalid_user_id');
   }
   return {
     id: body.id,
@@ -82,17 +96,17 @@ export function verifyBaleInitData(
   ttlSeconds = 86400,
 ): VerifiedBaleInitData {
   if (!botToken) {
-    throw new InitDataError('توکن بازوی بله پیکربندی نشده است.');
+    throw new InitDataError('توکن بازوی بله پیکربندی نشده است.', 'missing_bot_token');
   }
   const trimmed = initData.trim();
   if (!trimmed) {
-    throw new InitDataError('initData خالی است.');
+    throw new InitDataError('initData خالی است.', 'empty');
   }
 
   const params = new URLSearchParams(trimmed);
   const hash = params.get('hash');
   if (!hash) {
-    throw new InitDataError('امضای initData موجود نیست.');
+    throw new InitDataError('امضای initData موجود نیست.', 'missing_hash');
   }
 
   const pairs: Array<[string, string]> = [];
@@ -103,16 +117,19 @@ export function verifyBaleInitData(
   const dataCheckString = buildDataCheckString(pairs);
   const expected = computeInitDataHash(botToken, dataCheckString);
   if (!hexEquals(expected, hash)) {
-    throw new InitDataError('امضای دادهٔ بله معتبر نیست.');
+    throw new InitDataError('امضای دادهٔ بله معتبر نیست.', 'invalid_signature');
   }
 
   const authDateRaw = params.get('auth_date');
   const authDate = authDateRaw ? Number(authDateRaw) : NaN;
   if (!Number.isInteger(authDate) || authDate <= 0) {
-    throw new InitDataError('زمان اعتبارسنجی بله نامعتبر است.');
+    throw new InitDataError('زمان اعتبارسنجی بله نامعتبر است.', 'invalid_auth_date');
   }
   if (Math.abs(nowSeconds - authDate) > ttlSeconds) {
-    throw new InitDataError('نشست مینی‌اپ منقضی شده است. مینی‌اپ را ببندید و دوباره باز کنید.');
+    throw new InitDataError(
+      'نشست مینی‌اپ منقضی شده است. مینی‌اپ را ببندید و دوباره باز کنید.',
+      'expired',
+    );
   }
 
   return {
