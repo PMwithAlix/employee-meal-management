@@ -47,9 +47,9 @@ export function OrdersScreen({ toast }: { toast: (text: string) => void }) {
 
   return (
     <KmScreen title="سفارش‌های من" subtitle="دسته‌بندی بر اساس تاریخ واقعی وعده است، نه تاریخ ثبت.">
-      <div className="km-row">
-        <KmButton variant={filter === 'upcoming' ? 'primary' : 'ghost'} onClick={() => setFilter('upcoming')}>پیش‌رو</KmButton>
-        <KmButton variant={filter === 'past' ? 'primary' : 'ghost'} onClick={() => setFilter('past')}>گذشته</KmButton>
+      <div className="km-filter-tabs" role="group" aria-label="فیلتر سفارش‌ها">
+        <button type="button" className="km-filter-tab" aria-pressed={filter === 'upcoming'} onClick={() => setFilter('upcoming')}>سفارش‌های پیش‌رو</button>
+        <button type="button" className="km-filter-tab" aria-pressed={filter === 'past'} onClick={() => setFilter('past')}>سفارش‌های گذشته</button>
       </div>
       {!orders && !error ? <KmSkeleton lines={4} /> : null}
       {error ? <KmState title="خطا در دریافت سفارش‌ها" body={error} /> : null}
