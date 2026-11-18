@@ -14,7 +14,7 @@ export function AccountScreen() {
           <h2>{user.username}</h2>
           <p>{ROLE_LABEL[user.role]}</p>
         </div>
-        <span className="km-profile-verified" aria-label="حساب احراز هویت شده"><ShieldCheck size={19} /></span>
+        <span className="km-profile-verified" aria-hidden="true"><ShieldCheck size={19} /></span>
       </article>
       <article className="km-card">
         <h2>تغییر رمز و تنظیمات سامانه</h2>
