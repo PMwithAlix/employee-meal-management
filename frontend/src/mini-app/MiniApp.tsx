@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import { Activity, BarChart3, ClipboardCheck, ClipboardList, Home, UserRound, Utensils, Users } from 'lucide-react'
 import { MiniAuthProvider, useMiniAuth } from './auth/MiniAuth'
 import { baleApi } from './api/bale-api'
 import { isBaleMiniAppEnabled } from './lib/flag'
@@ -12,6 +13,20 @@ import { OrdersScreen } from './screens/OrdersScreen'
 import { bootBaleWebApp } from './sdk/bale-webapp'
 import { KmButton, KmScreen, KmSkeleton, KmState, KmToast } from './ui/primitives'
 import './styles.css'
+
+function tabIcon(tab: MiniTab) {
+  const iconProps = { size: 19, strokeWidth: 2 }
+  switch (tab) {
+    case 'home': return <Home {...iconProps} />
+    case 'menu': return <Utensils {...iconProps} />
+    case 'orders': return <ClipboardList {...iconProps} />
+    case 'staff': return <Users {...iconProps} />
+    case 'org-orders': return <ClipboardCheck {...iconProps} />
+    case 'reports': return <BarChart3 {...iconProps} />
+    case 'activity': return <Activity {...iconProps} />
+    case 'account': return <UserRound {...iconProps} />
+  }
+}
 
 function MiniAppShell() {
   const auth = useMiniAuth()
@@ -118,8 +133,15 @@ function MiniAppShell() {
       </main>
       <nav className="km-tabs" aria-label="ناوبری مینی‌اپ">
         {tabs.map((item) => (
-          <button key={item.id} className={item.id === active ? 'km-tab is-on' : 'km-tab'} onClick={() => setTab(item.id)}>
-            {item.label}
+          <button
+            key={item.id}
+            type="button"
+            aria-current={item.id === active ? 'page' : undefined}
+            className={item.id === active ? 'km-tab is-on' : 'km-tab'}
+            onClick={() => setTab(item.id)}
+          >
+            <span className="km-tab-icon" aria-hidden="true">{tabIcon(item.id)}</span>
+            <span>{item.label}</span>
           </button>
         ))}
       </nav>
