@@ -68,8 +68,8 @@ function hmacSha256(key: string | Buffer, data: string) {
 }
 
 function hexEquals(left: string, right: string) {
-  const a = Buffer.from(left, 'utf8');
-  const b = Buffer.from(right, 'utf8');
+  const a = Buffer.from(left.toLowerCase(), 'utf8');
+  const b = Buffer.from(right.toLowerCase(), 'utf8');
   if (a.length !== b.length) {
     return false;
   }
@@ -79,13 +79,17 @@ function hexEquals(left: string, right: string) {
 export function buildDataCheckString(pairs: Array<[string, string]>) {
   return pairs
     .filter(([key]) => key !== 'hash')
-    .sort(([left], [right]) => left.localeCompare(right))
+    .sort(([left], [right]) => (left < right ? -1 : left > right ? 1 : 0))
     .map(([key, value]) => `${key}=${value}`)
     .join('\n');
 }
 
 export function computeInitDataHash(botToken: string, dataCheckString: string) {
-  const secretKey = hmacSha256(botToken, 'WebAppData').digest();
+  // Bale copies Telegram's Mini App scheme. PHP hash_hmac($data, $key) and
+  // Python hmac.new(key=b"WebAppData", msg=bot_token) both use WebAppData as the
+  // HMAC key. Nightly Bale docs write HMAC_SHA256(<bot_token>, "WebAppData"),
+  // which Node createHmac treats as the opposite argument order.
+  const secretKey = hmacSha256('WebAppData', botToken).digest();
   return hmacSha256(secretKey, dataCheckString).digest('hex');
 }
 
