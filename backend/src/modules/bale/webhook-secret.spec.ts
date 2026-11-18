@@ -66,6 +66,9 @@ describe('webhook path secret', () => {
     expect(format).not.toMatch(/\$request[^_]/);
     expect(nginx).toContain('~^/api/v1/bale/webhook/.+  /api/v1/bale/webhook/[redacted]');
     expect(nginx).toContain(
+      `location ~ '^/api/v1/bale/webhook/[A-Za-z0-9_-]{${BALE_WEBHOOK_PATH_TOKEN_LENGTH}}$'`,
+    );
+    expect(nginx).not.toContain(
       `location ~ ^/api/v1/bale/webhook/[A-Za-z0-9_-]{${BALE_WEBHOOK_PATH_TOKEN_LENGTH}}$`,
     );
     expect(nginx).toContain('error_log /dev/null emerg;');
