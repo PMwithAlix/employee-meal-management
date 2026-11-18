@@ -389,3 +389,60 @@ button { -webkit-tap-highlight-color: transparent; }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
 }
+
+.km-login-intro {
+  display: flex;
+  align-items: center;
+  gap: 13px;
+  padding: 16px;
+  border: 1px solid #f0dfd5;
+  border-radius: 19px;
+  background: linear-gradient(115deg, #fff8f3, #fff);
+}
+.km-login-mark {
+  display: grid;
+  place-items: center;
+  flex: 0 0 48px;
+  height: 48px;
+  border-radius: 15px;
+  color: var(--km-accent);
+  background: #ffeadf;
+}
+.km-login-intro strong, .km-login-intro span { display: block; }
+.km-login-intro strong { font-size: 13px; font-weight: 800; }
+.km-login-intro span { margin-top: 4px; color: var(--km-muted); font-size: 11px; line-height: 1.7; }
+.km-field > span { display: flex; align-items: center; gap: 6px; }
+.km-form-error {
+  margin: 0;
+  padding: 11px 13px;
+  border: 1px solid #f6d7d3;
+  border-radius: 12px;
+  background: var(--km-danger-soft);
+  color: var(--km-danger);
+  font-size: 12px;
+  line-height: 1.7;
+}
+.km-filter-tabs {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 5px;
+  padding: 5px;
+  border: 1px solid var(--km-line);
+  border-radius: 15px;
+  background: #edf0f4;
+}
+.km-filter-tab {
+  min-height: 42px;
+  border: 0;
+  border-radius: 11px;
+  background: transparent;
+  color: var(--km-muted);
+  font-size: 12px;
+  font-weight: 750;
+  cursor: pointer;
+}
+.km-filter-tab[aria-pressed="true"] {
+  background: #fff;
+  color: var(--km-ink);
+  box-shadow: 0 1px 4px rgba(24,34,48,.08);
+}
