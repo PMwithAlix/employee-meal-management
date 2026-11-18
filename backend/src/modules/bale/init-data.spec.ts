@@ -121,4 +121,52 @@ describe('verifyBaleInitData', () => {
     expect(computeInitDataHash(token, dataCheckString)).toBe(protocolHash);
     expect(computeInitDataHash(token, dataCheckString)).not.toBe(invertedHash);
   });
+
+  it('matches an independent Python hmac test vector', () => {
+    // Generated with Python 3.11 hmac/hashlib, not with computeInitDataHash:
+    // secret = hmac.new(b"WebAppData", token.encode(), hashlib.sha256).digest()
+    // expected = hmac.new(secret, data_check_string.encode(), hashlib.sha256).hexdigest()
+    const dataCheckString = 'auth_date=1700000000\nquery_id=AAE\nuser={"id":42,"first_name":"Ali"}';
+    const expectedHash = '838f4be7d9e5334cfb96755c41a7ffdf82857a1609707c25e6e34656729d356f';
+    expect(computeInitDataHash(token, dataCheckString)).toBe(expectedHash);
+
+    const initData =
+      'auth_date=1700000000&query_id=AAE&user=%7B%22id%22%3A42%2C%22first_name%22%3A%22Ali%22%7D&hash=' +
+      expectedHash;
+    const verified = verifyBaleInitData(initData, token, 1700000000, 60);
+    expect(verified.user.id).toBe(42);
+    expect(verified.user.first_name).toBe('Ali');
+    expect(verified.queryId).toBe('AAE');
+    expect(verified.authDate).toBe(1700000000);
+  });
+
+  it('builds the data-check string with lexicographic keys and decoded values', () => {
+    expect(
+      buildDataCheckString([
+        ['user', '{"id":1}'],
+        ['hash', 'deadbeef'],
+        ['query_id', 'AAE'],
+        ['auth_date', '1700000000'],
+        ['empty', ''],
+      ]),
+    ).toBe('auth_date=1700000000\nempty=\nquery_id=AAE\nuser={"id":1}');
+  });
+
+  it('rejects a valid signature after a field is modified', () => {
+    const expectedHash = '838f4be7d9e5334cfb96755c41a7ffdf82857a1609707c25e6e34656729d356f';
+    const initData =
+      'auth_date=1700000000&query_id=AAE&user=%7B%22id%22%3A99%2C%22first_name%22%3A%22Ali%22%7D&hash=' +
+      expectedHash;
+    expect(() => verifyBaleInitData(initData, token, 1700000000, 60)).toThrow(
+      'امضای دادهٔ بله معتبر نیست.',
+    );
+  });
+
+  it('accepts an uppercase hex hash using a timing-safe compare', () => {
+    const expectedHash = '838F4BE7D9E5334CFB96755C41A7FFDF82857A1609707C25E6E34656729D356F';
+    const initData =
+      'auth_date=1700000000&query_id=AAE&user=%7B%22id%22%3A42%2C%22first_name%22%3A%22Ali%22%7D&hash=' +
+      expectedHash;
+    expect(verifyBaleInitData(initData, token, 1700000000, 60).user.id).toBe(42);
+  });
 });
