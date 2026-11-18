@@ -29,6 +29,10 @@ export function LoginScreen() {
 
   return (
     <KmScreen title="ورود به خوان" subtitle="با همان حساب سامانه وب وارد شوید. نقش شما از سرور خوانده می‌شود.">
+      <div className="km-login-intro" aria-hidden="true">
+        <div className="km-login-mark"><LockKeyhole size={27} strokeWidth={1.8} /></div>
+        <div><strong>ورود امن و یکپارچه</strong><span>دسترسی شما بر اساس نقش ثبت‌شده در سامانه تعیین می‌شود.</span></div>
+      </div>
       {webApp && webApp.isMiniAppSupported === false ? (
         <div className="km-card">
           <h2>این نسخه بله از مینی‌اپ پشتیبانی نمی‌کند</h2>
