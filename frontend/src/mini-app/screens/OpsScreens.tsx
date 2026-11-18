@@ -37,7 +37,7 @@ export function StaffScreen() {
     <KmScreen title="کارکنان" subtitle="ایجاد، حذف و تغییر نقش در پنل وب انجام می‌شود.">
       <label className="km-field">
         <span>جست‌وجوی نام کاربری</span>
-        <input value={query} onChange={(event) => setQuery(event.target.value)} />
+        <input type="search" aria-label="جست‌وجوی نام کاربری کارکنان" placeholder="نام کاربری را وارد کنید" value={query} onChange={(event) => setQuery(event.target.value)} />
       </label>
       {!items && !error ? <KmSkeleton /> : null}
       {error ? <KmState title="دسترسی محدود" body={error} /> : null}
@@ -80,7 +80,7 @@ export function OrgOrdersScreen() {
     <KmScreen title="پیگیری سفارش" subtitle={`امروز · ${mealDate}`}>
       <label className="km-field">
         <span>نام کاربری</span>
-        <input value={username} onChange={(event) => setUsername(event.target.value)} />
+        <input type="search" aria-label="جست‌وجوی سفارش بر اساس نام کاربری" placeholder="نام کاربری را وارد کنید" value={username} onChange={(event) => setUsername(event.target.value)} />
       </label>
       {!items && !error ? <KmSkeleton /> : null}
       {error ? <KmState title="بدون دسترسی" body={error} /> : null}
@@ -157,6 +157,7 @@ export function ActivityScreen() {
     <KmScreen title="فعالیت‌ها" subtitle="فقط‌خواندنی">
       {!items && !error ? <KmSkeleton /> : null}
       {error ? <KmState title="بدون دسترسی" body={error} /> : null}
+      {items?.length === 0 ? <KmState title="فعالیتی ثبت نشده" body="موردی برای نمایش وجود ندارد." /> : null}
       {items?.map((item) => (
         <article key={item.id} className="km-card">
           <h2>{auditActionLabel(item.action)}</h2>
