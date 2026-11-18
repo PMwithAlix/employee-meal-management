@@ -109,8 +109,8 @@ export function MenuScreen({ toast }: { toast: (text: string) => void }) {
         : null}
       {sheet && day ? (
         <div className="km-sheet" onClick={() => setSheet(null)}>
-          <div className="km-sheet-card" onClick={(event) => event.stopPropagation()}>
-            <h2>انتخاب {sheet === 'lunch' ? 'ناهار' : 'شام'}</h2>
+          <div className="km-sheet-card" role="dialog" aria-modal="true" aria-labelledby="km-meal-sheet-title" onClick={(event) => event.stopPropagation()}>
+            <h2 id="km-meal-sheet-title">انتخاب {sheet === 'lunch' ? 'ناهار' : 'شام'}</h2>
             {optionsOf(day, sheet)?.map((option) => (
               <button key={option.id} className="km-option" disabled={busy} onClick={() => void choose(sheet, option.id)}>
                 {option.title}
