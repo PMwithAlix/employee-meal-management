@@ -2,9 +2,9 @@ import {
   Body,
   Controller,
   Get,
-  Headers,
   HttpCode,
   HttpStatus,
+  Param,
   Post,
   Req,
   Res,
@@ -47,17 +47,6 @@ export class BaleController {
     return this.bale.login(dto, request, response);
   }
 
-  @Public()
-  @Post('webhook')
-  @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: 'دریافت آپدیت بازوی بله' })
-  webhook(
-    @Body() body: unknown,
-    @Headers() headers: Record<string, string | string[] | undefined>,
-  ) {
-    return this.bale.handleWebhook(body, headers);
-  }
-
   @Get('webhook/info')
   @Roles(Role.ADMIN)
   @ApiCookieAuth()
@@ -73,5 +62,13 @@ export class BaleController {
   @ApiOperation({ summary: 'ثبت وب‌هوک بله از روی متغیرهای محیطی' })
   syncWebhook(@CurrentUser() actor: AuthUser) {
     return this.bale.syncWebhook(actor);
+  }
+
+  @Public()
+  @Post('webhook/:token')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'دریافت آپدیت بازوی بله' })
+  webhook(@Param('token') token: string, @Body() body: unknown) {
+    return this.bale.handleWebhook(body, token);
   }
 }

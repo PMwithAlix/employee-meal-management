@@ -1,6 +1,7 @@
 import { ForbiddenException } from '@nestjs/common';
 import { of } from 'rxjs';
 import { NodeEnv } from '../../config/env.validation';
+import { baleWebhookPathToken } from '../../modules/bale/webhook-secret';
 import { OriginInterceptor } from './origin.interceptor';
 
 function context(url: string, headers: Record<string, string> = {}) {
@@ -32,15 +33,23 @@ describe('OriginInterceptor', () => {
   });
 
   it('allows the Bale webhook without Origin in production', () => {
+    const token = baleWebhookPathToken('webhook-secret-value');
     expect(() =>
-      interceptor().intercept(context('/api/v1/bale/webhook') as never, next),
+      interceptor().intercept(context(`/api/v1/bale/webhook/${token}`) as never, next),
     ).not.toThrow();
   });
 
+  it('does not exempt the old webhook path that has no secret segment', () => {
+    expect(() =>
+      interceptor().intercept(context('/api/v1/bale/webhook') as never, next),
+    ).toThrow(ForbiddenException);
+  });
+
   it('still rejects the Bale webhook when Origin is hostile', () => {
+    const token = baleWebhookPathToken('webhook-secret-value');
     expect(() =>
       interceptor().intercept(
-        context('/api/v1/bale/webhook', { origin: 'https://evil.example' }) as never,
+        context(`/api/v1/bale/webhook/${token}`, { origin: 'https://evil.example' }) as never,
         next,
       ),
     ).toThrow(ForbiddenException);

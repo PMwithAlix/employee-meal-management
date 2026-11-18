@@ -3,6 +3,7 @@ import {
   InternalServerErrorException,
   Logger,
   NotFoundException,
+  OnModuleInit,
   ServiceUnavailableException,
   UnauthorizedException,
 } from '@nestjs/common';
@@ -29,8 +30,10 @@ import { BaleLoginDto } from './dto/bale-login.dto';
 import { InitDataError, verifyBaleInitData } from './init-data';
 import { ProcessedUpdates } from './processed-updates';
 import {
-  readBaleWebhookSecretHeader,
-  webhookSecretsMatch,
+  baleWebhookDeliveryUrl,
+  redactKnownWebhookSecrets,
+  redactKnownWebhookSecretsDeep,
+  webhookPathTokenMatches,
 } from './webhook-secret';
 
 function asRecord(value: unknown) {
@@ -38,7 +41,7 @@ function asRecord(value: unknown) {
 }
 
 @Injectable()
-export class BaleService {
+export class BaleService implements OnModuleInit {
   private readonly logger = new Logger(BaleService.name);
   private readonly processed = new ProcessedUpdates();
 
@@ -124,25 +127,19 @@ export class BaleService {
     };
   }
 
-  assertWebhookSecret(
-    headers: Record<string, string | string[] | undefined>,
-  ) {
+  assertWebhookSecret(token: string | undefined) {
     const expected = this.config.get('BALE_WEBHOOK_SECRET', { infer: true }).trim();
     if (!expected) {
       throw new ServiceUnavailableException();
     }
-    const provided = readBaleWebhookSecretHeader(headers);
-    if (!webhookSecretsMatch(provided, expected)) {
+    if (!webhookPathTokenMatches(token, expected)) {
       throw new UnauthorizedException();
     }
   }
 
-  async handleWebhook(
-    body: unknown,
-    headers: Record<string, string | string[] | undefined>,
-  ) {
+  async handleWebhook(body: unknown, token: string | undefined) {
     this.requireEnabled();
-    this.assertWebhookSecret(headers);
+    this.assertWebhookSecret(token);
     const update = asRecord(body);
     if (!update) {
       return { ok: true, ignored: true };
@@ -157,10 +154,13 @@ export class BaleService {
       );
       return { ok: true, duplicate: result === 'duplicate' };
     } catch (error) {
+      const secret = this.config.get('BALE_WEBHOOK_SECRET', { infer: true }).trim();
+      const detail = error instanceof Error ? error.message : 'unknown';
       this.logger.warn(
-        `Bale update ${updateId} failed: ${
-          error instanceof Error ? redactBaleLogText(error.message) : 'unknown'
-        }`,
+        `Bale update ${updateId} failed: ${redactKnownWebhookSecrets(
+          redactBaleLogText(detail),
+          secret,
+        )}`,
       );
       if (isPermanentBaleFailure(error)) {
         this.processed.acknowledge(updateId);
@@ -175,22 +175,55 @@ export class BaleService {
     }
   }
 
+  async onModuleInit() {
+    if (!this.enabled()) {
+      return;
+    }
+    try {
+      await this.registerWebhook();
+      this.logger.log('Bale webhook registered.');
+    } catch (error) {
+      const secret = this.config.get('BALE_WEBHOOK_SECRET', { infer: true }).trim();
+      const detail = error instanceof Error ? error.message : 'unknown';
+      this.logger.error(
+        `Bale webhook registration failed: ${redactKnownWebhookSecrets(
+          redactBaleLogText(detail),
+          secret,
+        )}`,
+      );
+    }
+  }
+
   async syncWebhook(actor: AuthUser) {
     this.requireEnabled();
     if (actor.role !== Role.ADMIN) {
       throw new UnauthorizedException();
     }
-    const url = this.config.get('BALE_WEBHOOK_URL', { infer: true }).trim();
+    return this.registerWebhook();
+  }
+
+  private async registerWebhook() {
+    const configured = this.config.get('BALE_WEBHOOK_URL', { infer: true }).trim();
     const secret = this.config.get('BALE_WEBHOOK_SECRET', { infer: true }).trim();
+    if (!configured) {
+      throw new NotFoundException('BALE_WEBHOOK_URL تنظیم نشده است.');
+    }
+    if (!secret) {
+      throw new ServiceUnavailableException();
+    }
+    const url = baleWebhookDeliveryUrl(configured, secret);
     if (!url) {
       throw new NotFoundException('BALE_WEBHOOK_URL تنظیم نشده است.');
     }
-    return this.api.setWebhook(url, secret);
+    const result = await this.api.setWebhook(url);
+    return redactKnownWebhookSecretsDeep(result, secret);
   }
 
   async webhookInfo() {
     this.requireEnabled();
-    return this.api.getWebhookInfo();
+    const secret = this.config.get('BALE_WEBHOOK_SECRET', { infer: true }).trim();
+    const info = await this.api.getWebhookInfo();
+    return redactKnownWebhookSecretsDeep(info, secret);
   }
 
   private async dispatch(update: Record<string, unknown>) {
